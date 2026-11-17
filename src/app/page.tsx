@@ -1,1312 +1,3222 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { User } from 'firebase/auth';
-import {
-  Heart,
-  Flame,
-  ShieldAlert,
-  Clock,
-  Users,
-  Bot,
-  CheckCircle2,
-  XCircle,
-  Sparkles,
-  Copy,
-  RefreshCw,
-  LogIn,
-  LogOut,
-  History,
-} from 'lucide-react';
-import {
-  ActiveTurn,
-  AnswerChoice,
-  GameRoom,
-  Gender,
-  MatchHistoryItem,
-  PlayerAnswer,
-  PlayerProfile,
-  QuestionItem,
-  TurnLog,
-} from '@/types/game';
-import { getQuestionsForProfile } from '@/data/questions';
-import {
-  appendMatchHistory,
-  createCoupleRoom,
-  getUserProfileDoc,
-  isFirebaseConfigured,
-  joinCoupleRoom,
-  loginWithEmail,
-  loginWithGoogle,
-  logoutAccount,
-  mapAuthError,
-  registerWithEmail,
-  submitGuestAnswersAndStart,
-  subscribeToAuth,
-  subscribeToRoom,
-  syncRoomState,
-  upsertUserBasicProfile,
-} from '@/lib/firebase';
-import StoryCardGenerator from '@/components/StoryCardGenerator';
+import React, { useState, useEffect, useRef } from "react";
 
-type ScreenStep = 'auth' | 'questions' | 'lobby' | 'playing' | 'ending';
-
-function computeEnding(battery: number): NonNullable<GameRoom['ending']> {
-  if (battery >= 80) {
-    return {
-      title: 'BESOK KAWIN',
-      subtitle: 'Red flag kalian sudah saling mengunci. Siapin berkas KUA sekarang juga.',
-    };
-  }
-  if (battery >= 45) {
-    return {
-      title: 'PACARAN DULU AJA',
-      subtitle: 'Masih banyak kompromi yang menggantung. Jangan buru-buru DP gedung.',
-    };
-  }
-  return {
-    title: 'STOP THE WEDDING',
-    subtitle: 'Terlalu banyak penyesalan dan deadlock. Bubar sebelum jadi beban pikiran.',
-  };
+interface QuestionItem {
+  id: string;
+  category: "Ketakutan Hidup" | "Kebiasaan Buruk" | "Sifat Jelek & Red Flag Ego";
+  gender: "ALL" | "Laki-laki" | "Perempuan";
+  ageGroup: "ALL" | "young" | "adult";
+  segmentLabel: string;
+  statement: string;
+  partnerPrompt: string;
+  consequenceQuestion: string;
+  compromises: string[];
+  botPref: { young: number; mid: number; mature: number };
 }
 
-function buildGameDeck(
-  p1: PlayerProfile,
-  p2: PlayerProfile
-): { card: PlayerAnswer; ownerId: string }[] {
-  const p1Cards = p1.answers
-    .filter((a) => a.choice !== 'engga')
-    .sort((a) => (a.choice === 'iya_lagi' ? -1 : 1))
-    .slice(0, 4)
-    .map((card) => ({ card, ownerId: p1.id }));
-
-  const p2Cards = p2.answers
-    .filter((a) => a.choice !== 'engga')
-    .sort((a) => (a.choice === 'iya_lagi' ? -1 : 1))
-    .slice(0, 4)
-    .map((card) => ({ card, ownerId: p2.id }));
-
-  const combined: { card: PlayerAnswer; ownerId: string }[] = [];
-  const maxLen = Math.max(p1Cards.length, p2Cards.length, 1);
-
-  for (let i = 0; i < maxLen; i++) {
-    if (p2Cards[i]) combined.push(p2Cards[i]);
-    if (p1Cards[i]) combined.push(p1Cards[i]);
-  }
-
-  if (combined.length === 0) {
-    combined.push({ card: p2.answers[0], ownerId: p2.id });
-    combined.push({ card: p1.answers[0], ownerId: p1.id });
-  }
-
-  return combined;
+interface PlayerProfile {
+  name: string;
+  email: string;
+  gender: "Laki-laki" | "Perempuan";
+  age: number;
+  questions: QuestionItem[];
+  answers: Record<string, "iya" | "kayanya" | "engga">;
+  emoji?: string;
+  tier?: "young" | "mid" | "mature";
+  vibe?: string;
+  bio?: string;
+  reactAccept?: string;
+  reactReject?: string;
 }
 
-export default function BesokKawinApp() {
-  const [step, setStep] = useState<ScreenStep>('auth');
-  const [playTab, setPlayTab] = useState<'register' | 'join'>('register');
+interface DeckCard extends QuestionItem {
+  isWildcard: boolean;
+  sourceOwner: string;
+  roundNum: number;
+  responderKey: "player1" | "player2";
+}
 
-  // State Firebase Auth & Riwayat User
-  const [authUser, setAuthUser] = useState<User | null>(null);
-  const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
-  const [authEmail, setAuthEmail] = useState('');
-  const [authPassword, setAuthPassword] = useState('');
-  const [authLoading, setAuthLoading] = useState(false);
-  const [authMessage, setAuthMessage] = useState('');
-  const [matchHistory, setMatchHistory] = useState<MatchHistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false);
-  const [historySavedFlag, setHistorySavedFlag] = useState(false);
-  const savedMatchKeyRef = useRef<string | null>(null);
+interface HistoryItem {
+  round: number;
+  category: string;
+  isWildcard: boolean;
+  problem: string;
+  outcomeLabel: string;
+  delta: number;
+  type: "good" | "neutral" | "bad";
+}
 
-  // Form Profil Bermain
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [gender, setGender] = useState<Gender>('Laki-laki');
-  const [age, setAge] = useState<string>('24');
-  const [inviteInput, setInviteInput] = useState('');
-  const [formError, setFormError] = useState('');
+interface ToastItem {
+  id: number;
+  message: string;
+  type: "success" | "error" | "warning" | "info";
+}
 
-  // State Pemain Lokal & 20 Pertanyaan
-  const [localPlayer, setLocalPlayer] = useState<PlayerProfile | null>(null);
-  const [questionList, setQuestionList] = useState<QuestionItem[]>([]);
-  const [qIndex, setQIndex] = useState(0);
-  const [collectedAnswers, setCollectedAnswers] = useState<PlayerAnswer[]>([]);
+const QUESTION_BANK: QuestionItem[] = [
+  // ==================== KATEGORI 1: KETAKUTAN HIDUP ====================
+  {
+    id: "KH_U1",
+    category: "Ketakutan Hidup",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua sering ngerasa hidup gua jalan di tempat, sementara temen-temen seumuran udah pada mapan atau nikah.",
+    partnerPrompt:
+      "Dia sering kena quarter-life crisis dan ngerasa hidupnya jalan di tempat dibanding teman-temannya.",
+    consequenceQuestion:
+      "Lu yakin siap jadi tempat sampah curhat overthinking-nya tiap malem, padahal lu sendiri lagi pusing ngurusin hidup?",
+    compromises: [
+      "Bikin jadwal quality time bebas bahas pencapaian orang lain.",
+      "Saling evaluasi target 6 bulan bareng tanpa saling nyalahin.",
+      "Sepakat puasa buka media sosial tiap akhir pekan.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 1 },
+  },
+  {
+    id: "KH_U2",
+    category: "Ketakutan Hidup",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Jauh di lubuk hati, gua takut kalau orang yang paling gua sayang tahu sisi tergelap gua, dia bakal pergi.",
+    partnerPrompt:
+      "Dia nyimpen sisi kelam/trauma masa lalu dan takut banget bakal ditinggalin kalau lu tahu aslinya.",
+    consequenceQuestion:
+      "Lu sanggup nerima masa lalunya tanpa pernah ngungkit itu pas kalian lagi berantem hebat nanti?",
+    compromises: [
+      "Buka-bukaan bertahap sesuai kesiapan tanpa paksaan.",
+      "Datang ke konselor/psikolog pra-nikah bareng.",
+      "Bikin perjanjian masa lalu nggak boleh dibawa saat konflik.",
+    ],
+    botPref: { young: 0, mid: 2, mature: 1 },
+  },
+  {
+    id: "KH_U3",
+    category: "Ketakutan Hidup",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua lebih takut kesepian sendirian daripada terjebak di hubungan yang sebenernya udah nggak sehat.",
+    partnerPrompt:
+      "Dia punya ketergantungan emosional tinggi dan lebih takut kesepian daripada terjebak hubungan toxic.",
+    consequenceQuestion:
+      "Kalau suatu hari hubungan kalian hambar, lu yakin dia bertahan karena cinta—bukan cuma karena takut sendirian?",
+    compromises: [
+      "Wajib punya lingkar pertemanan dan me-time masing-masing.",
+      "Check-in kondisi mental hubungan tiap 3 bulan secara jujur.",
+      "Sepakat berani selesai baik-baik kalau udah saling nyakitin.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 2 },
+  },
+  {
+    id: "KH_U4",
+    category: "Ketakutan Hidup",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua takut banget pernikahan cuma bakal ngubah cinta jadi rutinitas tagihan listrik, cicilan, dan urusan dapur yang ngebosenin.",
+    partnerPrompt:
+      "Dia takut banget kehidupan pernikahan bakal ngebunuh sisi romantis dan cuma jadi rutinitas bayar tagihan.",
+    consequenceQuestion:
+      "Lu sanggup tetep usaha bikin hubungan seru di tengah capeknya kerja dan cicilan menumpuk?",
+    compromises: [
+      'Wajib alokasi budget khusus "date night" bulanan anti-batal.',
+      "Bagi tugas domestik & keuangan pakai sistem otomatis biar nggak ribut.",
+      "Jadwalin liburan singkat minimal 2 kali setahun.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 1 },
+  },
+  {
+    id: "KH_M_ALL",
+    category: "Ketakutan Hidup",
+    gender: "Laki-laki",
+    ageGroup: "ALL",
+    segmentLabel: "Laki-laki • 18–35",
+    statement:
+      "Gua takut banget kelihatan lemah atau nangis di depan pasangan karena ngerasa laki-laki harus selalu kelihatan kuat.",
+    partnerPrompt:
+      "Dia gengsi kelihatan lemah dan milih mendem beban berat sendirian demi menjaga harga diri.",
+    consequenceQuestion:
+      "Lu siap menghadapi pasangan yang tiba-tiba meledak marah cuma karena dia nahan tangis dan stres sendirian?",
+    compromises: [
+      "Kasih ruang aman buat cerita tanpa langsung diceramahin.",
+      "Boleh diem dulu 2 jam pas capek, tapi habis itu wajib ngomong.",
+      "Gunakan kode khusus kalau lagi butuh dipeluk tanpa ditanya-tanya.",
+    ],
+    botPref: { young: 2, mid: 0, mature: 1 },
+  },
+  {
+    id: "KH_F_ALL",
+    category: "Ketakutan Hidup",
+    gender: "Perempuan",
+    ageGroup: "ALL",
+    segmentLabel: "Perempuan • 18–35",
+    statement:
+      "Gua takut kehilangan jati diri, karier, dan kebebasan gua begitu masuk ke kehidupan rumah tangga.",
+    partnerPrompt:
+      "Dia takut banget kehilangan karier dan kebebasan pribadinya setelah resmi menikah nanti.",
+    consequenceQuestion:
+      "Lu yakin nggak bakal nuntut dia buat ngurangin jam kerja atau fokus ngurus rumah tangga sepenuhnya?",
+    compromises: [
+      "Sepakat sama-sama tetap berkarya dan bagi rata urusan rumah.",
+      "Hire asisten rumah tangga / jasa laundry biar sama-sama punya waktu.",
+      "Bikin kesepakatan tertulis soal pembagian peran sebelum nikah.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+  },
+  {
+    id: "KH_M_Y1",
+    category: "Ketakutan Hidup",
+    gender: "Laki-laki",
+    ageGroup: "young",
+    segmentLabel: "Laki-laki • 18–25",
+    statement:
+      "Gua takut banget gagal secara finansial sebelum umur 30 dan dianggap nggak punya masa depan sama keluarga pasangan.",
+    partnerPrompt:
+      "Dia terobsesi ngejar mapan sebelum 30 sampai sering ngorbanin waktu pacaran demi kerja sampingan.",
+    consequenceQuestion:
+      "Lu rela weekend-mu sering batal dan chat dibales lama karena dia sibuk ngejar target finansial?",
+    compromises: [
+      "Jadwalin minimal 1 hari penuh per minggu bebas dari urusan kerjaan.",
+      "Transparan soal target tabungan bareng biar sama-sama tenang.",
+      "Support ambisinya tapi tetap pasang batas jam kerja maksimal.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 1 },
+  },
+  {
+    id: "KH_M_Y2",
+    category: "Ketakutan Hidup",
+    gender: "Laki-laki",
+    ageGroup: "young",
+    segmentLabel: "Laki-laki • 18–25",
+    statement:
+      "Gua takut komitmen jangka panjang karena ngerasa masa muda gua belum puas buat eksplor banyak hal.",
+    partnerPrompt:
+      "Dia masih ragu komitmen serius karena takut masa mudanya habis terlalu cepat.",
+    consequenceQuestion:
+      "Lu yakin mau lanjut serius sama orang yang setengah kakinya masih pengen bebas sana-sini?",
+    compromises: [
+      "Pasang timeline hubungan yang jelas (misal evaluasi serius 1 tahun lagi).",
+      "Tetap kasih kebebasan hobi & solo trip asal komunikasi jelas.",
+      "Sepakat fokus bangun fondasi dulu tanpa buru-buru bahas nikah.",
+    ],
+    botPref: { young: 1, mid: 0, mature: 0 },
+  },
+  {
+    id: "KH_F_Y1",
+    category: "Ketakutan Hidup",
+    gender: "Perempuan",
+    ageGroup: "young",
+    segmentLabel: "Perempuan • 18–25",
+    statement:
+      "Gua sering ngerasa nggak cukup menarik atau nggak cukup berprestasi kalau dibandingin sama standar di media sosial.",
+    partnerPrompt:
+      "Dia gampang insecure sama penampilan dan pencapaian orang lain di media sosial.",
+    consequenceQuestion:
+      "Lu sanggup ngasih validasi dan pujian berulang kali tiap hari pas dia lagi kumat insecure-nya?",
+    compromises: [
+      'Kasih afirmasi positif rutin tanpa nunggu dia nanya "aku cantik nggak?".',
+      "Kurangi konsumsi konten pamer gaya hidup di medsos.",
+      "Fokus bikin aktivitas offline bareng yang ningkatin kepercayaan diri.",
+    ],
+    botPref: { young: 0, mid: 2, mature: 1 },
+  },
+  {
+    id: "KH_F_Y2",
+    category: "Ketakutan Hidup",
+    gender: "Perempuan",
+    ageGroup: "young",
+    segmentLabel: "Perempuan • 18–25",
+    statement:
+      "Gua takut banget udah nemenin pasangan dari nol, eh pas dia sukses malah ninggalin gua demi orang baru.",
+    partnerPrompt:
+      "Dia punya trauma takut ditinggalin setelah nemenin pasangan berjuang dari nol.",
+    consequenceQuestion:
+      "Lu siap menghadapi kecurigaan dia tiap kali karier lu naik atau lu mulai kenal lingkungan baru?",
+    compromises: [
+      "Kenalin dia ke lingkungan kerja dan temen-temen baru secara terbuka.",
+      "Bikin pencapaian finansial tercatat transparan sebagai hasil bareng.",
+      "Jaga batasan tegas sama lawan jenis di lingkungan profesional.",
+    ],
+    botPref: { young: 0, mid: 2, mature: 1 },
+  },
+  {
+    id: "KH_M_A1",
+    category: "Ketakutan Hidup",
+    gender: "Laki-laki",
+    ageGroup: "adult",
+    segmentLabel: "Laki-laki • 26+",
+    statement:
+      "Gua takut nggak sanggup jadi tulang punggung keluarga sendiri karena masih harus nanggung beban ekonomi orang tua (sandwich generation).",
+    partnerPrompt:
+      "Dia adalah sandwich generation yang wajib menyisihkan sebagian besar gajinya buat keluarga besar.",
+    consequenceQuestion:
+      "Lu ikhlas jatah liburan, skincare, atau tabungan rumah tangga kalian kepotong rutin buat biayain keluarganya?",
+    compromises: [
+      "Tetapkan batas nominal maksimal per bulan buat keluarga besar.",
+      "Pisahkan rekening keluarga inti dan rekening bantuan orang tua.",
+      "Cari sumber penghasilan tambahan bareng khusus pos keluarga.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 1 },
+  },
+  {
+    id: "KH_M_A2",
+    category: "Ketakutan Hidup",
+    gender: "Laki-laki",
+    ageGroup: "adult",
+    segmentLabel: "Laki-laki • 26+",
+    statement:
+      "Gua takut salah pilih istri yang ternyata nggak bisa akur sama ibu dan keluarga besar gua.",
+    partnerPrompt:
+      "Dia sangat memprioritaskan restu dan keharmonisan antara pasangannya dengan ibunya.",
+    consequenceQuestion:
+      "Kalau suatu hari terjadi gesekan antara lu dan mertua, lu siap kalau dia lebih milih belain ibunya dulu?",
+    compromises: [
+      "Wajib tinggal terpisah (ngontrak/rumah sendiri) dari orang tua setelah nikah.",
+      "Suami jadi penengah netral tanpa menyudutkan salah satu pihak.",
+      "Batasi frekuensi kumpul keluarga besar biar minim gesekan.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 0 },
+  },
+  {
+    id: "KH_F_A1",
+    category: "Ketakutan Hidup",
+    gender: "Perempuan",
+    ageGroup: "adult",
+    segmentLabel: "Perempuan • 26+",
+    statement:
+      "Gua takut salah pilih pasangan cuma karena dikejar umur dan tekanan pertanyaan keluarga soal kapan nikah.",
+    partnerPrompt:
+      "Dia jujur takut kalau keputusannya nikah dipengaruhi tekanan umur dan desakan keluarga.",
+    consequenceQuestion:
+      "Lu sanggup nerima kenyataan bahwa lu mungkin dipilih sebagian karena faktor kejar tayang usia?",
+    compromises: [
+      "Tunda tanggal nikah minimal 6 bulan sampai yakin 100% bukan karena panik.",
+      "Pasang tameng bareng menghadapi pertanyaan keluarga besar.",
+      "Uji kecocokan lewat manajemen proyek/keuangan bareng sebelum lamaran.",
+    ],
+    botPref: { young: 0, mid: 2, mature: 2 },
+  },
+  {
+    id: "KH_F_A2",
+    category: "Ketakutan Hidup",
+    gender: "Perempuan",
+    ageGroup: "adult",
+    segmentLabel: "Perempuan • 26+",
+    statement:
+      "Gua takut banget udah umur segini harus mulai kenalan dan adaptasi dari nol lagi kalau hubungan ini gagal.",
+    partnerPrompt:
+      "Dia kelelahan secara mental buat mulai PDKT dari awal lagi kalau hubungan ini kandas.",
+    consequenceQuestion:
+      "Lu yakin dia bertahan di diskusi ini karena beneran cocok sama lu, bukan karena males mulai dari nol lagi?",
+    compromises: [
+      'Sepakat nggak bertahan cuma karena faktor "sayang udah lama".',
+      "Bikin komitmen perbaikan nyata dengan tenggat waktu jelas.",
+      "Berani ambil jeda evaluasi 1 minggu tanpa komunikasi kalau buntu.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 0 },
+  },
 
-  // State Room & Gameplay
-  const [room, setRoom] = useState<GameRoom | null>(null);
-  const [botAge, setBotAge] = useState<number>(23);
-  const [loadingAI, setLoadingAI] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<number>(60);
-  const [botVoteMemory, setBotVoteMemory] = useState<number>(0);
+  // ==================== KATEGORI 2: KEBIASAAN BURUK ====================
+  {
+    id: "KB_U1",
+    category: "Kebiasaan Buruk",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Kalau lagi stres atau capek mental, pelarian gua adalah belanja impulsif atau jajan mahal walau saldo lagi sekarat.",
+    partnerPrompt:
+      'Dia punya kebiasaan "retail therapy" — belanja impulsif dan jajan mahal tiap lagi stres meski saldo tipis.',
+    consequenceQuestion:
+      "Lu sanggup ngerem kebiasaan jajan impulsifnya tanpa bikin dia ngerasa dikekang soal duitnya sendiri?",
+    compromises: [
+      'Sediakan pos "Dana Jajan Stres" maksimal 5% dari gaji per bulan.',
+      "Wajib terapkan aturan tunggu 48 jam sebelum checkout barang di atas 200rb.",
+      "Alihkan pelarian stres ke olahraga atau masak bareng di rumah.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 1 },
+  },
+  {
+    id: "KB_U2",
+    category: "Kebiasaan Buruk",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua sering doomscrolling sampai subuh, terus besoknya ngeluh capek dan nunda semua kerjaan penting.",
+    partnerPrompt:
+      "Dia sering begadang doomscrolling sampai subuh, lalu besoknya moody dan ngaret semua jadwal.",
+    consequenceQuestion:
+      "Lu tahan punya pasangan yang susah diajak ketemu pagi dan sering bad mood karena kurang tidur?",
+    compromises: [
+      "Sepakat taruh HP di luar kamar tidur 30 menit sebelum jam tidur.",
+      "Nggak ada jadwal kencan atau urusan penting sebelum jam 11 siang di weekend.",
+      "Saling ingetin jam tidur tanpa nada menggurui.",
+    ],
+    botPref: { young: 1, mid: 0, mature: 0 },
+  },
+  {
+    id: "KB_U3",
+    category: "Kebiasaan Buruk",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua gampang tergiur cicilan atau paylater demi gaya hidup yang sebenernya di luar kemampuan gaji gua.",
+    partnerPrompt:
+      "Dia gampang tergoda pakai paylater dan cicilan demi menjaga gengsi gaya hidup.",
+    consequenceQuestion:
+      "Lu siap kalau suatu saat tabunganku harus kepake buat nutupin tunggakan paylater atau cicilannya?",
+    compromises: [
+      "Wajib tutup semua akun paylater sebelum masuk tahap lamaran.",
+      "Cek SLIK OJK / riwayat kredit masing-masing secara transparan.",
+      "Bikin aturan dilarang nyicil barang konsumtif (hanya aset produktif).",
+    ],
+    botPref: { young: 2, mid: 1, mature: 1 },
+  },
+  {
+    id: "KB_U4",
+    category: "Kebiasaan Buruk",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua orangnya berantakan banget soal barang dan kamar, dan baru gerak beres-beres kalau udah bener-bener sumpek.",
+    partnerPrompt:
+      "Dia cukup berantakan soal kerapian ruangan dan baru bersih-bersih kalau kondisinya udah parah.",
+    consequenceQuestion:
+      "Lu siap jadi pihak yang lebih sering beres-beres, atau tahan tinggal di rumah yang berantakan?",
+    compromises: [
+      'Terapkan aturan "15 menit beres-beres bareng" tiap malam sebelum tidur.',
+      "Patungan bayar layanan home cleaning seminggu sekali.",
+      "Punya zona pribadi masing-masing yang bebas diatur sesuka hati.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 1 },
+  },
+  {
+    id: "KB_M_ALL",
+    category: "Kebiasaan Buruk",
+    gender: "Laki-laki",
+    ageGroup: "ALL",
+    segmentLabel: "Laki-laki • 18–35",
+    statement:
+      "Gua sering lupa tanggal-tanggal penting, detail cerita pasangan, atau janji-janji kecil yang menurut gua sepele.",
+    partnerPrompt:
+      "Dia pelupa banget soal tanggal penting, detail obrolan, dan janji-janji kecil.",
+    consequenceQuestion:
+      "Lu yakin nggak bakal sakit hati pas dia lupa tanggal anniversary atau hal kecil yang udah lu ceritain?",
+    compromises: [
+      "Wajib pasang pengingat kalender bareng dengan alarm H-3.",
+      "Pasangan boleh ngingetin langsung tanpa kode-kodean ngambek.",
+      "Fokus ke konsistensi perhatian harian daripada seremoni tanggal.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 2 },
+  },
+  {
+    id: "KB_F_ALL",
+    category: "Kebiasaan Buruk",
+    gender: "Perempuan",
+    ageGroup: "ALL",
+    segmentLabel: "Perempuan • 18–35",
+    statement:
+      "Kalau mood gua lagi hancur atau PMS, nada bicara gua bisa ketus banget padahal pasangan gua nggak salah apa-apa.",
+    partnerPrompt:
+      "Dia sering melampiaskan bad mood atau PMS lewat nada bicara yang ketus meski lu nggak salah.",
+    consequenceQuestion:
+      "Lu sanggup tetep kalem dan nggak ikut terpancing emosi pas kena semprot tanpa sebab?",
+    compromises: [
+      'Kasih peringatan awal "mood lagi sensitif" sebelum ngobrol serius.',
+      "Wajib minta maaf setelah emosi reda kalau sempat bicara kasar.",
+      "Kasih waktu menyendiri 1-2 jam + makanan favorit sampai tenang.",
+    ],
+    botPref: { young: 2, mid: 1, mature: 1 },
+  },
+  {
+    id: "KB_M_Y1",
+    category: "Kebiasaan Buruk",
+    gender: "Laki-laki",
+    ageGroup: "young",
+    segmentLabel: "Laki-laki • 18–25",
+    statement:
+      "Kalau udah keasyikan main game, nongkrong, atau hobi, gua bisa ngilang berjam-jam tanpa ngabarin pasangan.",
+    partnerPrompt:
+      "Dia bisa hilang kabar berjam-jam tanpa notif kalau udah asyik mabar game atau nongkrong sama temennya.",
+    consequenceQuestion:
+      "Lu sanggup nahan overthinking pas chat lu cuma centang satu berjam-jam demi hobinya?",
+    compromises: [
+      "Wajib kirim kabar singkat sebelum mulai mabar/nongkrong + estimasi selesai.",
+      "Bebas hobi tanpa diganggu asal komitmen 1 jam ngobrol sebelum tidur.",
+      "Ikut nimbrung sesekali biar kenal circle pertemanannya.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 1 },
+  },
+  {
+    id: "KB_M_Y2",
+    category: "Kebiasaan Buruk",
+    gender: "Laki-laki",
+    ageGroup: "young",
+    segmentLabel: "Laki-laki • 18–25",
+    statement:
+      "Gua susah nolak ajakan temen buat nongkrong dadakan, meskipun sebenernya gaji/uang bulanan gua udah menipis.",
+    partnerPrompt:
+      "Dia nggak enakan sama temen tongkrongan sampai sering maksain nongkrong meski dompet lagi tipis.",
+    consequenceQuestion:
+      "Lu siap ngadepin dia yang lebih takut dibilang pelit sama temennya daripada mikirin tabungan kalian?",
+    compromises: [
+      "Bikin jatah budget nongkrong bulanan yang kalau habis ya wajib di rumah.",
+      "Ganti lokasi nongkrong ke rumah/kost biar tetep kumpul tapi hemat.",
+      'Belajar bilang "lagi nabung buat masa depan" tanpa gengsi.',
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+  },
+  {
+    id: "KB_F_Y1",
+    category: "Kebiasaan Buruk",
+    gender: "Perempuan",
+    ageGroup: "young",
+    segmentLabel: "Perempuan • 18–25",
+    statement:
+      'Gua sering bilang "terserah" atau "aku gapapa", padahal dalam hati ngarep pasangan peka dan nebak sendiri maunya gua apa.',
+    partnerPrompt:
+      'Dia hobi bilang "terserah" atau "gapapa", tapi ngambek kalau lu gagal nebak isi pikirannya.',
+    consequenceQuestion:
+      "Lu sanggup main tebak-tebakan perasaan tiap minggu tanpa kehilangan kesabaran?",
+    compromises: [
+      'Hapus kata "terserah" — wajib kasih minimal 2 opsi pilihan konkret.',
+      'Kalau bilang "gapapa", pasangan berhak menganggap beneran aman.',
+      "Latihan ngomong langsung apa yang dibutuhin dalam 1 kalimat jelas.",
+    ],
+    botPref: { young: 0, mid: 2, mature: 2 },
+  },
+  {
+    id: "KB_F_Y2",
+    category: "Kebiasaan Buruk",
+    gender: "Perempuan",
+    ageGroup: "young",
+    segmentLabel: "Perempuan • 18–25",
+    statement:
+      "Gua sering curhat detail masalah hubungan kita ke sahabat-sahabat gua tiap kali kita lagi ribut.",
+    partnerPrompt:
+      "Dia sering curhatin masalah internal hubungan kalian ke sahabat-sahabatnya setiap kali ribut.",
+    consequenceQuestion:
+      "Lu siap kalau setiap kesalahan lu bakal diketahui dan dihakimi sama geng sahabatnya?",
+    compromises: [
+      "Sepakat masalah internal dilarang diceritain ke temen sebelum dibahas berdua.",
+      "Boleh curhat maksimal ke 1 orang netral yang dewasa, bukan ke grup.",
+      "Selesaikan konflik di hari yang sama biar nggak bocor keluar.",
+    ],
+    botPref: { young: 1, mid: 0, mature: 0 },
+  },
+  {
+    id: "KB_M_A1",
+    category: "Kebiasaan Buruk",
+    gender: "Laki-laki",
+    ageGroup: "adult",
+    segmentLabel: "Laki-laki • 26+",
+    statement:
+      "Kalau lagi ada masalah berat di kerjaan, gua milih nutup diri dan diem seharian daripada cerita ke pasangan.",
+    partnerPrompt:
+      'Dia tipe yang masuk ke "gua" dan membisu seharian kalau lagi stres berat sama kerjaan.',
+    consequenceQuestion:
+      "Lu tahan nggak ngerasa dicuekin atau diabaikan pas dia butuh waktu diem seharian?",
+    compromises: [
+      'Kirim pesan singkat "Lagi butuh waktu mikir sampai malem ya" biar nggak bikin cemas.',
+      "Maksimal waktu tutup diri adalah 24 jam, setelah itu wajib cerita.",
+      "Pasangan cukup nemenin di ruangan yang sama tanpa maksa ngobrol.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 0 },
+  },
+  {
+    id: "KB_M_A2",
+    category: "Kebiasaan Buruk",
+    gender: "Laki-laki",
+    ageGroup: "adult",
+    segmentLabel: "Laki-laki • 26+",
+    statement:
+      "Gua terlalu workaholic sampai sering buka laptop atau bales chat kerjaan pas lagi jalan berdua sama pasangan.",
+    partnerPrompt:
+      "Dia workaholic akut yang masih sering balesin chat kerjaan pas lagi kencan berdua.",
+    consequenceQuestion:
+      "Lu ikhlas posisi lu sering jadi nomor dua setelah urusan klien dan deadline kantornya?",
+    compromises: [
+      'Terapkan aturan "No Laptop & Silent Work Chat" selama 2 jam pas kencan.',
+      "Pisahkan HP kerja dan HP pribadi setelah jam 8 malam.",
+      "Kompensasi waktu kerja lembur dengan liburan berkualitas di akhir pekan.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 1 },
+  },
+  {
+    id: "KB_F_A1",
+    category: "Kebiasaan Buruk",
+    gender: "Perempuan",
+    ageGroup: "adult",
+    segmentLabel: "Perempuan • 26+",
+    statement:
+      "Gua punya kebiasaan nge-stalk masa lalu pasangan atau mantan-mantannya sampai bikin mood gua sendiri rusak.",
+    partnerPrompt:
+      "Dia hobi kepo dan nge-stalk jejak digital mantan-mantanmu sampai akhirnya bad mood sendiri.",
+    consequenceQuestion:
+      "Lu siap ngadepin kecemburuan masa lalu yang sebenernya udah selesai bertahun-tahun lalu?",
+    compromises: [
+      "Bersihkan foto/jejak mantan di media sosial demi ketenangan bersama.",
+      "Sepakat stop kepo akun masa lalu dan fokus ke masa depan.",
+      "Kasih kepastian sikap nyata kalau masa lalu udah beneran tutup buku.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 1 },
+  },
+  {
+    id: "KB_F_A2",
+    category: "Kebiasaan Buruk",
+    gender: "Perempuan",
+    ageGroup: "adult",
+    segmentLabel: "Perempuan • 26+",
+    statement:
+      "Gua gampang panik dan over-planning soal masa depan sampai bikin pasangan ngerasa lagi di-interview kerja.",
+    partnerPrompt:
+      "Dia suka bikin checklist masa depan yang kaku sampai diskusi hubungan berasa kayak interview HRD.",
+    consequenceQuestion:
+      "Lu sanggup ngikutin standar timeline hidupnya yang detail tanpa ngerasa tertekan?",
+    compromises: [
+      "Bahas rencana jangka panjang cukup 1 bulan sekali dalam suasana santai.",
+      "Ubah checklist kaku jadi rencana fleksibel yang disusun berdua.",
+      "Sisihkan waktu kencan tanpa boleh bahas target masa depan sama sekali.",
+    ],
+    botPref: { young: 2, mid: 0, mature: 1 },
+  },
 
-  // Pantau status Login Firebase & tarik data profil + riwayat dari Firestore
-  useEffect(() => {
-    const unsub = subscribeToAuth(async (user) => {
-      setAuthUser(user);
-      if (user) {
-        setEmail(user.email || '');
-        if (user.displayName) {
-          setName((prev) => prev || user.displayName || '');
-        }
-        const docData = await getUserProfileDoc(user.uid);
-        if (docData) {
-          if (docData.name) setName(docData.name);
-          if (docData.gender) setGender(docData.gender);
-          if (docData.age) setAge(String(docData.age));
-          if (Array.isArray(docData.history)) {
-            setMatchHistory([...docData.history].reverse());
-          }
-        }
-      } else {
-        setMatchHistory([]);
-      }
-    });
-    return () => unsub();
-  }, []);
+  // ==================== KATEGORI 3: SIFAT JELEK & RED FLAG EGO ====================
+  {
+    id: "SJ_U1",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Kalau lagi berantem, gua lebih milih menang debat dan nyari siapa yang salah daripada nyari solusi bareng.",
+    partnerPrompt:
+      "Dia kompetitif banget pas berantem — lebih fokus menang debat daripada nyari jalan keluar.",
+    consequenceQuestion:
+      "Lu siap nelen ego buat ngalah duluan cuma supaya debat kusir kalian berhenti?",
+    compromises: [
+      'Gunakan prinsip "Kita lawan masalah, bukan aku lawan kamu".',
+      "Stop debat kalau nada suara udah naik; lanjut setelah dingin 30 menit.",
+      'Fokus bahas "ke depannya gimana" daripada nyalahin "tadi siapa yang mulai".',
+    ],
+    botPref: { young: 1, mid: 0, mature: 0 },
+  },
+  {
+    id: "SJ_U2",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua sering ngasih silent treatment (mendiamkan pasangan) berhari-hari daripada ngomongin masalahnya secara dewasa.",
+    partnerPrompt:
+      "Dia sering ngasih silent treatment dingin berhari-hari setiap kali kecewa atau marah.",
+    consequenceQuestion:
+      "Lu kuat mental didiemin berhari-hari tanpa kepastian di tengah konflik yang menggantung?",
+    compromises: [
+      'Ganti silent treatment dengan "time-out" resmi maksimal 3 jam.',
+      "Wajib selesaikan masalah sebelum tidur, minimal sepakat damai sementara.",
+      "Tulis lewat chat kalau emang lagi susah ngomong langsung.",
+    ],
+    botPref: { young: 0, mid: 1, mature: 0 },
+  },
+  {
+    id: "SJ_U3",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua sering terlalu ngatur dan nuntut pasangan berubah sesuai standar gua, tapi gua sendiri ogah dikritik.",
+    partnerPrompt:
+      "Dia cenderung perfeksionis ngatur standar pasangannya, tapi defensif kalau dirinya dikritik.",
+    consequenceQuestion:
+      "Lu rela kehilangan sebagian kebebasan pribadimu demi ngikutin standar aturannya?",
+    compromises: [
+      'Pisahkan mana "prinsip wajib" dan mana "preferensi pribadi" yang nggak boleh dipaksa.',
+      "Terapkan aturan kritik 1-banding-1 (setiap koreksi wajib dibarengi apresiasi).",
+      "Hormati cara masing-masing dalam menyelesaikan hal teknis.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 0 },
+  },
+  {
+    id: "SJ_U4",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "ALL",
+    ageGroup: "ALL",
+    segmentLabel: "Universal • 18–35",
+    statement:
+      "Gua gampang ilfeel dan pengen kabur menjauh begitu hubungan mulai masuk fase serius atau ngebosenin.",
+    partnerPrompt:
+      "Dia punya kecenderungan avoidant — gampang ilfeel dan pengen kabur pas hubungan mulai datar atau serius.",
+    consequenceQuestion:
+      "Lu siap berjuang sendirian menjaga api hubungan pas dia tiba-tiba ngerasa hambar dan pengen menjauh?",
+    compromises: [
+      "Pahami bahwa fase tenang bukan berarti hilang rasa, tapi tanda hubungan stabil.",
+      "Cari tantangan atau hobi baru bareng tiap 3 bulan buat ngusir jenuh.",
+      "Komitmen nggak ambil keputusan putus pas lagi ngerasa bosan sesaat.",
+    ],
+    botPref: { young: 1, mid: 0, mature: 0 },
+  },
+  {
+    id: "SJ_M_ALL",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "Laki-laki",
+    ageGroup: "ALL",
+    segmentLabel: "Laki-laki • 18–35",
+    statement:
+      "Gua susah banget minta maaf duluan, bahkan di saat gua sadar kalau gua yang salah.",
+    partnerPrompt:
+      'Dia punya ego tinggi yang bikin dia susah banget ngucapin kata "maaf" duluan meski sadar salah.',
+    consequenceQuestion:
+      "Lu sanggup hidup bareng orang yang gengsi minta maaf dan cuma nunjukkin penyesalan lewat tindakan?",
+    compromises: [
+      'Latih ucapkan kata "maaf" secara verbal minimal untuk kesalahan besar.',
+      "Pasangan belajar baca bahasa permintaan maaf lewat tindakannya.",
+      "Buat kode lucu buat mencairkan gengsi pas sama-sama sadar salah.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 1 },
+  },
+  {
+    id: "SJ_F_ALL",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "Perempuan",
+    ageGroup: "ALL",
+    segmentLabel: "Perempuan • 18–35",
+    statement:
+      "Gua gampang ngungkit-ngungkit kesalahan lama pasangan tiap kali kita lagi ribut soal masalah baru.",
+    partnerPrompt:
+      'Dia punya "arsip ingatan tajam" dan suka ngungkit kesalahan lama tiap kali kalian ribut masalah baru.',
+    consequenceQuestion:
+      "Lu siap mental kalau kesalahan lu hari ini bakal terus diputar ulang di pertengkaran tahun depan?",
+    compromises: [
+      'Terapkan aturan "1 Konflik = 1 Topik", dilarang bawa arsip masa lalu.',
+      "Masalah yang udah dimaafin dianggap hangus dan nggak valid lagi.",
+      "Boleh bahas pola berulang hanya kalau terjadi lagi dalam 30 hari terakhir.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 0 },
+  },
+  {
+    id: "SJ_M_Y1",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "Laki-laki",
+    ageGroup: "young",
+    segmentLabel: "Laki-laki • 18–25",
+    statement:
+      "Gua gampang cemburu dan posesif kalau pasangan deket sama temen lawan jenis, meski gua sendiri pengen bebas berteman.",
+    partnerPrompt:
+      "Dia punya standar ganda: gampang cemburu sama temen lawan jenismu, tapi nuntut bebas buat dirinya sendiri.",
+    consequenceQuestion:
+      "Lu sanggup ngejalanin aturan pertemanan yang ketat sementara dia dapet kelonggaran lebih?",
+    compromises: [
+      "Terapkan standar batasan pertemanan lawan jenis yang 100% adil & sama.",
+      "Saling kenalin temen-temen deket biar nggak ada rasa curiga.",
+      "Transparan soal aktivitas tanpa harus saling cek HP tiap jam.",
+    ],
+    botPref: { young: 1, mid: 0, mature: 0 },
+  },
+  {
+    id: "SJ_F_Y1",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "Perempuan",
+    ageGroup: "young",
+    segmentLabel: "Perempuan • 18–25",
+    statement:
+      "Gua sering ngetes kesetiaan atau kesabaran pasangan pakai drama kecil cuma buat mastiin dia masih peduli.",
+    partnerPrompt:
+      'Dia suka bikin drama kecil buat "ngetes" seberapa sabar dan peduli lu sama dia.',
+    consequenceQuestion:
+      "Lu tahan ngadepin ujian drama dadakan yang sebenernya cuma cara dia nyari perhatian?",
+    compromises: [
+      "Stop bikin tes drama — ganti dengan minta perhatian secara langsung.",
+      "Pasangan kasih waktu perhatian penuh 30 menit tiap hari tanpa HP.",
+      "Kalau ketahuan ngetes, diskusi langsung kenapa dia lagi butuh kepastian.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 0 },
+  },
+  {
+    id: "SJ_M_A1",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "Laki-laki",
+    ageGroup: "adult",
+    segmentLabel: "Laki-laki • 26+",
+    statement:
+      "Gua cenderung ngerasa paling logis dan nganggep perasaan pasangan terlalu emosional atau lebay pas lagi diskusi.",
+    partnerPrompt:
+      'Dia sering ngeremehin perasaanmu sebagai "terlalu emosional" karena ngerasa dirinya paling logis.',
+    consequenceQuestion:
+      "Lu siap kalau keluhan emosionalmu sering dibales pakai argumen dingin dan data logika?",
+    compromises: [
+      'Validasi emosi pasangan dulu ("Aku ngerti kamu capek") sebelum kasih solusi.',
+      'Tanya dulu: "Kamu lagi pengen didengerin aja atau dicariin solusi?".',
+      "Hormati bahwa empati dan logika punya bobot yang sama pentingnya.",
+    ],
+    botPref: { young: 1, mid: 1, mature: 0 },
+  },
+  {
+    id: "SJ_F_A1",
+    category: "Sifat Jelek & Red Flag Ego",
+    gender: "Perempuan",
+    ageGroup: "adult",
+    segmentLabel: "Perempuan • 26+",
+    statement:
+      "Gua gampang nyimpen dendam halus dan bersikap pasif-agresif (nyindir halus) kalau keinginan gua nggak diturutin.",
+    partnerPrompt:
+      "Dia cenderung pasif-agresif dan nyindir halus kalau kemauannya nggak keturutan.",
+    consequenceQuestion:
+      "Lu sanggup nangkap sindiran halusnya atau tahan sama suasana dingin penuh kode sindiran?",
+    compromises: [
+      'Dilarang nyindir — biasakan bilang "Aku kecewa karena..." secara lugas.',
+      "Pasangan wajib dengerin keberatan tanpa langsung defensif.",
+      "Evaluasi ekspektasi masing-masing biar nggak ada harapan sepihak.",
+    ],
+    botPref: { young: 0, mid: 0, mature: 0 },
+  },
+];
 
-  // Subscribe ke Firestore jika mode multiplayer
-  useEffect(() => {
-    if (!room || room.mode !== 'couple') return;
-    const unsub = subscribeToRoom(room.roomCode, (updatedRoom) => {
-      setRoom(updatedRoom);
-      if (updatedRoom.status === 'playing' && step !== 'playing') {
-        setStep('playing');
-      }
-      if (updatedRoom.status === 'finished' && step !== 'ending') {
-        setStep('ending');
-      }
-    });
-    return () => unsub();
-  }, [room?.roomCode, room?.mode, step]);
+function build20QuestionsForProfile(
+  gender: "Laki-laki" | "Perempuan",
+  age: number
+): QuestionItem[] {
+  const ageGroup = age <= 25 ? "young" : "adult";
+  const categories: QuestionItem["category"][] = [
+    "Ketakutan Hidup",
+    "Kebiasaan Buruk",
+    "Sifat Jelek & Red Flag Ego",
+  ];
+  let finalDeck: QuestionItem[] = [];
 
-  // Simpan otomatis riwayat pertandingan ke users/{uid} saat mencapai Ending
-  useEffect(() => {
-    if (step !== 'ending' || !room?.ending || !authUser || !localPlayer) return;
+  categories.forEach((cat) => {
+    const pool = QUESTION_BANK.filter(
+      (q) =>
+        q.category === cat &&
+        (q.gender === "ALL" || q.gender === gender) &&
+        (q.ageGroup === "ALL" || q.ageGroup === ageGroup)
+    );
+    finalDeck = finalDeck.concat(pool);
+  });
 
-    const matchKey = `${room.roomCode}_${room.logs.length}_${room.loveBattery}`;
-    if (savedMatchKeyRef.current === matchKey) return;
-    savedMatchKeyRef.current = matchKey;
+  return finalDeck.slice(0, 20);
+}
 
-    const partner = room.host.id === localPlayer.id ? room.guest : room.host;
-
-    const newItem: MatchHistoryItem = {
-      id: `match_${Date.now()}`,
-      roomCode: room.roomCode,
-      mode: room.mode,
-      partnerName: partner ? partner.name : 'Bot AI',
-      partnerAge: partner ? partner.age : room.botAge || 24,
-      loveBattery: room.loveBattery,
-      endingTitle: room.ending.title,
-      endingSubtitle: room.ending.subtitle,
-      totalRounds: room.logs.length,
-      playedAt: Date.now(),
+function getBotPersonaConfig(
+  botGender: "Laki-laki" | "Perempuan",
+  botAge: number
+) {
+  const isFemale = botGender === "Perempuan";
+  if (botAge <= 24) {
+    return {
+      name: isFemale ? "Keisya" : "Arkan",
+      age: botAge,
+      gender: botGender,
+      tier: "young" as const,
+      emoji: isFemale ? "👧" : "🧑",
+      vibe: "Gen-Z Dramatis & Baperan",
+      bio: "Ekspresif, butuh validasi tinggi, gampang overthinking kalau chat dibales singkat.",
+      reactAccept:
+        "Wah seriusan kamu nerima sifatku yang itu? Jangan cuma manis di awal doang ya!",
+      reactReject:
+        "Tuh kan! Pasti ujung-ujungnya kamu nggak ngertiin aku. Yaudah coba cari jalan tengahnya gimana!",
     };
+  } else if (botAge <= 32) {
+    return {
+      name: isFemale ? "Nadya" : "Bagas",
+      age: botAge,
+      gender: botGender,
+      tier: "mid" as const,
+      emoji: isFemale ? "👩" : "👨",
+      vibe: "Quarter-Life Realistis",
+      bio: "Mikirin karier, stabilitas finansial, dan trauma masa lalu. Suka diskusi objektif.",
+      reactAccept:
+        "Oke, aku hargai kejujuranmu nerima itu. Tapi pastiin kamu sanggup nanggung efek sampingnya ya.",
+      reactReject:
+        "Fair enough, emang nggak semua hal harus diiyain. Ayo kita negosiasi kompromi yang masuk akal buat berdua.",
+    };
+  } else {
+    return {
+      name: isFemale ? "Laras" : "Dimas",
+      age: botAge,
+      gender: botGender,
+      tier: "mature" as const,
+      emoji: isFemale ? "👩‍💼" : "👨‍💼",
+      vibe: "Pragmatis Siap Nikah",
+      bio: "To-the-point, anti-drama, fokus efisiensi keuangan, keluarga, dan komitmen konkret.",
+      reactAccept:
+        "Bagus. Dalam pernikahan memang butuh kesiapan mental nerima kekurangan pasangan tanpa banyak drama.",
+      reactReject:
+        "Saya menghargai ketegasan kamu menolak. Sekarang pilih solusi paling praktis supaya ini nggak jadi masalah di rumah tangga.",
+    };
+  }
+}
 
-    appendMatchHistory(authUser.uid, newItem).then(() => {
-      setHistorySavedFlag(true);
-      setMatchHistory((prev) => [newItem, ...prev]);
-    });
-  }, [step, room, authUser, localPlayer]);
+export default function BesokKawinGame() {
+  // Audio FX
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
-  // HANDLER AUTH: GOOGLE & EMAIL
-  const handleGoogleSignIn = async () => {
-    setAuthMessage('');
-    setAuthLoading(true);
+  const playTone = (
+    freq: number,
+    type: OscillatorType = "sine",
+    duration = 0.15,
+    vol = 0.08,
+    delay = 0
+  ) => {
+    if (!soundEnabled) return;
     try {
-      await loginWithGoogle();
-    } catch (err) {
-      setAuthMessage(mapAuthError(err));
-    } finally {
-      setAuthLoading(false);
+      if (!audioCtxRef.current && typeof window !== "undefined") {
+        const AudioCtx =
+          window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        if (AudioCtx) audioCtxRef.current = new AudioCtx();
+      }
+      const ctx = audioCtxRef.current;
+      if (!ctx) return;
+      if (ctx.state === "suspended") ctx.resume();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = type;
+      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+      gain.gain.setValueAtTime(vol, ctx.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(
+        0.001,
+        ctx.currentTime + delay + duration
+      );
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + duration);
+    } catch {
+      // Ignore autoplay errors
     }
   };
 
-  const handleEmailAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthMessage('');
-    if (!authEmail.trim() || !authPassword) {
-      setAuthMessage('Isi email dan password terlebih dahulu.');
-      return;
-    }
-    setAuthLoading(true);
-    try {
-      if (authMode === 'login') {
-        await loginWithEmail(authEmail, authPassword);
-      } else {
-        await registerWithEmail(authEmail, authPassword);
-      }
-      setAuthPassword('');
-    } catch (err) {
-      setAuthMessage(mapAuthError(err));
-    } finally {
-      setAuthLoading(false);
-    }
+  const sfxTap = () => playTone(520, "triangle", 0.08, 0.06);
+  const sfxCharge = () => {
+    playTone(523.25, "sine", 0.14, 0.09, 0);
+    playTone(659.25, "sine", 0.18, 0.09, 0.09);
+  };
+  const sfxPenalty = () => {
+    playTone(220, "sawtooth", 0.18, 0.08, 0);
+    playTone(165, "sawtooth", 0.25, 0.08, 0.12);
+  };
+  const sfxFlip = () => playTone(380, "sine", 0.12, 0.07);
+  const sfxWin = () => {
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
+      playTone(f, "triangle", 0.25, 0.09, i * 0.1)
+    );
   };
 
-  // 1. VALIDASI PENDAFTARAN BERMAIN & KODE UNDANGAN (WAJIB 18+ & LAWAN JENIS)
-  const handleStartProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setFormError('');
-
-    const numericAge = parseInt(age, 10);
-    const activeEmail = authUser?.email || email.trim();
-
-    if (!name.trim() || !activeEmail) {
-      setFormError('Nama panggilan dan email wajib diisi.');
-      return;
-    }
-    if (isNaN(numericAge) || numericAge < 18) {
-      setFormError('Akses ditolak: Aplikasi ini khusus pengguna berusia 18 tahun ke atas.');
-      return;
-    }
-
-    const playerId =
-      authUser?.uid || `guest_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-
-    if (authUser) {
-      await upsertUserBasicProfile(authUser.uid, {
-        email: activeEmail,
-        name: name.trim(),
-        gender,
-        age: numericAge,
-      });
-    }
-
-    const baseProfile: PlayerProfile = {
-      id: playerId,
-      name: name.trim(),
-      email: activeEmail,
-      gender,
-      age: numericAge,
-      answers: [],
-      isReady: false,
-    };
-
-    if (playTab === 'join') {
-      if (!inviteInput.trim()) {
-        setFormError('Masukkan kode undangan dari pasanganmu.');
-        return;
-      }
-      const res = await joinCoupleRoom(inviteInput, baseProfile);
-      if (!res.ok || !res.room) {
-        setFormError(res.error || 'Gagal bergabung ke room.');
-        return;
-      }
-      setRoom(res.room);
-    }
-
-    savedMatchKeyRef.current = null;
-    setHistorySavedFlag(false);
-    setLocalPlayer(baseProfile);
-    setQuestionList(getQuestionsForProfile(gender, numericAge));
-    setQIndex(0);
-    setCollectedAnswers([]);
-    setStep('questions');
+  // Toasts
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const showToast = (message: string, type: ToastItem["type"] = "info") => {
+    const id = Date.now() + Math.random();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 2800);
   };
 
-  // 2. MENJAWAB 20 PERTANYAAN KEHIDUPAN
-  const handleAnswerQuestion = async (choice: AnswerChoice) => {
-    if (!localPlayer) return;
-    const currentQ = questionList[qIndex];
-    const newEntry: PlayerAnswer = {
-      questionId: currentQ.id,
-      statement: currentQ.statement,
-      category: currentQ.category,
-      consequenceSeed: currentQ.consequenceSeed,
-      choice,
-    };
-
-    const updated = [...collectedAnswers, newEntry];
-    setCollectedAnswers(updated);
-
-    if (qIndex + 1 < questionList.length) {
-      setQIndex(qIndex + 1);
-      return;
-    }
-
-    const finishedPlayer: PlayerProfile = {
-      ...localPlayer,
-      answers: updated,
-      isReady: true,
-    };
-    setLocalPlayer(finishedPlayer);
-
-    if (room && room.mode === 'couple' && room.host.id !== finishedPlayer.id) {
-      const deck = buildGameDeck(room.host, finishedPlayer);
-      const firstCard = deck[0];
-      const firstTurn: ActiveTurn = {
-        round: 1,
-        activePlayerId: firstCard.ownerId === room.host.id ? finishedPlayer.id : room.host.id,
-        sourcePlayerId: firstCard.ownerId,
-        card: firstCard.card,
-        phase: 'decision',
-        votes: {},
-        turnStartedAt: Date.now(),
-      };
-
-      const startedRoom: GameRoom = {
-        ...room,
-        guest: finishedPlayer,
-        status: 'playing',
-        deck,
-        currentTurn: firstTurn,
-      };
-      setRoom(startedRoom);
-      await submitGuestAnswersAndStart(room.roomCode, updated, {
-        status: 'playing',
-        deck,
-        currentTurn: firstTurn,
-      });
-      setStep('playing');
+  const copyTextSafe = (text: string, successMsg: string) => {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard
+        .writeText(text)
+        .then(() => showToast(successMsg, "success"))
+        .catch(() => fallbackCopy(text, successMsg));
     } else {
-      setStep('lobby');
+      fallbackCopy(text, successMsg);
     }
   };
 
-  // 3A. MULAI MODE SOLO VS BOT AI
-  const handleStartSolo = async () => {
-    if (!localPlayer) return;
-    setLoadingAI(true);
+  const fallbackCopy = (text: string, successMsg: string) => {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
     try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_bot',
-          userProfile: localPlayer,
-          botAge,
-        }),
-      });
-      const data = await res.json();
-      const botProfile: PlayerProfile = {
-        id: 'ai_bot',
-        name: data.botName,
-        email: 'bot@besokkawin.ai',
-        gender: data.botGender,
-        age: botAge,
-        answers: data.answers,
-        isReady: true,
-      };
+      document.execCommand("copy");
+      showToast(successMsg, "success");
+    } catch {
+      showToast("Gagal menyalin otomatis, silakan salin manual.", "warning");
+    }
+    document.body.removeChild(ta);
+  };
 
-      const soloDeck = botProfile.answers
-        .filter((a) => a.choice !== 'engga')
-        .slice(0, 6)
-        .map((card) => ({ card, ownerId: botProfile.id }));
+  // Screens & Navigation
+  const [screen, setScreen] = useState<
+    "register" | "quiz" | "mode" | "partner-join" | "game" | "ending"
+  >("register");
 
-      const deckToUse =
-        soloDeck.length > 0 ? soloDeck : [{ card: botProfile.answers[0], ownerId: botProfile.id }];
-
-      const newRoom: GameRoom = {
-        roomCode: 'SOLO-AI',
-        mode: 'solo',
-        status: 'playing',
-        loveBattery: 50,
-        consecutiveTimeouts: 0,
-        host: localPlayer,
-        guest: botProfile,
-        botAge,
-        deck: deckToUse,
-        currentTurn: {
-          round: 1,
-          activePlayerId: localPlayer.id,
-          sourcePlayerId: botProfile.id,
-          card: deckToUse[0].card,
-          phase: 'decision',
-          votes: {},
-          turnStartedAt: Date.now(),
-        },
-        logs: [],
-      };
-      setRoom(newRoom);
-      setStep('playing');
-    } finally {
-      setLoadingAI(false);
+  const goScreen = (next: typeof screen) => {
+    setScreen(next);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
-  // 3B. BUAT KODE UNDANGAN PASANGAN
-  const handleCreateInvite = async () => {
-    if (!localPlayer) return;
-    const created = await createCoupleRoom(localPlayer);
-    setRoom(created);
-  };
-
-  // HELPER PINDAH RONDE / SELESAI GAME
-  const advanceRound = useCallback(
-    async (
-      currentRoom: GameRoom,
-      delta: number,
-      action: TurnLog['action'],
-      note: string,
-      isTimeout = false
-    ) => {
-      if (!currentRoom.currentTurn || !currentRoom.guest) return;
-
-      const nextBattery = Math.max(0, Math.min(100, currentRoom.loveBattery + delta));
-      const nextTimeouts = isTimeout ? currentRoom.consecutiveTimeouts + 1 : 0;
-      const actorName =
-        currentRoom.currentTurn.activePlayerId === currentRoom.host.id
-          ? currentRoom.host.name
-          : currentRoom.guest.name;
-
-      const newLog: TurnLog = {
-        round: currentRoom.currentTurn.round,
-        actorName,
-        cardStatement: currentRoom.currentTurn.card.statement,
-        action,
-        delta,
-        note,
-      };
-
-      const updatedLogs = [...currentRoom.logs, newLog];
-      const nextIndex = currentRoom.currentTurn.round;
-
-      if (nextTimeouts >= 3 || nextIndex >= currentRoom.deck.length) {
-        const finalBattery = nextTimeouts >= 3 ? Math.min(nextBattery, 30) : nextBattery;
-        const ending = computeEnding(finalBattery);
-        const finishedRoom: GameRoom = {
-          ...currentRoom,
-          loveBattery: finalBattery,
-          consecutiveTimeouts: nextTimeouts,
-          logs: updatedLogs,
-          status: 'finished',
-          currentTurn: null,
-          ending,
-        };
-        setRoom(finishedRoom);
-        if (currentRoom.mode === 'couple') {
-          await syncRoomState(currentRoom.roomCode, {
-            loveBattery: finalBattery,
-            consecutiveTimeouts: nextTimeouts,
-            logs: updatedLogs,
-            status: 'finished',
-            currentTurn: null,
-            ending,
-          });
-        }
-        setStep('ending');
-        return;
-      }
-
-      const nextCardItem = currentRoom.deck[nextIndex];
-      const nextActorId =
-        nextCardItem.ownerId === currentRoom.host.id
-          ? currentRoom.guest.id
-          : currentRoom.host.id;
-
-      const nextTurn: ActiveTurn = {
-        round: nextIndex + 1,
-        activePlayerId: nextActorId,
-        sourcePlayerId: nextCardItem.ownerId,
-        card: nextCardItem.card,
-        phase: 'decision',
-        votes: {},
-        turnStartedAt: Date.now(),
-      };
-
-      const nextRoom: GameRoom = {
-        ...currentRoom,
-        loveBattery: nextBattery,
-        consecutiveTimeouts: nextTimeouts,
-        logs: updatedLogs,
-        currentTurn: nextTurn,
-      };
-
-      setRoom(nextRoom);
-      if (currentRoom.mode === 'couple') {
-        await syncRoomState(currentRoom.roomCode, {
-          loveBattery: nextBattery,
-          consecutiveTimeouts: nextTimeouts,
-          logs: updatedLogs,
-          currentTurn: nextTurn,
-        });
-      }
-    },
-    []
+  // Registration State
+  const [landingTab, setLandingTab] = useState<"new" | "invite">("new");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inputJoinCode, setInputJoinCode] = useState("");
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regGender, setRegGender] = useState<"Laki-laki" | "Perempuan">(
+    "Laki-laki"
   );
+  const [regAge, setRegAge] = useState("");
+  const [regError, setRegError] = useState<{
+    title: string;
+    text: string;
+    key: number;
+  } | null>(null);
 
-  // TIMER 60 DETIK ANTI-AFK
+  // Players & Quiz State
+  const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
+  const [player2, setPlayer2] = useState<PlayerProfile | null>(null);
+  const [mode, setMode] = useState<"solo" | "couple">("solo");
+  const [quizTarget, setQuizTarget] = useState<"player1" | "player2">(
+    "player1"
+  );
+  const [quizIndex, setQuizIndex] = useState(0);
+
+  // Mode Screen State
+  const [botAgeSlider, setBotAgeSlider] = useState(25);
+  const [partnerNameInput, setPartnerNameInput] = useState("");
+  const [partnerGenderInput, setPartnerGenderInput] = useState<
+    "Laki-laki" | "Perempuan"
+  >("Perempuan");
+  const [partnerAgeInput, setPartnerAgeInput] = useState("");
+  const [partnerError, setPartnerError] = useState<{
+    title: string;
+    text: string;
+    key: number;
+  } | null>(null);
+
+  // Gameplay State
+  const [battery, setBattery] = useState(50);
+  const [deltaPop, setDeltaPop] = useState<{ val: number; key: number } | null>(
+    null
+  );
+  const [shakeHud, setShakeHud] = useState(0);
+  const [round, setRound] = useState(1);
+  const maxRounds = 8;
+  const [deck, setDeck] = useState<DeckCard[]>([]);
+  const [gameStage, setGameStage] = useState<
+    | "dilemma"
+    | "consequence"
+    | "negotiate-solo"
+    | "negotiate-couple-1"
+    | "negotiate-couple-2"
+  >("dilemma");
+  const [coupleP1Choice, setCoupleP1Choice] = useState<number | null>(null);
+  const [timerSeconds, setTimerSeconds] = useState(60);
+  const [timerActive, setTimerActive] = useState(false);
+  const [consecutiveTimeouts, setConsecutiveTimeouts] = useState(0);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [stats, setStats] = useState({
+    terimaMantap: 0,
+    menyesal: 0,
+    kompromiSepakat: 0,
+    deadlockOrAfk: 0,
+  });
+  const [endingReason, setEndingReason] = useState("");
+
+  // Battery Updater
+  const applyBatteryDelta = (delta: number) => {
+    setBattery((prev) => Math.max(0, Math.min(100, prev + delta)));
+    if (delta !== 0) {
+      setDeltaPop({ val: delta, key: Date.now() + Math.random() });
+      if (delta < 0) setShakeHud((prev) => prev + 1);
+    }
+  };
+
+  // Turn Timer Effect
   useEffect(() => {
-    if (step !== 'playing' || !room?.currentTurn) return;
-
+    if (screen !== "game" || !timerActive) return;
     const interval = setInterval(() => {
-      const elapsed = Math.floor((Date.now() - room.currentTurn!.turnStartedAt) / 1000);
-      const remaining = Math.max(0, 60 - elapsed);
-      setTimeLeft(remaining);
-
-      if (remaining === 0) {
-        clearInterval(interval);
-        advanceRound(
-          room,
-          -15,
-          'timeout',
-          'Waktu habis (60 detik)! Dihitung otomatis sebagai Tolak & Gagal Kompromi.',
-          true
-        );
-      }
-    }, 500);
-
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setTimerActive(false);
+          handleTimeoutPenalty();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
     return () => clearInterval(interval);
-  }, [step, room, advanceRound]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, timerActive, round]);
 
-  // AKSI 1: KLIK "TERIMA"
-  const handleChooseTerima = async () => {
-    if (!room?.currentTurn || !localPlayer) return;
-    setLoadingAI(true);
-    try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_consequence',
-          actorAnswers: localPlayer.answers,
-          card: room.currentTurn.card,
-        }),
-      });
-      const data = await res.json();
-
-      const updatedTurn: ActiveTurn = {
-        ...room.currentTurn,
-        phase: 'consequence',
-        consequenceText: data.consequenceText,
-        turnStartedAt: Date.now(),
-      };
-      setRoom({ ...room, currentTurn: updatedTurn });
-      if (room.mode === 'couple') {
-        await syncRoomState(room.roomCode, { currentTurn: updatedTurn });
-      }
-    } finally {
-      setLoadingAI(false);
-    }
+  // Handlers: Screen 1
+  const quickFillDemoUser = () => {
+    sfxTap();
+    const samples = [
+      {
+        name: "Raka",
+        email: "raka.drama@mail.com",
+        gender: "Laki-laki" as const,
+        age: "24",
+      },
+      {
+        name: "Nadya",
+        email: "nadya.jujur@mail.com",
+        gender: "Perempuan" as const,
+        age: "27",
+      },
+      {
+        name: "Dimas",
+        email: "dimas.realistis@mail.com",
+        gender: "Laki-laki" as const,
+        age: "29",
+      },
+      {
+        name: "Keisya",
+        email: "keisya.overthink@mail.com",
+        gender: "Perempuan" as const,
+        age: "22",
+      },
+    ];
+    const pick =
+      landingTab === "invite"
+        ? samples[1]
+        : samples[Math.floor(Math.random() * samples.length)];
+    setRegName(pick.name);
+    setRegEmail(pick.email);
+    setRegGender(pick.gender);
+    setRegAge(pick.age);
+    setRegError(null);
+    showToast(
+      `Data demo (${pick.name}, ${pick.gender}, ${pick.age} thn) diisi!`,
+      "success"
+    );
   };
 
-  // AKSI 2: KLIK "TOLAK"
-  const handleChooseTolak = async () => {
-    if (!room?.currentTurn) return;
-    setLoadingAI(true);
-    try {
-      const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'generate_compromise',
-          card: room.currentTurn.card,
-          botAge: room.botAge,
-        }),
+  const handleRegistration = (e: React.FormEvent) => {
+    e.preventDefault();
+    const ageNum = parseInt(regAge, 10);
+
+    if (isNaN(ageNum) || ageNum < 18) {
+      sfxPenalty();
+      setRegError({
+        title:
+          "Akses Ditolak! Minimal usia 18 tahun untuk mengurus drama hubungan.",
+        text: `Usiamu baru ${
+          isNaN(ageNum) ? "belum jelas" : ageNum + " tahun"
+        }. Kelarin dulu urusan sekolah/kuliah sebelum uji nyali soal KUA!`,
+        key: Date.now(),
       });
-      const data = await res.json();
-      setBotVoteMemory(data.botVoteIndex ?? 0);
-
-      const updatedTurn: ActiveTurn = {
-        ...room.currentTurn,
-        phase: 'negotiating',
-        compromiseOptions: data.options,
-        votes: {},
-        turnStartedAt: Date.now(),
-      };
-      setRoom({ ...room, currentTurn: updatedTurn });
-      if (room.mode === 'couple') {
-        await syncRoomState(room.roomCode, { currentTurn: updatedTurn });
-      }
-    } finally {
-      setLoadingAI(false);
-    }
-  };
-
-  // AKSI 3: VOTE JALAN TENGAH
-  const handleVoteCompromise = async (optionIdx: number) => {
-    if (!room?.currentTurn || !localPlayer || !room.guest) return;
-
-    if (room.mode === 'solo') {
-      const agreed = optionIdx === botVoteMemory;
-      await advanceRound(
-        room,
-        agreed ? 5 : -15,
-        agreed ? 'tolak_sepakat' : 'tolak_deadlock',
-        agreed
-          ? `Sepakat jalan tengah: "${room.currentTurn.compromiseOptions?.[optionIdx]}"`
-          : `Deadlock! Kamu dan ${room.guest.name} memilih kompromi yang berbeda.`
-      );
       return;
     }
 
-    const updatedVotes = {
-      ...room.currentTurn.votes,
-      [localPlayer.id]: optionIdx,
+    if (landingTab === "invite") {
+      const code = inputJoinCode.trim().toUpperCase();
+      if (!code || code.length < 4) {
+        sfxPenalty();
+        setRegError({
+          title: "Kode Undangan Kosong!",
+          text: "Masukkan kode undangan pasanganmu (atau klik tombol Kode Demo).",
+          key: Date.now(),
+        });
+        return;
+      }
+
+      const hostQuestions = build20QuestionsForProfile("Laki-laki", 26);
+      const hostAnswers: PlayerProfile["answers"] = {};
+      hostQuestions.forEach((q, idx) => {
+        hostAnswers[q.id] =
+          idx % 3 === 0 ? "iya" : idx % 3 === 1 ? "kayanya" : "engga";
+      });
+
+      const simulatedHost: PlayerProfile = {
+        name: "Arkan (Pengundang)",
+        email: "arkan@host.id",
+        gender: "Laki-laki",
+        age: 26,
+        questions: hostQuestions,
+        answers: hostAnswers,
+      };
+
+      if (regGender === simulatedHost.gender) {
+        sfxPenalty();
+        setRegError({
+          title:
+            "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
+          text: `Kode ${code} dibuat oleh ${simulatedHost.name} (${simulatedHost.gender}). Kamu tidak bisa bergabung dengan jenis kelamin yang sama.`,
+          key: Date.now(),
+        });
+        return;
+      }
+
+      sfxTap();
+      setRegError(null);
+      setInviteCode(code);
+      setMode("couple");
+      setPlayer1(simulatedHost);
+      setPlayer2({
+        name: regName.trim(),
+        email: regEmail.trim(),
+        gender: regGender,
+        age: ageNum,
+        questions: build20QuestionsForProfile(regGender, ageNum),
+        answers: {},
+      });
+      setQuizTarget("player2");
+      setQuizIndex(0);
+      goScreen("quiz");
+      return;
+    }
+
+    sfxTap();
+    setRegError(null);
+    setMode("solo");
+    setInviteCode("KAWIN-" + Math.floor(100 + Math.random() * 899));
+    setPlayer1({
+      name: regName.trim(),
+      email: regEmail.trim(),
+      gender: regGender,
+      age: ageNum,
+      questions: build20QuestionsForProfile(regGender, ageNum),
+      answers: {},
+    });
+    setPlayer2(null);
+    setQuizTarget("player1");
+    setQuizIndex(0);
+    goScreen("quiz");
+  };
+
+  // Handlers: Screen 2 (Quiz)
+  const answerQuiz = (choice: "iya" | "kayanya" | "engga") => {
+    sfxTap();
+    const activeProfile = quizTarget === "player1" ? player1 : player2;
+    if (!activeProfile) return;
+
+    const currentQ = activeProfile.questions[quizIndex];
+    const updatedProfile: PlayerProfile = {
+      ...activeProfile,
+      answers: { ...activeProfile.answers, [currentQ.id]: choice },
     };
 
-    const hostVote = updatedVotes[room.host.id];
-    const guestVote = updatedVotes[room.guest.id];
+    if (quizTarget === "player1") setPlayer1(updatedProfile);
+    else setPlayer2(updatedProfile);
 
-    if (hostVote !== undefined && guestVote !== undefined) {
-      const agreed = hostVote === guestVote;
-      await advanceRound(
-        room,
-        agreed ? 5 : -15,
-        agreed ? 'tolak_sepakat' : 'tolak_deadlock',
-        agreed
-          ? `Sepakat jalan tengah: "${room.currentTurn.compromiseOptions?.[optionIdx]}"`
-          : 'Deadlock! Pilihan jalan tengah kalian berdua tidak cocok.'
-      );
+    if (quizIndex + 1 < activeProfile.questions.length) {
+      setQuizIndex(quizIndex + 1);
     } else {
-      const updatedTurn: ActiveTurn = {
-        ...room.currentTurn,
-        votes: updatedVotes,
-      };
-      setRoom({ ...room, currentTurn: updatedTurn });
-      await syncRoomState(room.roomCode, { currentTurn: updatedTurn });
+      finishQuizPhase(updatedProfile);
     }
   };
 
-  const resetToLobbyOrHome = () => {
-    setRoom(null);
-    setStep('auth');
+  const autoCompleteQuizDemo = () => {
+    sfxTap();
+    const activeProfile = quizTarget === "player1" ? player1 : player2;
+    if (!activeProfile) return;
+
+    const choices: ("iya" | "kayanya" | "engga")[] = [
+      "iya",
+      "iya",
+      "kayanya",
+      "engga",
+    ];
+    const newAnswers = { ...activeProfile.answers };
+    for (let i = quizIndex; i < activeProfile.questions.length; i++) {
+      const q = activeProfile.questions[i];
+      newAnswers[q.id] =
+        choices[(i + Math.floor(Math.random() * 3)) % choices.length];
+    }
+    const updatedProfile = { ...activeProfile, answers: newAnswers };
+    if (quizTarget === "player1") setPlayer1(updatedProfile);
+    else setPlayer2(updatedProfile);
+
+    showToast("Sisa pertanyaan otomatis terisi untuk simulasi!", "success");
+    finishQuizPhase(updatedProfile);
   };
 
-  // ==================== RENDER UI ====================
+  const finishQuizPhase = (completedProfile: PlayerProfile) => {
+    if (quizTarget === "player2" && player1) {
+      showToast(
+        `Dek masalah ${completedProfile.name} siap! Memulai permainan pasangan...`,
+        "success"
+      );
+      initMatchArena(player1, completedProfile, "couple");
+      return;
+    }
+    goScreen("mode");
+  };
 
-  // SCREEN 1: AUTH (GOOGLE / EMAIL) + FORM PROFIL 18+ + RIWAYAT MAIN
-  if (step === 'auth') {
-    return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-4 py-8">
-        <div className="w-full max-w-md space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-2 text-rose-500 font-bold text-xs uppercase tracking-wider">
-                <Flame className="w-4 h-4" /> 18+ Relationship Reality Game
+  // Handlers: Screen 3 & 3B (Mode & Partner Join)
+  const startSoloGame = () => {
+    if (!player1) return;
+    sfxTap();
+    const botGender =
+      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+    const persona = getBotPersonaConfig(botGender, botAgeSlider);
+    const botQuestions = build20QuestionsForProfile(botGender, botAgeSlider);
+    const botAnswers: PlayerProfile["answers"] = {};
+    botQuestions.forEach((q, i) => {
+      if (i % 3 === 0 || i % 5 === 0) botAnswers[q.id] = "iya";
+      else if (i % 2 === 0) botAnswers[q.id] = "kayanya";
+      else botAnswers[q.id] = "engga";
+    });
+
+    const botProfile: PlayerProfile = {
+      name: persona.name,
+      email: "bot@ai.id",
+      gender: botGender,
+      age: botAgeSlider,
+      questions: botQuestions,
+      answers: botAnswers,
+      emoji: persona.emoji,
+      tier: persona.tier,
+      vibe: persona.vibe,
+      bio: persona.bio,
+      reactAccept: persona.reactAccept,
+      reactReject: persona.reactReject,
+    };
+
+    setMode("solo");
+    setPlayer2(botProfile);
+    initMatchArena(player1, botProfile, "solo");
+  };
+
+  const openPartnerSimulatorModal = () => {
+    if (!player1) return;
+    sfxTap();
+    setPartnerError(null);
+    setPartnerGenderInput(
+      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
+    );
+    goScreen("partner-join");
+  };
+
+  const quickFillPartnerDemo = () => {
+    if (!player1) return;
+    sfxTap();
+    const opp = player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+    setPartnerNameInput(opp === "Perempuan" ? "Salsa" : "Reza");
+    setPartnerGenderInput(opp);
+    setPartnerAgeInput("25");
+    setPartnerError(null);
+  };
+
+  const handlePartnerJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!player1) return;
+    const pAge = parseInt(partnerAgeInput, 10);
+
+    if (isNaN(pAge) || pAge < 18) {
+      sfxPenalty();
+      setPartnerError({
+        title: "Akses Ditolak! Minimal Usia 18+",
+        text: "Pasangan harus berusia minimal 18 tahun untuk bermain.",
+        key: Date.now(),
+      });
+      return;
+    }
+
+    if (partnerGenderInput === player1.gender) {
+      sfxPenalty();
+      setPartnerError({
+        title:
+          "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
+        text: `${player1.name} terdaftar sebagai ${
+          player1.gender
+        }. Pasangan harus berjenis kelamin ${
+          player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
+        }.`,
+        key: Date.now(),
+      });
+      return;
+    }
+
+    sfxTap();
+    setPartnerError(null);
+    const p2: PlayerProfile = {
+      name: partnerNameInput.trim(),
+      email: "pasangan@invite.id",
+      gender: partnerGenderInput,
+      age: pAge,
+      questions: build20QuestionsForProfile(partnerGenderInput, pAge),
+      answers: {},
+    };
+    setMode("couple");
+    setPlayer2(p2);
+    setQuizTarget("player2");
+    setQuizIndex(0);
+    goScreen("quiz");
+  };
+
+  // Match Deck Builder & Arena Init
+  const initMatchArena = (
+    p1: PlayerProfile,
+    p2: PlayerProfile,
+    matchMode: "solo" | "couple"
+  ) => {
+    const extractDeckCards = (profile: PlayerProfile) => {
+      const mainCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
+      const wildCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
+      const fallbackCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
+
+      profile.questions.forEach((q) => {
+        const ans = profile.answers[q.id];
+        if (ans === "iya")
+          mainCards.push({ ...q, isWildcard: false, sourceOwner: profile.name });
+        else if (ans === "kayanya")
+          wildCards.push({ ...q, isWildcard: true, sourceOwner: profile.name });
+        else
+          fallbackCards.push({
+            ...q,
+            isWildcard: true,
+            sourceOwner: profile.name,
+          });
+      });
+
+      const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
+      return [
+        ...shuffle(mainCards),
+        ...shuffle(wildCards),
+        ...shuffle(fallbackCards),
+      ];
+    };
+
+    const p2Pool = extractDeckCards(p2);
+    const p1Pool = extractDeckCards(p1);
+    const matchDeck: DeckCard[] = [];
+
+    for (let r = 1; r <= maxRounds; r++) {
+      if (matchMode === "solo") {
+        const card = p2Pool[(r - 1) % p2Pool.length];
+        matchDeck.push({ ...card, roundNum: r, responderKey: "player1" });
+      } else {
+        if (r % 2 === 1) {
+          const card = p2Pool[Math.floor(r / 2) % p2Pool.length];
+          matchDeck.push({ ...card, roundNum: r, responderKey: "player1" });
+        } else {
+          const card = p1Pool[Math.floor((r - 1) / 2) % p1Pool.length];
+          matchDeck.push({ ...card, roundNum: r, responderKey: "player2" });
+        }
+      }
+    }
+
+    setBattery(50);
+    setDeltaPop(null);
+    setRound(1);
+    setConsecutiveTimeouts(0);
+    setHistory([]);
+    setStats({
+      terimaMantap: 0,
+      menyesal: 0,
+      kompromiSepakat: 0,
+      deadlockOrAfk: 0,
+    });
+    setEndingReason("");
+    setDeck(matchDeck);
+    setGameStage("dilemma");
+    setTimerSeconds(60);
+    setTimerActive(true);
+    goScreen("game");
+  };
+
+  // Gameplay Actions
+  const advanceToNextRound = (projectedBattery: number) => {
+    if (projectedBattery <= 0) {
+      setTimerActive(false);
+      setEndingReason(
+        "Baterai Cinta habis menyentuh 0% sebelum ronde selesai!"
+      );
+      sfxPenalty();
+      goScreen("ending");
+      return;
+    }
+    if (round >= maxRounds) {
+      setTimerActive(false);
+      if (projectedBattery >= 80) sfxWin();
+      else if (projectedBattery >= 45) sfxCharge();
+      else sfxPenalty();
+      goScreen("ending");
+      return;
+    }
+    setRound((prev) => prev + 1);
+    setGameStage("dilemma");
+    setTimerSeconds(60);
+    setTimerActive(true);
+  };
+
+  const handleTimeoutPenalty = () => {
+    sfxPenalty();
+    const currentCard = deck[round - 1];
+    if (!currentCard) return;
+    const responder =
+      currentCard.responderKey === "player1" ? player1 : player2;
+    const nextAfk = consecutiveTimeouts + 1;
+    setConsecutiveTimeouts(nextAfk);
+
+    const nextBattery = Math.max(0, Math.min(100, battery - 15));
+    applyBatteryDelta(-15);
+    setStats((s) => ({ ...s, deadlockOrAfk: s.deadlockOrAfk + 1 }));
+    setHistory((h) => [
+      ...h,
+      {
+        round,
+        category: currentCard.category,
+        isWildcard: currentCard.isWildcard,
+        problem: currentCard.partnerPrompt,
+        outcomeLabel: `Timeout / AFK (${responder?.name || "Pemain"})`,
+        delta: -15,
+        type: "bad",
+      },
+    ]);
+
+    showToast(
+      "⏱️ Waktu habis / AFK! Dihitung Tolak tanpa kompromi (-15%).",
+      "error"
+    );
+
+    if (nextAfk >= 3) {
+      setTimeout(() => {
+        setEndingReason("3x Timeout / Pasangan Ghosting Berturut-turut!");
+        goScreen("ending");
+      }, 900);
+      return;
+    }
+
+    setTimeout(() => advanceToNextRound(nextBattery), 950);
+  };
+
+  const chooseAcceptCard = () => {
+    sfxFlip();
+    setConsecutiveTimeouts(0);
+    setGameStage("consequence");
+  };
+
+  const resolveConsequence = (isFirm: boolean) => {
+    setTimerActive(false);
+    const currentCard = deck[round - 1];
+    const responder =
+      currentCard.responderKey === "player1" ? player1 : player2;
+
+    if (isFirm) {
+      sfxCharge();
+      const nextBattery = Math.max(0, Math.min(100, battery + 10));
+      applyBatteryDelta(10);
+      setStats((s) => ({ ...s, terimaMantap: s.terimaMantap + 1 }));
+      setHistory((h) => [
+        ...h,
+        {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `${responder?.name}: Terima Konsekuensi Mantap`,
+          delta: 10,
+          type: "good",
+        },
+      ]);
+      showToast("Komitmen penuh! Baterai Cinta +10%", "success");
+      setTimeout(() => advanceToNextRound(nextBattery), 800);
+    } else {
+      sfxPenalty();
+      const nextBattery = Math.max(0, Math.min(100, battery - 12));
+      applyBatteryDelta(-12);
+      setStats((s) => ({ ...s, menyesal: s.menyesal + 1 }));
+      setHistory((h) => [
+        ...h,
+        {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `${responder?.name}: Menyesal Pilih Terima`,
+          delta: -12,
+          type: "bad",
+        },
+      ]);
+      showToast("Asal mengiyakan lalu menyesal! Penalti berat -12%", "error");
+      setTimeout(() => advanceToNextRound(nextBattery), 800);
+    }
+  };
+
+  const chooseRejectCard = () => {
+    sfxFlip();
+    setConsecutiveTimeouts(0);
+    setCoupleP1Choice(null);
+    if (mode === "solo") setGameStage("negotiate-solo");
+    else setGameStage("negotiate-couple-1");
+  };
+
+  const resolveSoloNegotiation = (playerIdx: number, botIdx: number) => {
+    setTimerActive(false);
+    const currentCard = deck[round - 1];
+    const isAgreed = playerIdx === botIdx;
+
+    if (isAgreed) {
+      sfxCharge();
+      const nextBattery = Math.max(0, Math.min(100, battery + 5));
+      applyBatteryDelta(5);
+      setStats((s) => ({ ...s, kompromiSepakat: s.kompromiSepakat + 1 }));
+      setHistory((h) => [
+        ...h,
+        {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
+            65 + playerIdx
+          )})`,
+          delta: 5,
+          type: "neutral",
+        },
+      ]);
+      showToast(
+        `Sepakat sama ${player2?.name} di Opsi ${String.fromCharCode(
+          65 + playerIdx
+        )}! Baterai +5%`,
+        "success"
+      );
+      setTimeout(() => advanceToNextRound(nextBattery), 950);
+    } else {
+      sfxPenalty();
+      const nextBattery = Math.max(0, Math.min(100, battery - 15));
+      applyBatteryDelta(-15);
+      setStats((s) => ({ ...s, deadlockOrAfk: s.deadlockOrAfk + 1 }));
+      setHistory((h) => [
+        ...h,
+        {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `Tolak → Deadlock (Kamu: ${String.fromCharCode(
+            65 + playerIdx
+          )}, ${player2?.name}: ${String.fromCharCode(65 + botIdx)})`,
+          delta: -15,
+          type: "bad",
+        },
+      ]);
+      showToast(
+        `Deadlock! Kamu pilih ${String.fromCharCode(65 + playerIdx)}, ${
+          player2?.name
+        } maunya ${String.fromCharCode(65 + botIdx)} (-15%)`,
+        "error"
+      );
+      setTimeout(() => advanceToNextRound(nextBattery), 950);
+    }
+  };
+
+  const resolveCoupleNegotiation = (partnerChoiceIdx: number) => {
+    setTimerActive(false);
+    const currentCard = deck[round - 1];
+    const firstIdx = coupleP1Choice ?? 0;
+    const isAgreed = firstIdx === partnerChoiceIdx;
+
+    if (isAgreed) {
+      sfxCharge();
+      const nextBattery = Math.max(0, Math.min(100, battery + 5));
+      applyBatteryDelta(5);
+      setStats((s) => ({ ...s, kompromiSepakat: s.kompromiSepakat + 1 }));
+      setHistory((h) => [
+        ...h,
+        {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
+            65 + firstIdx
+          )})`,
+          delta: 5,
+          type: "neutral",
+        },
+      ]);
+      showToast(
+        `Kalian berdua sepakat di Opsi ${String.fromCharCode(
+          65 + firstIdx
+        )}! Baterai +5%`,
+        "success"
+      );
+      setTimeout(() => advanceToNextRound(nextBattery), 950);
+    } else {
+      sfxPenalty();
+      const nextBattery = Math.max(0, Math.min(100, battery - 15));
+      applyBatteryDelta(-15);
+      setStats((s) => ({ ...s, deadlockOrAfk: s.deadlockOrAfk + 1 }));
+      setHistory((h) => [
+        ...h,
+        {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `Tolak → Deadlock (${String.fromCharCode(
+            65 + firstIdx
+          )} vs ${String.fromCharCode(65 + partnerChoiceIdx)})`,
+          delta: -15,
+          type: "bad",
+        },
+      ]);
+      showToast(
+        `Beda pilihan kompromi (${String.fromCharCode(
+          65 + firstIdx
+        )} vs ${String.fromCharCode(65 + partnerChoiceIdx)})! Deadlock -15%`,
+        "error"
+      );
+      setTimeout(() => advanceToNextRound(nextBattery), 950);
+    }
+  };
+
+  const fullResetGame = () => {
+    sfxTap();
+    setTimerActive(false);
+    setPlayer1(null);
+    setPlayer2(null);
+    setHistory([]);
+    setRegName("");
+    setRegEmail("");
+    setRegAge("");
+    setRegError(null);
+    setLandingTab("new");
+    goScreen("register");
+  };
+
+  // Derived UI Data
+  const activeQuizProfile = quizTarget === "player1" ? player1 : player2;
+  const activeQuizQuestion = activeQuizProfile?.questions[quizIndex];
+
+  const p1Counts = { iya: 0, kayanya: 0, engga: 0 };
+  const p1TopConfessions: { tag: string; text: string }[] = [];
+  if (player1) {
+    player1.questions.forEach((q) => {
+      const ans = player1.answers[q.id];
+      if (ans === "iya") {
+        p1Counts.iya++;
+        p1TopConfessions.push({ tag: "🔥 Masalah", text: q.statement });
+      } else if (ans === "kayanya") {
+        p1Counts.kayanya++;
+        p1TopConfessions.push({ tag: "🤔 Wildcard", text: q.statement });
+      } else {
+        p1Counts.engga++;
+      }
+    });
+  }
+
+  const botOppositeGender =
+    player1?.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+  const botPreview = getBotPersonaConfig(botOppositeGender, botAgeSlider);
+
+  const currentCard = deck[round - 1];
+  const currentResponder =
+    currentCard?.responderKey === "player1" ? player1 : player2;
+  const currentPartner =
+    currentCard?.responderKey === "player1" ? player2 : player1;
+
+  const responderConfessions =
+    currentResponder?.questions.filter(
+      (q) =>
+        currentResponder.answers[q.id] === "iya" ||
+        currentResponder.answers[q.id] === "kayanya"
+    ) || [];
+  const personalTrap =
+    responderConfessions.length > 0
+      ? responderConfessions[round % responderConfessions.length]
+      : currentResponder?.questions[0];
+
+  const endingVerdict =
+    battery >= 80
+      ? {
+          emoji: "💍",
+          title: "BESOK KAWIN!",
+          subtitle:
+            "Red flag kalian berdua ternyata saling mengunci kayak puzzle! Kesiapan mental dan kompromi kalian udah matang. Langsung booking KUA dan sebar undangan!",
+          border: "border-emerald-500/60 shadow-emerald-500/15",
+          iconBg: "bg-emerald-500/20 border-emerald-500/40",
+          badgeBg: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+          titleClass:
+            "text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-300 to-amber-300",
+        }
+      : battery >= 45
+      ? {
+          emoji: "⏳",
+          title: "PACARAN DULU AJA",
+          subtitle:
+            "Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Jangan buru-buru DP gedung — pacaran dulu aja sambil benerin komunikasi!",
+          border: "border-amber-500/60 shadow-amber-500/10",
+          iconBg: "bg-amber-500/20 border-amber-500/40",
+          badgeBg: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+          titleClass: "text-amber-400",
+        }
+      : {
+          emoji: "🚨",
+          title: "STOP THE WEDDING",
+          subtitle: endingReason
+            ? `${endingReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama di pengadilan agama!`
+            : "Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!",
+          border: "border-red-500/60 shadow-red-500/15",
+          iconBg: "bg-red-500/20 border-red-500/40",
+          badgeBg: "bg-red-500/20 text-red-300 border-red-500/40",
+          titleClass: "text-red-500",
+        };
+
+  return (
+    <div className="bg-grid-pattern min-h-screen flex flex-col justify-between bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
+      <style>{`
+        .bg-grid-pattern {
+          background-image: 
+            radial-gradient(circle at 15% 15%, rgba(244, 63, 94, 0.12), transparent 35%),
+            radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.08), transparent 40%),
+            linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+          background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+        }
+        @keyframes cardEnter {
+          0% { opacity: 0; transform: translateY(18px) scale(0.96); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes cardFlipIn {
+          0% { opacity: 0; transform: rotateY(-14deg) scale(0.95); }
+          100% { opacity: 1; transform: rotateY(0deg) scale(1); }
+        }
+        @keyframes pulseShake {
+          0%, 100% { transform: translateX(0); }
+          20% { transform: translateX(-6px); }
+          40% { transform: translateX(6px); }
+          60% { transform: translateX(-4px); }
+          80% { transform: translateX(4px); }
+        }
+        @keyframes floatUpFade {
+          0% { opacity: 1; transform: translateY(0) scale(1); }
+          100% { opacity: 0; transform: translateY(-28px) scale(1.15); }
+        }
+        @keyframes shimmer {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+        .animate-card-enter { animation: cardEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-card-flip { animation: cardFlipIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .animate-shake { animation: pulseShake 0.4s ease-in-out; }
+        .animate-delta { animation: floatUpFade 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .battery-shimmer::after {
+          content: '';
+          position: absolute;
+          top: 0; left: 0; width: 100%; height: 100%;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+          animation: shimmer 2.2s infinite;
+        }
+        input[type="range"] { -webkit-appearance: none; appearance: none; background: transparent; cursor: pointer; }
+        input[type="range"]::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: #1f2937; }
+        input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none; margin-top: -6px;
+          background-color: #f43f5e; height: 20px; width: 20px; border-radius: 50%;
+          border: 3px solid #fff; box-shadow: 0 0 12px rgba(244, 63, 94, 0.6);
+        }
+        .btn-tactile { transition: transform 0.12s ease, box-shadow 0.15s ease, background-color 0.15s ease; }
+        .btn-tactile:active { transform: scale(0.97); }
+      `}</style>
+
+      {/* TOP NAVIGATION BAR */}
+      <header className="w-full border-b border-slate-800/80 bg-[#090d16]/85 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2.3"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                />
+              </svg>
+            </div>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold tracking-tight text-base sm:text-lg text-white">
+                  BESOK KAWIN?
+                </span>
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  18+
+                </span>
               </div>
-              {authUser && (
-                <button
-                  type="button"
-                  onClick={() => setShowHistory((v) => !v)}
-                  className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full bg-zinc-800 hover:bg-zinc-700 text-amber-300 transition"
+              <p className="text-[11px] text-slate-400 leading-none">
+                Dating & Red Flag Card Game
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                const next = !soundEnabled;
+                setSoundEnabled(next);
+                showToast(
+                  next ? "Suara efek diaktifkan" : "Suara efek dimatikan",
+                  "info"
+                );
+              }}
+              title="Suara Efek"
+              className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/70 transition"
+            >
+              {soundEnabled ? (
+                <svg
+                  className="w-4 h-4 text-emerald-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
                 >
-                  <History className="w-3.5 h-3.5" /> Riwayat ({matchHistory.length})
-                </button>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-4 h-4 text-slate-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                  />
+                </svg>
               )}
+            </button>
+
+            {screen !== "register" && (
+              <button
+                onClick={() => {
+                  fullResetGame();
+                  showToast("Sesi direset. Silakan mulai dari awal.", "info");
+                }}
+                className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/70 transition"
+              >
+                Keluar
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {/* TOAST CONTAINER */}
+      <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
+        {toasts.map((t) => {
+          const styles = {
+            success: "bg-emerald-950/95 border-emerald-500/60 text-emerald-200",
+            error: "bg-red-950/95 border-red-500/60 text-red-200",
+            warning: "bg-amber-950/95 border-amber-500/60 text-amber-200",
+            info: "bg-slate-900/95 border-slate-700 text-slate-200",
+          };
+          const icons = {
+            success: "✅",
+            error: "🚨",
+            warning: "⚠️",
+            info: "💬",
+          };
+          return (
+            <div
+              key={t.id}
+              className={`pointer-events-auto px-4 py-3 rounded-2xl border backdrop-blur-md shadow-2xl text-xs font-bold flex items-center gap-2.5 animate-card-enter ${styles[t.type]}`}
+            >
+              <span className="text-sm">{icons[t.type]}</span>
+              <span>{t.message}</span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* MAIN CONTAINER */}
+      <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6 flex flex-col justify-center">
+        {/* ==================== SCREEN 1: REGISTER ==================== */}
+        {screen === "register" && (
+          <section className="animate-card-enter">
+            <div className="text-center mb-6">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-3">
+                <span>🔥</span> Uji Nyali Sebelum DP Gedung
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                Buka Borokmu di Depan,
+                <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-500 to-amber-400">
+                  Biar Nggak Nyesel di KUA.
+                </span>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-md mx-auto">
+                Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi
+                kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian
+                sanggup bertahan.
+              </p>
             </div>
 
-            <h1 className="text-3xl font-black tracking-tight mb-1">BESOK KAWIN?</h1>
-            <p className="text-zinc-400 text-xs mb-5">
-              Buka semua borok dan red flag sebelum terlanjur sebar undangan.
-            </p>
+            <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 mb-4">
+              <button
+                type="button"
+                onClick={() => {
+                  sfxTap();
+                  setLandingTab("new");
+                  setRegError(null);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  landingTab === "new"
+                    ? "bg-rose-500 text-white shadow-md shadow-rose-500/20"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Daftar Pemain Baru
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  sfxTap();
+                  setLandingTab("invite");
+                  setRegError(null);
+                }}
+                className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  landingTab === "invite"
+                    ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Punya Kode Undangan?
+              </button>
+            </div>
 
-            {/* BLOK FIREBASE AUTHENTICATION */}
-            {isFirebaseConfigured && (
-              <div className="mb-5 p-4 rounded-2xl bg-zinc-950 border border-zinc-800">
-                {authUser ? (
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-[11px] text-emerald-400 font-bold uppercase">
-                        Akun Terhubung (Riwayat Tersimpan)
+            <div className="bg-[#111827]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl">
+              {landingTab === "invite" && (
+                <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1.5">
+                    Masukkan Kode Undangan Pasangan
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={inputJoinCode}
+                      onChange={(e) => setInputJoinCode(e.target.value)}
+                      placeholder="Contoh: KAWIN-729"
+                      maxLength={12}
+                      className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sfxTap();
+                        setInputJoinCode("KAWIN-888");
+                        showToast(
+                          "Kode demo KAWIN-888 terpasang (Pengundang: Laki-laki, 26 thn).",
+                          "info"
+                        );
+                      }}
+                      className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/30 whitespace-nowrap"
+                    >
+                      Kode Demo
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    *Sistem otomatis memblokir jika jenis kelaminmu sama dengan
+                    pengirim kode.
+                  </p>
+                </div>
+              )}
+
+              {regError && (
+                <div
+                  key={regError.key}
+                  className="mb-5 p-4 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-base">🚫</span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-red-400">
+                        {regError.title}
+                      </h3>
+                      <p className="text-xs text-red-200/90 mt-0.5 leading-relaxed">
+                        {regError.text}
                       </p>
-                      <p className="text-xs text-zinc-300 truncate">{authUser.email}</p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={logoutAccount}
-                      className="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 flex items-center gap-1 shrink-0"
-                    >
-                      <LogOut className="w-3.5 h-3.5" /> Keluar
-                    </button>
                   </div>
-                ) : (
-                  <div className="space-y-3">
-                    <button
-                      type="button"
-                      disabled={authLoading}
-                      onClick={handleGoogleSignIn}
-                      className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-zinc-200 text-zinc-950 font-bold text-xs flex items-center justify-center gap-2 transition"
-                    >
-                      <LogIn className="w-4 h-4" /> Masuk dengan Google
-                    </button>
+                </div>
+              )}
 
-                    <div className="flex items-center gap-2 text-[10px] text-zinc-500 uppercase">
-                      <div className="h-px bg-zinc-800 flex-1" />
-                      <span>atau pakai email</span>
-                      <div className="h-px bg-zinc-800 flex-1" />
-                    </div>
-
-                    <form onSubmit={handleEmailAuth} className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="email"
-                          placeholder="Email akun"
-                          value={authEmail}
-                          onChange={(e) => setAuthEmail(e.target.value)}
-                          className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-rose-500"
-                        />
-                        <input
-                          type="password"
-                          placeholder="Password (min. 6)"
-                          value={authPassword}
-                          onChange={(e) => setAuthPassword(e.target.value)}
-                          className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-rose-500"
-                        />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          disabled={authLoading}
-                          onClick={() => setAuthMode('login')}
-                          className="flex-1 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold transition"
-                        >
-                          Masuk Email
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={authLoading}
-                          onClick={() => setAuthMode('signup')}
-                          className="flex-1 py-2 rounded-lg bg-rose-950/70 hover:bg-rose-900/70 border border-rose-800/50 text-rose-200 text-xs font-bold transition"
-                        >
-                          Daftar Akun
-                        </button>
-                      </div>
-                    </form>
-
-                    {authMessage && (
-                      <p className="text-[11px] text-rose-400">{authMessage}</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* PANEL RIWAYAT MAIN */}
-            {authUser && showHistory && (
-              <div className="mb-5 p-4 rounded-2xl bg-zinc-950 border border-amber-500/30 space-y-2 max-h-56 overflow-y-auto">
+              <form onSubmit={handleRegistration} className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-amber-300 uppercase">
-                    Riwayat Skor & Ending
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Identitas Pemain
                   </span>
                   <button
                     type="button"
-                    onClick={() => setShowHistory(false)}
-                    className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                    onClick={quickFillDemoUser}
+                    className="text-xs font-semibold text-rose-400 hover:text-rose-300 underline underline-offset-4"
                   >
-                    Tutup
+                    ⚡ Isi Cepat (Demo)
                   </button>
                 </div>
-                {matchHistory.length === 0 ? (
-                  <p className="text-xs text-zinc-500 py-2">
-                    Belum ada riwayat main. Selesaikan 1 sesi untuk menyimpan skor.
-                  </p>
-                ) : (
-                  matchHistory.map((m) => (
-                    <div
-                      key={m.id}
-                      className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 text-xs flex items-center justify-between gap-2"
-                    >
-                      <div className="min-w-0">
-                        <p className="font-bold truncate">
-                          vs {m.partnerName} ({m.mode === 'solo' ? 'Solo AI' : 'Couple'})
-                        </p>
-                        <p className="text-[11px] text-zinc-400">
-                          {m.endingTitle} •{' '}
-                          {new Date(m.playedAt).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })}
-                        </p>
-                      </div>
-                      <span
-                        className={`font-mono font-black text-sm shrink-0 ${
-                          m.loveBattery >= 80
-                            ? 'text-emerald-400'
-                            : m.loveBattery >= 45
-                            ? 'text-amber-400'
-                            : 'text-rose-400'
-                        }`}
-                      >
-                        {m.loveBattery}%
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
 
-            {/* TAB MODE MULAI BERMAIN */}
-            <div className="grid grid-cols-2 bg-zinc-950 p-1 rounded-xl mb-4 border border-zinc-800">
-              <button
-                type="button"
-                onClick={() => setPlayTab('register')}
-                className={`py-2 text-xs font-bold rounded-lg transition ${
-                  playTab === 'register' ? 'bg-rose-600 text-white' : 'text-zinc-400'
-                }`}
-              >
-                Mulai Sesi Baru
-              </button>
-              <button
-                type="button"
-                onClick={() => setPlayTab('join')}
-                className={`py-2 text-xs font-bold rounded-lg transition ${
-                  playTab === 'join' ? 'bg-rose-600 text-white' : 'text-zinc-400'
-                }`}
-              >
-                Punya Kode Undangan
-              </button>
-            </div>
-
-            <form onSubmit={handleStartProfile} className="space-y-3.5">
-              {playTab === 'join' && (
                 <div>
-                  <label className="block text-[11px] font-bold text-zinc-400 mb-1">
-                    KODE UNDANGAN PASANGAN
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Nama Panggilan
                   </label>
                   <input
                     type="text"
-                    maxLength={6}
-                    placeholder="Contoh: KWN842"
-                    value={inviteInput}
-                    onChange={(e) => setInviteInput(e.target.value.toUpperCase())}
-                    className="w-full bg-zinc-950 border border-rose-500/50 rounded-xl px-4 py-2.5 font-mono text-base tracking-widest uppercase focus:outline-none focus:border-rose-500"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="Misal: Raka / Nadya"
+                    className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition"
                   />
                 </div>
-              )}
 
-              <div>
-                <label className="block text-[11px] font-bold text-zinc-400 mb-1">
-                  NAMA PANGGILAN
-                </label>
-                <input
-                  type="text"
-                  placeholder="Nama panggilanmu"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-rose-500"
-                />
-              </div>
-
-              {!authUser && (
                 <div>
-                  <label className="block text-[11px] font-bold text-zinc-400 mb-1">
-                    EMAIL (MODE TAMU)
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Email Aktif
                   </label>
                   <input
                     type="email"
-                    placeholder="email@domain.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-rose-500"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="nama@email.com"
+                    className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition"
                   />
                 </div>
-              )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-400 mb-1">
-                    JENIS KELAMIN
-                  </label>
-                  <select
-                    value={gender}
-                    onChange={(e) => setGender(e.target.value as Gender)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-rose-500"
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Jenis Kelamin
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["Laki-laki", "Perempuan"] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setRegGender(g)}
+                          className={`py-3 px-2 rounded-xl border text-xs font-bold text-center transition ${
+                            regGender === g
+                              ? "border-rose-500 bg-rose-500/15 text-white"
+                              : "border-slate-700 bg-slate-950/90 text-slate-400"
+                          }`}
+                        >
+                          {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Usia (Wajib 18+)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={10}
+                      max={80}
+                      value={regAge}
+                      onChange={(e) => setRegAge(e.target.value)}
+                      placeholder="Contoh: 24"
+                      className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none transition"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full mt-2 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile flex items-center justify-center gap-2"
+                >
+                  <span>
+                    {landingTab === "new"
+                      ? "Lanjut ke 20 Pengakuan Hidup"
+                      : "Gabung Kode & Isi 20 Pengakuan"}
+                  </span>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
                   >
-                    <option value="Laki-laki">Laki-laki</option>
-                    <option value="Perempuan">Perempuan</option>
-                  </select>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
+
+        {/* ==================== SCREEN 2: QUIZ ==================== */}
+        {screen === "quiz" && activeQuizProfile && activeQuizQuestion && (
+          <section>
+            <div className="mb-4">
+              <div className="flex items-center justify-between text-xs mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                    {activeQuizProfile.name} (
+                    {activeQuizProfile.gender === "Laki-laki" ? "👨" : "👩"}{" "}
+                    {activeQuizProfile.age} thn)
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {activeQuizQuestion.segmentLabel}
+                  </span>
                 </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-zinc-400 mb-1">
-                    USIA (MIN. 18)
-                  </label>
-                  <input
-                    type="number"
-                    min={12}
-                    max={70}
-                    value={age}
-                    onChange={(e) => setAge(e.target.value)}
-                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-rose-500"
-                  />
-                </div>
+                <span className="font-mono font-extrabold text-rose-400 text-sm">
+                  {quizIndex + 1}
+                  <span className="text-slate-500">/20</span>
+                </span>
               </div>
 
-              {formError && (
-                <div className="p-3 rounded-xl bg-red-950/60 border border-red-800 text-red-300 text-xs">
-                  {formError}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-rose-600/20"
-              >
-                {playTab === 'join'
-                  ? 'Gabung & Jawab 20 Pertanyaan'
-                  : 'Lanjut Jawab 20 Pertanyaan'}
-              </button>
-            </form>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // SCREEN 2: 20 PERTANYAAN KEHIDUPAN
-  if (step === 'questions' && questionList[qIndex]) {
-    const currentQ = questionList[qIndex];
-    const progress = ((qIndex + 1) / questionList.length) * 100;
-
-    return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md">
-          <div className="flex justify-between text-xs text-zinc-400 mb-2">
-            <span>
-              Pertanyaan {qIndex + 1} dari {questionList.length}
-            </span>
-            <span className="text-rose-400 font-semibold">{currentQ.category}</span>
-          </div>
-          <div className="w-full h-2 bg-zinc-900 rounded-full overflow-hidden mb-6">
-            <div
-              className="h-full bg-rose-600 transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-7 min-h-[240px] flex flex-col justify-between shadow-xl mb-6">
-            <span className="inline-block w-fit text-[11px] uppercase tracking-wider px-2.5 py-1 rounded-full bg-zinc-800 text-zinc-300">
-              Pengakuan Jujur
-            </span>
-            <p className="text-xl font-bold leading-snug my-4">&ldquo;{currentQ.statement}&rdquo;</p>
-            <p className="text-xs text-zinc-500">
-              Jawaban jujurmu menentukan kartu dilema yang akan dihadapi pasanganmu.
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <button
-              onClick={() => handleAnswerQuestion('iya_lagi')}
-              className="w-full py-3.5 px-5 rounded-2xl bg-rose-600 hover:bg-rose-500 font-bold text-left flex justify-between items-center transition"
-            >
-              <span>Iya lagi</span>
-              <span className="text-xs font-normal text-rose-200">Setuju banget</span>
-            </button>
-            <button
-              onClick={() => handleAnswerQuestion('kayanya_sih')}
-              className="w-full py-3.5 px-5 rounded-2xl bg-amber-600/20 border border-amber-500/40 hover:bg-amber-600/30 text-amber-200 font-bold text-left flex justify-between items-center transition"
-            >
-              <span>Kayanya sih</span>
-              <span className="text-xs font-normal text-amber-300/80">Ragu / kadang-kadang</span>
-            </button>
-            <button
-              onClick={() => handleAnswerQuestion('engga')}
-              className="w-full py-3.5 px-5 rounded-2xl bg-zinc-900 border border-zinc-800 hover:bg-zinc-800 text-zinc-300 font-bold text-left flex justify-between items-center transition"
-            >
-              <span>Engga</span>
-              <span className="text-xs font-normal text-zinc-500">Bukan gua banget</span>
-            </button>
-          </div>
-        </div>
-      </main>
-    );
-  }
-
-  // SCREEN 3: PILIH MODE (SOLO BOT AI VS AJAK PASANGAN)
-  if (step === 'lobby' && localPlayer) {
-    const oppositeGender: Gender = localPlayer.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki';
-
-    return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6">
-            <h2 className="text-xl font-black mb-1">20 Pengakuan Terkunci</h2>
-            <p className="text-xs text-zinc-400 mb-5">
-              Pilih mau uji mental lawan Bot AI atau ajak pasangan aslimu.
-            </p>
-
-            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800 mb-4">
-              <div className="flex items-center gap-2 font-bold text-rose-400 mb-2">
-                <Bot className="w-5 h-5" /> Main Sendiri (Bot AI {oppositeGender})
-              </div>
-              <p className="text-xs text-zinc-400 mb-3">
-                Bot akan membentuk masalah hidupnya sendiri berdasarkan 20 jawabanmu.
-              </p>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <span className="text-xs text-zinc-300">Pilih Usia Bot AI:</span>
-                <input
-                  type="number"
-                  min={18}
-                  max={45}
-                  value={botAge}
-                  onChange={(e) => setBotAge(Math.max(18, parseInt(e.target.value || '18', 10)))}
-                  className="w-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-1.5 text-center font-bold text-sm"
+              <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5">
+                <div
+                  className="h-full bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 rounded-full transition-all duration-300"
+                  style={{ width: `${((quizIndex + 1) / 20) * 100}%` }}
                 />
               </div>
+            </div>
+
+            <div
+              key={`${quizTarget}-${quizIndex}`}
+              className="bg-[#111827]/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl min-h-[270px] flex flex-col justify-between animate-card-enter"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-5">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide border ${
+                      activeQuizQuestion.category === "Ketakutan Hidup"
+                        ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+                        : activeQuizQuestion.category === "Kebiasaan Buruk"
+                        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                        : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                    }`}
+                  >
+                    {activeQuizQuestion.category}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    #{String(quizIndex + 1).padStart(2, "0")}
+                  </span>
+                </div>
+
+                <blockquote className="text-lg sm:text-xl font-bold text-white leading-relaxed">
+                  &ldquo;{activeQuizQuestion.statement}&rdquo;
+                </blockquote>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <span>
+                  Jawab jujur — ini bakal jadi dek kartu pasanganmu!
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5 mt-4">
               <button
-                disabled={loadingAI}
-                onClick={handleStartSolo}
-                className="w-full py-3 rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-sm transition disabled:opacity-50"
+                onClick={() => answerQuiz("iya")}
+                className="w-full py-3.5 px-5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/60 hover:border-rose-500 text-left flex items-center justify-between group btn-tactile"
               >
-                {loadingAI ? 'Menyiapkan Persona Bot AI...' : 'Mulai Main Lawan Bot AI'}
+                <div>
+                  <span className="block text-sm sm:text-base font-extrabold text-rose-400 group-hover:text-rose-300">
+                    🔥 Iya lagi
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    Setuju banget — masuk ke Dek Masalah Utama
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
+                  MASALAH
+                </span>
+              </button>
+
+              <button
+                onClick={() => answerQuiz("kayanya")}
+                className="w-full py-3.5 px-5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border-2 border-amber-500/50 hover:border-amber-400 text-left flex items-center justify-between group btn-tactile"
+              >
+                <div>
+                  <span className="block text-sm sm:text-base font-extrabold text-amber-400 group-hover:text-amber-300">
+                    🤔 Kayanya sih
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
+                  WILDCARD
+                </span>
+              </button>
+
+              <button
+                onClick={() => answerQuiz("engga")}
+                className="w-full py-3.5 px-5 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border-2 border-slate-700/80 hover:border-slate-500 text-left flex items-center justify-between group btn-tactile"
+              >
+                <div>
+                  <span className="block text-sm sm:text-base font-extrabold text-slate-200">
+                    🛡️ Engga
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    Bukan gua banget — dibuang dari dek permainan
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
+                  BUANG
+                </span>
               </button>
             </div>
 
-            <div className="p-4 rounded-2xl bg-zinc-950 border border-zinc-800">
-              <div className="flex items-center gap-2 font-bold text-emerald-400 mb-2">
-                <Users className="w-5 h-5" /> Ajak Pasangan (Wajib {oppositeGender})
+            <div className="mt-4 text-center">
+              <button
+                onClick={autoCompleteQuizDemo}
+                className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition"
+              >
+                ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ==================== SCREEN 3: MODE SELECTION ==================== */}
+        {screen === "mode" && player1 && (
+          <section className="animate-card-enter space-y-5">
+            <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
+                    Hasil Profiling Jujur
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-white">
+                    Profil Borok & Red Flag{" "}
+                    <span className="text-rose-400">{player1.name}</span>
+                  </h2>
+                </div>
+                <span className="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-700">
+                  {player1.gender} • {player1.age} thn
+                </span>
               </div>
-              {!room ? (
-                <button
-                  onClick={handleCreateInvite}
-                  className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-bold text-sm transition"
-                >
-                  Buat Kode Undangan Pasangan
-                </button>
-              ) : (
-                <div className="text-center space-y-2 py-2">
-                  <p className="text-xs text-zinc-400">Kirim kode ini ke pasanganmu:</p>
-                  <div className="flex items-center justify-center gap-2 bg-zinc-900 border border-emerald-500/40 rounded-xl py-3 px-4">
-                    <span className="font-mono text-2xl font-black tracking-widest text-emerald-400">
-                      {room.roomCode}
-                    </span>
-                    <button
-                      onClick={() => navigator.clipboard.writeText(room.roomCode)}
-                      className="p-1.5 text-zinc-400 hover:text-white"
-                      title="Salin Kode"
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
+
+              <div className="grid grid-cols-3 gap-2.5 my-4">
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+                  <span className="block text-2xl font-mono font-extrabold text-rose-400">
+                    {p1Counts.iya}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Iya lagi
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    Masalah Utama
+                  </span>
+                </div>
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+                  <span className="block text-2xl font-mono font-extrabold text-amber-400">
+                    {p1Counts.kayanya}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Kayanya sih
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    Kartu Wildcard
+                  </span>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-center">
+                  <span className="block text-2xl font-mono font-extrabold text-slate-300">
+                    {p1Counts.engga}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Engga
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    Dibuang
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  💣 Senjata Makan Tuan Teratasmu:
+                </p>
+                <ul className="space-y-1.5 text-xs text-slate-300">
+                  {p1TopConfessions.length === 0 ? (
+                    <li className="text-slate-400 italic">
+                      Kamu menjawab &ldquo;Engga&rdquo; semua! Pencitraan
+                      tingkat dewa — hati-hati kena kartu jebakan sistem.
+                    </li>
+                  ) : (
+                    p1TopConfessions.slice(0, 3).map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 border border-slate-700">
+                          {item.tag}
+                        </span>
+                        <span className="line-clamp-2">
+                          &ldquo;{item.text}&rdquo;
+                        </span>
+                      </li>
+                    ))
+                  )}
+                </ul>
+              </div>
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-base font-extrabold text-white">
+                Pilih Lawan Main Uji Kecocokan
+              </h3>
+              <p className="text-xs text-slate-400">
+                Baterai Cinta dimulai dari{" "}
+                <span className="text-amber-400 font-bold">50%</span>. Sanggup
+                tembus 80%?
+              </p>
+            </div>
+
+            {/* MODE A: SOLO AI */}
+            <div className="bg-[#111827]/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-5 transition">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-lg">
+                    🤖
                   </div>
-                  <p className="text-xs text-amber-400 animate-pulse">
-                    Menunggu pasangan masuk & menjawab 20 pertanyaan...
+                  <div>
+                    <h4 className="font-extrabold text-white text-base">
+                      Mode Solo — Lawan Bot AI
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Otomatis lawan jenis (
+                      <span className="text-rose-400 font-semibold">
+                        {botOppositeGender}
+                      </span>
+                      ) dengan kepribadian sesuai usia.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold text-slate-300">
+                    Pilih Usia Bot AI:
+                  </label>
+                  <span className="font-mono font-extrabold text-sm px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    {botAgeSlider} Tahun
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={18}
+                  max={40}
+                  value={botAgeSlider}
+                  onChange={(e) => setBotAgeSlider(parseInt(e.target.value, 10))}
+                  className="w-full my-2"
+                />
+                <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-3">
+                  <span>18 (Dramatis)</span>
+                  <span>28 (Realistis)</span>
+                  <span>40 (Pragmatis)</span>
+                </div>
+
+                <div className="flex items-center gap-3 pt-3 border-t border-slate-800/80">
+                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-lg shrink-0">
+                    {botPreview.emoji}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-sm text-white">
+                        {botPreview.name} ({botAgeSlider} thn)
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        {botPreview.vibe}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                      &ldquo;{botPreview.bio}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={startSoloGame}
+                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
+              >
+                Mulai Main Lawan Bot AI →
+              </button>
+            </div>
+
+            {/* MODE B: COUPLE */}
+            <div className="bg-[#111827]/95 border-2 border-slate-800 hover:border-emerald-500/50 rounded-3xl p-5 transition">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-lg">
+                  💌
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-white text-base">
+                    Mode Ajak Pasangan (Kode Undangan)
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Kirim kode ke pasangan lawan jenis & main bergantian di
+                    perangkat ini.
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 mb-3">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                    Kode Undangan Kamu
+                  </span>
+                  <span className="font-mono font-extrabold text-lg text-emerald-400 tracking-wider">
+                    {inviteCode}
+                  </span>
+                </div>
+                <button
+                  onClick={() =>
+                    copyTextSafe(
+                      inviteCode,
+                      `Kode undangan ${inviteCode} disalin! Kirim ke pasangan lawan jenismu.`
+                    )
+                  }
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 btn-tactile"
+                >
+                  Salin Kode
+                </button>
+              </div>
+
+              <button
+                onClick={openPartnerSimulatorModal}
+                className="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile"
+              >
+                📲 Simulasikan Pasangan Masuk Pakai Kode Ini
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ==================== SCREEN 3B: PARTNER JOIN ==================== */}
+        {screen === "partner-join" && player1 && (
+          <section className="animate-card-enter">
+            <div className="bg-[#111827]/95 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  Kode: {inviteCode}
+                </span>
+                <button
+                  onClick={() => {
+                    sfxTap();
+                    goScreen("mode");
+                  }}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  ← Kembali
+                </button>
+              </div>
+
+              <h2 className="text-xl font-extrabold text-white">
+                Pasangan Bergabung!
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 mb-4">
+                <span className="text-rose-400 font-semibold">
+                  {player1.name} ({player1.gender}, {player1.age} thn)
+                </span>{" "}
+                mengundangmu uji kecocokan. Masukkan datamu (wajib lawan jenis
+                & 18+).
+              </p>
+
+              {partnerError && (
+                <div
+                  key={partnerError.key}
+                  className="mb-4 p-3.5 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
+                >
+                  <p className="text-xs font-extrabold text-red-400">
+                    {partnerError.title}
+                  </p>
+                  <p className="text-xs text-red-200/90 mt-0.5">
+                    {partnerError.text}
                   </p>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
-      </main>
-    );
-  }
 
-  // SCREEN 4: ARENA BERMAIN & BATERAI CINTA
-  if (step === 'playing' && room && room.currentTurn && localPlayer && room.guest) {
-    const turn = room.currentTurn;
-    const isMyTurnToDecide = turn.activePlayerId === localPlayer.id;
-    const partnerName = room.host.id === localPlayer.id ? room.guest.name : room.host.name;
-
-    return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-4">
-          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-            <div className="flex justify-between items-center text-xs mb-2">
-              <span className="font-bold flex items-center gap-1.5 text-rose-400">
-                <Heart className="w-4 h-4 fill-rose-500" /> Baterai Cinta: {room.loveBattery}%
-              </span>
-              <span
-                className={`font-mono font-bold flex items-center gap-1 ${
-                  timeLeft <= 15 ? 'text-red-400 animate-pulse' : 'text-zinc-400'
-                }`}
-              >
-                <Clock className="w-3.5 h-3.5" /> {timeLeft}s
-              </span>
-            </div>
-            <div className="w-full h-3 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800">
-              <div
-                className={`h-full transition-all duration-500 ${
-                  room.loveBattery >= 80
-                    ? 'bg-emerald-500'
-                    : room.loveBattery >= 45
-                    ? 'bg-amber-500'
-                    : 'bg-rose-600'
-                }`}
-                style={{ width: `${room.loveBattery}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[11px] text-zinc-500 mt-1.5">
-              <span>
-                Ronde {turn.round} / {room.deck.length}
-              </span>
-              <span>Lawan: {partnerName}</span>
-            </div>
-          </div>
-
-          <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-rose-950 text-rose-300 border border-rose-800/50">
-                Masalah {partnerName} • {turn.card.category}
-              </span>
-              <span className="text-xs text-zinc-500">
-                {turn.card.choice === 'iya_lagi' ? 'Red Flag Utama' : 'Wildcard'}
-              </span>
-            </div>
-
-            <p className="text-lg font-bold leading-relaxed mb-4">
-              &ldquo;{turn.card.statement}&rdquo;
-            </p>
-
-            {turn.phase === 'decision' && (
-              <>
-                {isMyTurnToDecide ? (
-                  <div className="grid grid-cols-2 gap-3 pt-2">
-                    <button
-                      disabled={loadingAI}
-                      onClick={handleChooseTerima}
-                      className="py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-black flex items-center justify-center gap-2 transition"
-                    >
-                      <CheckCircle2 className="w-5 h-5" /> Terima
-                    </button>
-                    <button
-                      disabled={loadingAI}
-                      onClick={handleChooseTolak}
-                      className="py-3.5 rounded-2xl bg-rose-600 hover:bg-rose-500 text-white font-black flex items-center justify-center gap-2 transition"
-                    >
-                      <XCircle className="w-5 h-5" /> Tolak
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-center text-sm text-amber-400 py-4 animate-pulse">
-                    Menunggu {partnerName} memutuskan Terima atau Tolak...
-                  </p>
-                )}
-              </>
-            )}
-
-            {turn.phase === 'consequence' && (
-              <div className="mt-2 p-4 rounded-2xl bg-amber-950/40 border border-amber-700/50 space-y-4">
-                <div className="flex items-center gap-2 text-amber-400 font-bold text-xs uppercase">
-                  <ShieldAlert className="w-4 h-4" /> Konsekuensi Kehidupanmu
+              <form onSubmit={handlePartnerJoinSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Nama Panggilan Pasangan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={partnerNameInput}
+                    onChange={(e) => setPartnerNameInput(e.target.value)}
+                    placeholder="Nama pasanganmu"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+                  />
                 </div>
-                <p className="text-sm text-amber-100 leading-relaxed">{turn.consequenceText}</p>
-                {isMyTurnToDecide ? (
-                  <div className="space-y-2">
-                    <button
-                      onClick={() =>
-                        advanceRound(
-                          room,
-                          10,
-                          'terima_mantap',
-                          'Tetap menerima masalah pasangan beserta konsekuensinya (+10%).'
-                        )
-                      }
-                      className="w-full py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-zinc-950 font-bold text-xs"
-                    >
-                      Tetap Terima & Tanggung (+10% Baterai)
-                    </button>
-                    <button
-                      onClick={() =>
-                        advanceRound(
-                          room,
-                          -12,
-                          'terima_menyesal',
-                          'Ragu dan menyesal setelah melihat konsekuensi (-12%).'
-                        )
-                      }
-                      className="w-full py-3 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-rose-300 font-bold text-xs"
-                    >
-                      Ragu / Nyesel Pilih Terima (-12% Baterai)
-                    </button>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Jenis Kelamin Pasangan
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["Laki-laki", "Perempuan"] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setPartnerGenderInput(g)}
+                          className={`py-2.5 px-2 rounded-xl border text-xs font-bold text-center ${
+                            partnerGenderInput === g
+                              ? "border-emerald-500 bg-emerald-500/15 text-white"
+                              : "border-slate-700 bg-slate-950 text-slate-400"
+                          }`}
+                        >
+                          {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-zinc-400 text-center">
-                    {partnerName} sedang menimbang konsekuensi...
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Usia Pasangan (18+)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={10}
+                      max={80}
+                      value={partnerAgeInput}
+                      onChange={(e) => setPartnerAgeInput(e.target.value)}
+                      placeholder="Contoh: 25"
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={quickFillPartnerDemo}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4"
+                  >
+                    ⚡ Isi Cepat Data Pasangan
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/25 btn-tactile"
+                >
+                  Generate Dek Masalah Pasangan & Mulai →
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
+
+        {/* ==================== SCREEN 4: GAMEPLAY ==================== */}
+        {screen === "game" && currentCard && currentResponder && currentPartner && (
+          <section className="space-y-4">
+            {/* BATERAI CINTA HUD */}
+            <div
+              key={shakeHud}
+              className={`bg-[#111827]/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 shadow-xl relative overflow-visible ${
+                shakeHud > 0 ? "animate-shake" : ""
+              }`}
+            >
+              {deltaPop && (
+                <div
+                  key={deltaPop.key}
+                  className="absolute right-6 -top-3 pointer-events-none z-30"
+                >
+                  <span
+                    className={`inline-block font-mono font-extrabold text-base px-2.5 py-1 rounded-xl shadow-lg animate-delta ${
+                      deltaPop.val > 0
+                        ? "bg-emerald-500 text-slate-950"
+                        : "bg-red-500 text-white"
+                    }`}
+                  >
+                    {deltaPop.val > 0 ? `+${deltaPop.val}%` : `${deltaPop.val}%`}
+                  </span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">🔋</span>
+                  <div>
+                    <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+                      Baterai Cinta
+                    </span>
+                    <span
+                      className={`ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                        battery >= 80
+                          ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                          : battery >= 45
+                          ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                          : "bg-red-500/15 text-red-400 border-red-500/30"
+                      }`}
+                    >
+                      {battery >= 80
+                        ? "Siap Besok Kawin!"
+                        : battery >= 45
+                        ? "Zona Pacaran Dulu"
+                        : "Zona Bahaya!"}
+                    </span>
+                  </div>
+                </div>
+                <span
+                  className={`font-mono font-extrabold text-xl sm:text-2xl ${
+                    battery >= 80
+                      ? "text-emerald-400"
+                      : battery >= 45
+                      ? "text-amber-400"
+                      : "text-red-400"
+                  }`}
+                >
+                  {battery}%
+                </span>
+              </div>
+
+              <div className="flex items-center gap-1.5">
+                <div className="flex-1 h-6 bg-slate-950 rounded-xl border-2 border-slate-700 p-1 relative overflow-hidden">
+                  <div
+                    className={`h-full rounded-lg transition-all duration-500 ease-out relative battery-shimmer bg-gradient-to-r ${
+                      battery >= 80
+                        ? "from-emerald-500 to-teal-400"
+                        : battery >= 45
+                        ? "from-amber-500 to-yellow-400"
+                        : "from-red-600 to-rose-500"
+                    }`}
+                    style={{ width: `${battery}%` }}
+                  />
+                  <div className="absolute top-0 bottom-0 left-[45%] w-0.5 bg-slate-600/70" />
+                  <div className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-emerald-400/70" />
+                </div>
+                <div className="w-2 h-3.5 bg-slate-700 rounded-r-md" />
+              </div>
+
+              <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800/80 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200">
+                    Ronde <span className="text-rose-400">{round}</span>/8
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
+                    Giliran: {currentResponder.name}
+                  </span>
+                </div>
+
+                <div
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold ${
+                    timerSeconds <= 10
+                      ? "bg-red-500/20 border-red-500/60 text-red-400 animate-pulse"
+                      : "bg-slate-950 border-slate-700 text-slate-200"
+                  }`}
+                >
+                  <span>⏱️</span>
+                  <span>{timerSeconds}s</span>
+                </div>
+              </div>
+            </div>
+
+            {/* STAGE 1: DILEMMA CARD */}
+            {gameStage === "dilemma" && (
+              <div
+                key={`dilemma-${round}`}
+                className={`bg-[#111827]/95 backdrop-blur-xl border-2 ${
+                  currentCard.isWildcard
+                    ? "border-amber-500/50"
+                    : "border-slate-800"
+                } rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-enter`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                    {currentCard.category}
+                  </span>
+                  {currentCard.isWildcard ? (
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      ⚡ KARTU JEBAKAN (WILDCARD)
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-slate-800 text-slate-400">
+                      🔥 MASALAH UTAMA
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90 mb-4">
+                  <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-base shrink-0">
+                    {currentPartner.emoji ||
+                      (currentPartner.gender === "Perempuan" ? "👩" : "👨")}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-white truncate">
+                      Pengakuan {currentPartner.name} ({currentPartner.age} thn)
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {currentCard.isWildcard
+                        ? 'Dia sempat ragu menjawab "Kayanya sih" soal ini...'
+                        : 'Dia ngaku jujur "Iya lagi" soal borok ini:'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="my-4">
+                  <p className="text-base sm:text-lg font-bold text-white leading-relaxed">
+                    &ldquo;{currentCard.partnerPrompt}&rdquo;
                   </p>
-                )}
+                  <p className="text-xs text-slate-400 italic mt-2.5 pl-3 border-l-2 border-slate-700">
+                    Pengakuan asli: &ldquo;{currentCard.statement}&rdquo;
+                  </p>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5">
+                  <p className="text-xs font-bold text-slate-300">
+                    👉{" "}
+                    <span className="text-rose-400">
+                      {currentResponder.name}
+                    </span>
+                    , kamu siap hidup bareng pasangan yang punya
+                    sifat/ketakutan ini?
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={chooseAcceptCard}
+                    className="py-4 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/70 hover:border-emerald-400 text-center btn-tactile"
+                  >
+                    <span className="block text-base sm:text-lg font-extrabold text-emerald-400">
+                      💚 TERIMA
+                    </span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5">
+                      Uji Konsekuensi (+10% / -12%)
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={chooseRejectCard}
+                    className="py-4 px-4 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/70 hover:border-rose-400 text-center btn-tactile"
+                  >
+                    <span className="block text-base sm:text-lg font-extrabold text-rose-400">
+                      🛑 TOLAK
+                    </span>
+                    <span className="block text-[10px] text-slate-400 mt-0.5">
+                      Cari Jalan Tengah (+5% / -15%)
+                    </span>
+                  </button>
+                </div>
               </div>
             )}
 
-            {turn.phase === 'negotiating' && turn.compromiseOptions && (
-              <div className="mt-2 p-4 rounded-2xl bg-indigo-950/40 border border-indigo-700/50 space-y-3">
-                <div className="flex items-center gap-2 text-indigo-300 font-bold text-xs uppercase">
-                  <Sparkles className="w-4 h-4" /> Ditolak! Pilih Jalan Tengah yang Sama
+            {/* STAGE 2A: CONSEQUENCE CARD */}
+            {gameStage === "consequence" && (
+              <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    ⚠️ KARTU KONSEKUENSI TERBUKA
+                  </span>
+                  <span className="text-xs font-bold text-slate-400">
+                    {currentResponder.name}
+                  </span>
                 </div>
-                <p className="text-xs text-zinc-300">
-                  Sepakat (+5% baterai) • Beda pilihan / Deadlock (-15% baterai)
-                </p>
-                {turn.votes[localPlayer.id] !== undefined ? (
-                  <p className="text-xs text-emerald-400 font-semibold py-2">
-                    Pilihanmu terkunci. Menunggu pilihan {partnerName}...
+
+                {mode === "solo" && currentPartner.reactAccept && (
+                  <div className="mb-4 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-200">
+                    <span className="font-bold text-indigo-300">
+                      {currentPartner.name} ({currentPartner.age} thn):
+                    </span>{" "}
+                    &ldquo;{currentPartner.reactAccept}&rdquo;
+                  </div>
+                )}
+
+                <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 mb-4">
+                  <p className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
+                    &ldquo;{currentCard.consequenceQuestion}&rdquo;
                   </p>
-                ) : (
-                  <div className="space-y-2">
-                    {turn.compromiseOptions.map((opt, idx) => (
+                  {personalTrap && (
+                    <div className="mt-3 pt-3 border-t border-slate-800/90">
+                      <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
+                        🪞 Cermin Pengakuanmu Sendiri di Awal:
+                      </span>
+                      <p className="text-xs text-slate-300 italic">
+                        Padahal di awal {currentResponder.name} sendiri ngaku:
+                        &ldquo;{personalTrap.statement}&rdquo;
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                <p className="text-xs text-slate-400 mb-4 text-center">
+                  Setelah sadar tabrakan sifat ini, kamu beneran sanggup atau
+                  mulai nyesel?
+                </p>
+
+                <div className="space-y-2.5">
+                  <button
+                    onClick={() => resolveConsequence(true)}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-between btn-tactile"
+                  >
+                    <span>💪 Tetap Terima Konsekuensinya</span>
+                    <span className="font-mono bg-black/25 px-2.5 py-1 rounded-lg text-emerald-200">
+                      +10%
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => resolveConsequence(false)}
+                    className="w-full py-3.5 px-4 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border-2 border-red-500/60 text-red-300 font-extrabold text-xs sm:text-sm flex items-center justify-between btn-tactile"
+                  >
+                    <span>😰 Ragu / Menyesal Pilih Terima</span>
+                    <span className="font-mono bg-red-500/20 px-2.5 py-1 rounded-lg text-red-300">
+                      -12%
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* STAGE 2B: SOLO NEGOTIATION */}
+            {gameStage === "negotiate-solo" && (
+              <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    🤝 DISKUSI JALAN TENGAH
+                  </span>
+                  <span className="text-xs text-slate-400">
+                    Sepakat: <strong className="text-emerald-400">+5%</strong> |
+                    Beda: <strong className="text-red-400">-15%</strong>
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-base">{currentPartner.emoji}</span>
+                    <span className="text-xs font-extrabold text-white">
+                      {currentPartner.name} ({currentPartner.age} thn)
+                    </span>
+                    <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                      {currentPartner.vibe}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    &ldquo;{currentPartner.reactReject}&rdquo;
+                  </p>
+                  <p className="text-[11px] text-amber-400/90 mt-1.5 font-medium">
+                    💡 Petunjuk gaya kompromi:{" "}
+                    {currentPartner.tier === "young"
+                      ? "Aku maunya yang tetep ngejaga perasaan & perhatian kita sih..."
+                      : currentPartner.tier === "mid"
+                      ? "Menurutku kita butuh aturan yang realistis dan adil buat masing-masing."
+                      : "Pilih opsi yang paling praktis, terukur, dan minim drama ke depannya."}
+                  </p>
+                </div>
+
+                <p className="text-xs font-bold text-slate-300 mb-2.5">
+                  Pilih 1 opsi kompromi yang menurutmu bakal disetujui{" "}
+                  {currentPartner.name}:
+                </p>
+
+                <div className="space-y-2.5">
+                  {currentCard.compromises.map((opt, idx) => {
+                    const tier = currentPartner.tier || "mid";
+                    const botPrefIdx = currentCard.botPref[tier] ?? 0;
+                    return (
                       <button
                         key={idx}
-                        onClick={() => handleVoteCompromise(idx)}
-                        className="w-full text-left p-3 rounded-xl bg-zinc-950 hover:bg-indigo-900/40 border border-zinc-800 text-xs leading-relaxed transition"
+                        onClick={() => resolveSoloNegotiation(idx, botPrefIdx)}
+                        className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-left flex items-start gap-3 transition btn-tactile"
                       >
-                        {idx + 1}. {opt}
+                        <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-amber-400 shrink-0 mt-0.5">
+                          {String.fromCharCode(65 + idx)}
+                        </span>
+                        <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                          {opt}
+                        </span>
                       </button>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             )}
-          </div>
-        </div>
-      </main>
-    );
-  }
 
-  // SCREEN 5: HASIL AKHIR + STORY CARD GENERATOR + STATUS SIMPAN RIWAYAT
-  if (step === 'ending' && room?.ending) {
-    const badgeColor =
-      room.ending.title === 'BESOK KAWIN'
-        ? 'text-emerald-400 border-emerald-500/40 bg-emerald-950/30'
-        : room.ending.title === 'PACARAN DULU AJA'
-        ? 'text-amber-400 border-amber-500/40 bg-amber-950/30'
-        : 'text-rose-500 border-rose-500/40 bg-rose-950/30';
-
-    return (
-      <main className="min-h-screen bg-zinc-950 text-zinc-100 flex items-center justify-center p-4 py-8">
-        <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-3xl p-6 space-y-5 shadow-2xl">
-          <div className={`p-5 rounded-2xl border text-center ${badgeColor}`}>
-            <p className="text-xs font-bold uppercase tracking-widest mb-1">
-              Baterai Cinta Akhir: {room.loveBattery}%
-            </p>
-            <h1 className="text-3xl font-black tracking-tight mb-2">{room.ending.title}</h1>
-            <p className="text-xs opacity-90">{room.ending.subtitle}</p>
-          </div>
-
-          {authUser ? (
-            <div className="flex items-center justify-center gap-1.5 text-xs text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 py-2 px-3 rounded-xl">
-              <CheckCircle2 className="w-4 h-4" />
-              <span>
-                {historySavedFlag
-                  ? `Riwayat tersimpan ke akun ${authUser.email}`
-                  : 'Menyimpan riwayat ke akun...'}
-              </span>
-            </div>
-          ) : (
-            <p className="text-center text-[11px] text-zinc-500">
-              Mode Tamu: Login Google/Email di layar awal agar riwayat skor tersimpan permanen.
-            </p>
-          )}
-
-          <StoryCardGenerator room={room} />
-
-          <div className="space-y-2 max-h-48 overflow-y-auto pr-1 pt-2 border-t border-zinc-800">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase">Detail Semua Ronde</h3>
-            {room.logs.map((log, i) => (
-              <div
-                key={i}
-                className="p-3 rounded-xl bg-zinc-950 border border-zinc-800 text-xs space-y-1"
-              >
-                <div className="flex justify-between font-bold">
-                  <span>
-                    Ronde {log.round} • {log.actorName}
-                  </span>
-                  <span className={log.delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                    {log.delta >= 0 ? `+${log.delta}%` : `${log.delta}%`}
+            {/* STAGE 2C: COUPLE NEGOTIATION STEP 1 */}
+            {gameStage === "negotiate-couple-1" && (
+              <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                    🤝 NEGOSIASI PASANGAN (TAHAP 1/2)
                   </span>
                 </div>
-                <p className="text-zinc-400">{log.note}</p>
+
+                <p className="text-xs text-slate-300 mb-3">
+                  <strong className="text-rose-400">
+                    {currentResponder.name}
+                  </strong>{" "}
+                  menolak masalah ini! Pilih kompromi diam-diam sebelum
+                  gantian ke{" "}
+                  <strong className="text-emerald-400">
+                    {currentPartner.name}
+                  </strong>
+                  :
+                </p>
+
+                <div className="space-y-2.5">
+                  {currentCard.compromises.map((opt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        sfxTap();
+                        setCoupleP1Choice(idx);
+                        setGameStage("negotiate-couple-2");
+                      }}
+                      className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-rose-400 text-left flex items-start gap-3 transition btn-tactile"
+                    >
+                      <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-rose-400 shrink-0 mt-0.5">
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                        {opt}
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            ))}
-          </div>
+            )}
 
-          <button
-            onClick={resetToLobbyOrHome}
-            className="w-full py-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 font-bold text-sm flex items-center justify-center gap-2"
-          >
-            <RefreshCw className="w-4 h-4" /> Main Lagi & Lihat Riwayat
-          </button>
-        </div>
+            {/* STAGE 2D: COUPLE NEGOTIATION STEP 2 */}
+            {gameStage === "negotiate-couple-2" && (
+              <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    📲 GILIRAN {currentPartner.name.toUpperCase()} (TAHAP 2/2)
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 mb-3">
+                  <strong className="text-rose-400">
+                    {currentResponder.name}
+                  </strong>{" "}
+                  sudah mengunci pilihannya. Sekarang{" "}
+                  <strong className="text-emerald-400">
+                    {currentPartner.name}
+                  </strong>{" "}
+                  pilih jalan tengah yang sama agar sepakat (+5%):
+                </p>
+
+                <div className="space-y-2.5">
+                  {currentCard.compromises.map((opt, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => resolveCoupleNegotiation(idx)}
+                      className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-emerald-400 text-left flex items-start gap-3 transition btn-tactile"
+                    >
+                      <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-emerald-400 shrink-0 mt-0.5">
+                        {String.fromCharCode(65 + idx)}
+                      </span>
+                      <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                        {opt}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* BOTTOM AFK BAR */}
+            <div className="flex items-center justify-between px-2 pt-1">
+              <span className="text-[11px] font-mono text-slate-500">
+                AFK Berturut-turut: {consecutiveTimeouts}/3
+              </span>
+              <button
+                onClick={() => {
+                  setTimerActive(false);
+                  handleTimeoutPenalty();
+                }}
+                className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
+              >
+                💤 Simulasi Timeout / Pasangan AFK (-15%)
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ==================== SCREEN 5: ENDING ==================== */}
+        {screen === "ending" && player1 && player2 && (
+          <section className="animate-card-enter space-y-5">
+            <div
+              className={`bg-[#111827]/95 border-2 rounded-3xl p-6 sm:p-7 text-center shadow-2xl relative overflow-hidden ${endingVerdict.border}`}
+            >
+              <div
+                className={`w-16 h-16 mx-auto rounded-2xl border flex items-center justify-center text-4xl mb-4 shadow-lg ${endingVerdict.iconBg}`}
+              >
+                {endingVerdict.emoji}
+              </div>
+
+              <span
+                className={`inline-block px-3.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest border mb-2 ${endingVerdict.badgeBg}`}
+              >
+                BATERAI CINTA AKHIR: {battery}%
+              </span>
+
+              <h1
+                className={`text-3xl sm:text-4xl font-extrabold tracking-tight mt-1 ${endingVerdict.titleClass}`}
+              >
+                {endingVerdict.title}
+              </h1>
+
+              <p className="text-xs sm:text-sm text-slate-300 mt-3 leading-relaxed max-w-md mx-auto">
+                {endingVerdict.subtitle}
+              </p>
+
+              <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <span className="font-bold text-white">
+                  {player1.name} ({player1.age})
+                </span>
+                <span>⚡</span>
+                <span className="font-bold text-rose-400">
+                  {player2.name} ({player2.age})
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-4 gap-2">
+              <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-emerald-400">
+                  {stats.terimaMantap}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Terima (+10%)
+                </span>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-rose-400">
+                  {stats.menyesal}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Nyesel (-12%)
+                </span>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-amber-400">
+                  {stats.kompromiSepakat}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Sepakat (+5%)
+                </span>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-red-400">
+                  {stats.deadlockOrAfk}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Gagal/AFK (-15%)
+                </span>
+              </div>
+            </div>
+
+            <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-extrabold text-white">
+                  📋 Rapor Kecocokan Tiap Ronde
+                </h3>
+                <button
+                  onClick={() => {
+                    const summary = [
+                      `=== HASIL BESOK KAWIN? ===`,
+                      `Pasangan: ${player1.name} & ${player2.name}`,
+                      `Baterai Cinta Akhir: ${battery}% -> ${endingVerdict.title}`,
+                      `Statistik: Terima Mantap (${stats.terimaMantap}), Menyesal (${stats.menyesal}), Sepakat Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
+                      `Mainkan sekarang untuk uji red flag hubunganmu!`,
+                    ].join("\n");
+                    copyTextSafe(summary, "Rapor kecocokan berhasil disalin!");
+                  }}
+                  className="text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-4"
+                >
+                  Salin Rapor
+                </button>
+              </div>
+
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {history.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/90 flex items-start justify-between gap-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="font-mono text-[10px] font-bold text-slate-500">
+                          R{item.round}
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {item.category}
+                        </span>
+                        {item.isWildcard && (
+                          <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                            WILDCARD
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-slate-200 font-medium line-clamp-2">
+                        {item.problem}
+                      </p>
+                      <p className="text-[11px] font-bold text-slate-400 mt-1">
+                        → {item.outcomeLabel}
+                      </p>
+                    </div>
+                    <span
+                      className={`font-mono font-extrabold text-xs px-2 py-1 rounded-lg border shrink-0 ${
+                        item.delta > 0
+                          ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+                          : "text-red-400 bg-red-500/15 border-red-500/30"
+                      }`}
+                    >
+                      {item.delta > 0 ? `+${item.delta}%` : `${item.delta}%`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
+              <button
+                onClick={() => {
+                  sfxTap();
+                  setTimerActive(false);
+                  goScreen("mode");
+                }}
+                className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile"
+              >
+                🔄 Ganti Lawan / Mode
+              </button>
+              <button
+                onClick={fullResetGame}
+                className="py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
+              >
+                ✨ Main Ulang Dari Awal
+              </button>
+            </div>
+          </section>
+        )}
       </main>
-    );
-  }
 
-  return null;
+      {/* FOOTER */}
+      <footer className="w-full py-4 text-center text-[11px] text-slate-600">
+        BESOK KAWIN? • Simulasi Mekanik Game & Red Flag Card Engine
+      </footer>
+    </div>
+  );
 }
