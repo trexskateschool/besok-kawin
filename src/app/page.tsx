@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 interface QuestionItem {
   id: string;
@@ -783,6 +783,35 @@ const QUESTION_BANK: QuestionItem[] = [
   },
 ];
 
+// Pola melodi & akor piano romantis (Fmaj7 -> Em7 -> Dm7 -> Cmaj7/G)
+const ROMANTIC_BGM_STEPS: {
+  bass?: number;
+  chord?: number[];
+  melody?: number;
+  dur?: number;
+}[] = [
+  // Bar 1: Fmaj7
+  { bass: 174.61, chord: [261.63, 329.63], melody: 440.0, dur: 1.5 }, // F3 + C4/E4 + A4
+  { chord: [329.63], melody: 392.0, dur: 0.9 }, // G4
+  { melody: 329.63, dur: 0.9 }, // E4
+  { chord: [261.63], melody: 293.66, dur: 1.1 }, // D4
+  // Bar 2: Em7
+  { bass: 164.81, chord: [246.94, 293.66], melody: 392.0, dur: 1.5 }, // E3 + B3/D4 + G4
+  { chord: [293.66], melody: 493.88, dur: 0.9 }, // B4
+  { melody: 587.33, dur: 1.1 }, // D5
+  { chord: [246.94], melody: 493.88, dur: 0.9 }, // B4
+  // Bar 3: Dm7
+  { bass: 146.83, chord: [220.0, 261.63], melody: 523.25, dur: 1.5 }, // D3 + A3/C4 + C5
+  { chord: [261.63], melody: 440.0, dur: 0.9 }, // A4
+  { melody: 349.23, dur: 0.9 }, // F4
+  { chord: [220.0], melody: 329.63, dur: 1.1 }, // E4
+  // Bar 4: Cmaj7 -> G/B
+  { bass: 130.81, chord: [196.0, 246.94], melody: 329.63, dur: 1.4 }, // C3 + G3/B3 + E4
+  { melody: 392.0, dur: 0.9 }, // G4
+  { bass: 123.47, chord: [196.0, 293.66], melody: 493.88, dur: 1.1 }, // B2 + G3/D4 + B4
+  { melody: 523.25, dur: 1.2 }, // C5
+];
+
 function build20QuestionsForProfile(
   gender: "Laki-laki" | "Perempuan",
   age: number
@@ -859,9 +888,145 @@ function getBotPersonaConfig(
 }
 
 export default function BesokKawinGame() {
-  // Audio FX
+  // Audio FX & Romantic BGM State
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [bgmEnabled, setBgmEnabled] = useState(true);
+  const [bgmPlaying, setBgmPlaying] = useState(false);
+
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const bgmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bgmStepRef = useRef(0);
+  const bgmEnabledRef = useRef(true);
+
+  useEffect(() => {
+    bgmEnabledRef.current = bgmEnabled;
+  }, [bgmEnabled]);
+
+  const getOrCreateAudioContext = useCallback(() => {
+    if (typeof window === "undefined") return null;
+    if (!audioCtxRef.current) {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (AudioCtx) audioCtxRef.current = new AudioCtx();
+    }
+    const ctx = audioCtxRef.current;
+    if (ctx && ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    return ctx;
+  }, []);
+
+  // Warm Electric Piano / Music Box Voice for Romantic BGM
+  const playPianoVoice = useCallback(
+    (freq: number, dur: number, peakGain: number) => {
+      const ctx = getOrCreateAudioContext();
+      if (!ctx || ctx.state !== "running") return;
+
+      const now = ctx.currentTime;
+      const oscMain = ctx.createOscillator();
+      const oscWarm = ctx.createOscillator();
+      const filter = ctx.createBiquadFilter();
+      const gain = ctx.createGain();
+
+      oscMain.type = "sine";
+      oscMain.frequency.setValueAtTime(freq, now);
+
+      oscWarm.type = "triangle";
+      oscWarm.frequency.setValueAtTime(freq, now);
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(920, now);
+      filter.Q.setValueAtTime(0.8, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.linearRampToValueAtTime(peakGain, now + 0.06);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+      const warmSubGain = ctx.createGain();
+      warmSubGain.gain.setValueAtTime(0.32, now);
+
+      oscMain.connect(filter);
+      oscWarm.connect(warmSubGain);
+      warmSubGain.connect(filter);
+
+      filter.connect(gain);
+      gain.connect(ctx.destination);
+
+      oscMain.start(now);
+      oscWarm.start(now);
+      oscMain.stop(now + dur + 0.05);
+      oscWarm.stop(now + dur + 0.05);
+    },
+    [getOrCreateAudioContext]
+  );
+
+  const stopRomanticBgm = useCallback(() => {
+    if (bgmTimerRef.current) {
+      clearInterval(bgmTimerRef.current);
+      bgmTimerRef.current = null;
+    }
+    setBgmPlaying(false);
+  }, []);
+
+  const startRomanticBgm = useCallback(() => {
+    if (!bgmEnabledRef.current) return;
+    const ctx = getOrCreateAudioContext();
+    if (!ctx) return;
+    if (ctx.state === "suspended") {
+      ctx.resume().catch(() => {});
+    }
+    if (bgmTimerRef.current) return;
+
+    const triggerStep = () => {
+      if (!bgmEnabledRef.current) return;
+      const activeCtx = getOrCreateAudioContext();
+      if (!activeCtx || activeCtx.state !== "running") return;
+
+      setBgmPlaying(true);
+      const stepData =
+        ROMANTIC_BGM_STEPS[bgmStepRef.current % ROMANTIC_BGM_STEPS.length];
+      const dur = stepData.dur ?? 1.1;
+
+      if (stepData.bass) {
+        playPianoVoice(stepData.bass, dur * 1.35, 0.028);
+      }
+      if (stepData.chord) {
+        stepData.chord.forEach((f) => playPianoVoice(f, dur * 1.2, 0.017));
+      }
+      if (stepData.melody) {
+        playPianoVoice(stepData.melody, dur * 1.15, 0.032);
+      }
+
+      bgmStepRef.current =
+        (bgmStepRef.current + 1) % ROMANTIC_BGM_STEPS.length;
+    };
+
+    triggerStep();
+    bgmTimerRef.current = setInterval(triggerStep, 440);
+  }, [getOrCreateAudioContext, playPianoVoice]);
+
+  // Unlock BGM otomatis saat interaksi pertama pengguna di layar
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const unlockAudio = () => {
+      if (bgmEnabledRef.current) {
+        startRomanticBgm();
+      }
+    };
+    window.addEventListener("pointerdown", unlockAudio, { once: true });
+    window.addEventListener("keydown", unlockAudio, { once: true });
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, [startRomanticBgm]);
+
+  // Bersihkan timer saat komponen ditutup
+  useEffect(() => {
+    return () => stopRomanticBgm();
+  }, [stopRomanticBgm]);
 
   const playTone = (
     freq: number,
@@ -872,16 +1037,8 @@ export default function BesokKawinGame() {
   ) => {
     if (!soundEnabled) return;
     try {
-      if (!audioCtxRef.current && typeof window !== "undefined") {
-        const AudioCtx =
-          window.AudioContext ||
-          (window as unknown as { webkitAudioContext: typeof AudioContext })
-            .webkitAudioContext;
-        if (AudioCtx) audioCtxRef.current = new AudioCtx();
-      }
-      const ctx = audioCtxRef.current;
+      const ctx = getOrCreateAudioContext();
       if (!ctx) return;
-      if (ctx.state === "suspended") ctx.resume();
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.type = type;
@@ -924,6 +1081,19 @@ export default function BesokKawinGame() {
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 2800);
+  };
+
+  const toggleRomanticBgm = () => {
+    const next = !bgmEnabled;
+    setBgmEnabled(next);
+    bgmEnabledRef.current = next;
+    if (next) {
+      startRomanticBgm();
+      showToast("🎹 Musik latar romantis dinyalakan", "info");
+    } else {
+      stopRomanticBgm();
+      showToast("🔇 Musik latar dimatikan", "info");
+    }
   };
 
   const copyTextSafe = (text: string, successMsg: string) => {
@@ -1724,7 +1894,6 @@ export default function BesokKawinGame() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // 1. Background Obsidian & Radial Glow
     ctx.fillStyle = "#090d16";
     ctx.fillRect(0, 0, 1080, 1920);
 
@@ -1743,7 +1912,6 @@ export default function BesokKawinGame() {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 1080, 1920);
 
-    // Pola Grid Tipis
     ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
     ctx.lineWidth = 2;
     for (let x = 0; x <= 1080; x += 54) {
@@ -1775,7 +1943,6 @@ export default function BesokKawinGame() {
       ctx.closePath();
     };
 
-    // 2. Header Brand
     ctx.fillStyle = "#f43f5e";
     ctx.font = "900 44px sans-serif";
     ctx.textAlign = "center";
@@ -1785,7 +1952,6 @@ export default function BesokKawinGame() {
     ctx.font = "600 28px sans-serif";
     ctx.fillText("HASIL UJI NYALI & RED FLAG PASANGAN", 540, 210);
 
-    // 3. Kartu Vonis Utama
     roundRect(80, 280, 920, 1180, 48);
     ctx.fillStyle = "rgba(17, 24, 39, 0.94)";
     ctx.fill();
@@ -1815,7 +1981,6 @@ export default function BesokKawinGame() {
       740
     );
 
-    // Progress Bar Baterai
     roundRect(150, 795, 780, 44, 22);
     ctx.fillStyle = "#020617";
     ctx.fill();
@@ -1825,7 +1990,6 @@ export default function BesokKawinGame() {
       ctx.fill();
     }
 
-    // Wrap Teks Penjelasan Vonis
     ctx.fillStyle = "#cbd5e1";
     ctx.font = "500 30px sans-serif";
     const words = endingVerdict.subtitle.split(" ");
@@ -1843,7 +2007,6 @@ export default function BesokKawinGame() {
     }
     ctx.fillText(line.trim(), 540, lineY);
 
-    // 4. Grid Statistik 2x2
     const statBoxes = [
       {
         label: "TERIMA MANTAP",
@@ -1888,7 +2051,6 @@ export default function BesokKawinGame() {
       ctx.fillText(box.label, bx + 195, by + 90);
     });
 
-    // 5. Footer Watermark
     ctx.fillStyle = "#94a3b8";
     ctx.font = "600 28px sans-serif";
     ctx.fillText("Berani buka borokmu sebelum ke KUA?", 540, 1580);
@@ -2050,7 +2212,26 @@ export default function BesokKawinGame() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Tombol Musik Latar Romantis (BGM) */}
+            <button
+              onClick={toggleRomanticBgm}
+              title="Musik Latar Romantis"
+              className={`px-2.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition ${
+                bgmEnabled
+                  ? "bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border-rose-500/40"
+                  : "bg-slate-800/80 hover:bg-slate-700 text-slate-400 border-slate-700/70"
+              }`}
+            >
+              <span className={bgmEnabled && bgmPlaying ? "animate-pulse" : ""}>
+                {bgmEnabled ? "🎹" : "🔇"}
+              </span>
+              <span className="hidden sm:inline">
+                {bgmEnabled ? "BGM" : "Mute"}
+              </span>
+            </button>
+
+            {/* Tombol Efek Suara (SFX) */}
             <button
               onClick={() => {
                 const next = !soundEnabled;
