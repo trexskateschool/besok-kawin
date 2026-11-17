@@ -117,6 +117,10 @@ function getBotPersonaConfig(
 }
 
 export default function BesokKawinGame() {
+  // PWA Install Prompt State
+  const [installPromptEvent, setInstallPromptEvent] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState(false);
+
   // Audio FX & Romantic BGM State
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [bgmEnabled, setBgmEnabled] = useState(true);
@@ -131,6 +135,45 @@ export default function BesokKawinGame() {
   useEffect(() => {
     bgmEnabledRef.current = bgmEnabled;
   }, [bgmEnabled]);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setInstallPromptEvent(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    if (
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as unknown as { standalone?: boolean }).standalone
+    ) {
+      setIsAppInstalled(true);
+    }
+
+    return () => {
+      window.removeEventListener(
+        "beforeinstallprompt",
+        handleBeforeInstallPrompt
+      );
+    };
+  }, []);
+
+  const handleInstallClick = async () => {
+    if (!installPromptEvent) {
+      showToast(
+        "Gunakan menu browser (titik tiga) lalu pilih 'Add to Home Screen'.",
+        "info"
+      );
+      return;
+    }
+    installPromptEvent.prompt();
+    const { outcome } = await installPromptEvent.userChoice;
+    if (outcome === "accepted") {
+      showToast("Terima kasih telah menginstal Besok Kawin!", "success");
+      setInstallPromptEvent(null);
+    }
+  };
 
   const getOrCreateAudioContext = useCallback(() => {
     if (typeof window === "undefined") return null;
@@ -148,7 +191,6 @@ export default function BesokKawinGame() {
     return ctx;
   }, []);
 
-  // Warm Electric Piano / Music Box Voice for Romantic BGM
   const playPianoVoice = useCallback(
     (freq: number, dur: number, peakGain: number) => {
       const ctx = getOrCreateAudioContext();
@@ -301,7 +343,6 @@ export default function BesokKawinGame() {
     );
   };
 
-  // Toasts
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const showToast = (message: string, type: ToastItem["type"] = "info") => {
     const id = Date.now() + Math.random();
@@ -351,7 +392,6 @@ export default function BesokKawinGame() {
     document.body.removeChild(ta);
   };
 
-  // Screens & Navigation
   const [screen, setScreen] = useState<
     "register" | "quiz" | "mode" | "game" | "ending"
   >("register");
@@ -363,7 +403,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Registration State
   const [landingTab, setLandingTab] = useState<"new" | "invite">("new");
   const [inviteCode, setInviteCode] = useState("");
   const [inputJoinCode, setInputJoinCode] = useState("");
@@ -379,7 +418,6 @@ export default function BesokKawinGame() {
     key: number;
   } | null>(null);
 
-  // Players & Quiz State
   const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
   const [player2, setPlayer2] = useState<PlayerProfile | null>(null);
   const [mode, setMode] = useState<"solo" | "couple">("solo");
@@ -388,10 +426,8 @@ export default function BesokKawinGame() {
   );
   const [quizIndex, setQuizIndex] = useState(0);
 
-  // Mode Screen State
   const [botAgeSlider, setBotAgeSlider] = useState(25);
 
-  // Gameplay State
   const [battery, setBattery] = useState(50);
   const [deltaPop, setDeltaPop] = useState<{ val: number; key: number } | null>(
     null
@@ -420,7 +456,6 @@ export default function BesokKawinGame() {
   });
   const [endingReason, setEndingReason] = useState("");
 
-  // Battery Updater
   const applyBatteryDelta = (delta: number) => {
     setBattery((prev) => Math.max(0, Math.min(100, prev + delta)));
     if (delta !== 0) {
@@ -429,7 +464,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Turn Timer Effect
   useEffect(() => {
     if (screen !== "game" || !timerActive) return;
     const interval = setInterval(() => {
@@ -447,7 +481,6 @@ export default function BesokKawinGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, timerActive, round]);
 
-  // Handlers: Screen 1
   const handleRegistration = (e: React.FormEvent) => {
     e.preventDefault();
     const ageNum = parseInt(regAge, 10);
@@ -541,7 +574,6 @@ export default function BesokKawinGame() {
     goScreen("quiz");
   };
 
-  // Handlers: Screen 2 (Quiz)
   const answerQuiz = (choice: "iya" | "kayanya" | "engga") => {
     sfxTap();
     const activeProfile = quizTarget === "player1" ? player1 : player2;
@@ -575,7 +607,6 @@ export default function BesokKawinGame() {
     goScreen("mode");
   };
 
-  // Handlers: Screen 3 (Mode)
   const startSoloGame = () => {
     if (!player1) return;
     sfxTap();
@@ -610,7 +641,6 @@ export default function BesokKawinGame() {
     initMatchArena(player1, botProfile, "solo");
   };
 
-  // Match Deck Builder & Arena Init
   const initMatchArena = (
     p1: PlayerProfile,
     p2: PlayerProfile,
@@ -681,7 +711,6 @@ export default function BesokKawinGame() {
     goScreen("game");
   };
 
-  // Gameplay Actions
   const advanceToNextRound = (projectedBattery: number) => {
     if (projectedBattery <= 0) {
       setTimerActive(false);
@@ -929,7 +958,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Ending Verdict Config
   const endingVerdict =
     battery >= 80
       ? {
@@ -966,7 +994,6 @@ export default function BesokKawinGame() {
           titleClass: "text-red-500",
         };
 
-  // IG Story PNG Generator
   const downloadStoryCardPNG = () => {
     if (!player1 || !player2 || typeof document === "undefined") return;
     sfxTap();
@@ -1163,7 +1190,6 @@ export default function BesokKawinGame() {
     goScreen("register");
   };
 
-  // Derived UI Data
   const activeQuizProfile = quizTarget === "player1" ? player1 : player2;
   const activeQuizQuestion = activeQuizProfile?.questions[quizIndex];
 
@@ -1206,7 +1232,7 @@ export default function BesokKawinGame() {
       : currentResponder?.questions[0];
 
   return (
-    <div className="bg-grid-pattern h-[100dvh] overflow-hidden overscroll-none flex flex-col bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
+    <div className="bg-grid-pattern min-h-[100dvh] h-[100dvh] overflow-hidden overscroll-none flex flex-col bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
       <style>{`
         html, body {
           height: 100%;
@@ -1301,7 +1327,16 @@ export default function BesokKawinGame() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {/* Tombol Musik Latar Romantis (BGM) */}
+            {!isAppInstalled && installPromptEvent && (
+              <button
+                onClick={handleInstallClick}
+                className="px-2.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold flex items-center gap-1 shadow-lg shadow-rose-500/25 transition btn-tactile"
+              >
+                <span>📱</span>
+                <span className="hidden sm:inline">Install</span>
+              </button>
+            )}
+
             <button
               onClick={toggleRomanticBgm}
               title="Musik Latar Romantis"
@@ -1319,7 +1354,6 @@ export default function BesokKawinGame() {
               </span>
             </button>
 
-            {/* Tombol Efek Suara (SFX) */}
             <button
               onClick={() => {
                 const next = !soundEnabled;
@@ -1405,1146 +1439,799 @@ export default function BesokKawinGame() {
         })}
       </div>
 
-      {/* MAIN CONTAINER (Auto-locks when content fits viewport, scrolls smoothly only if needed) */}
+      {/* MAIN CONTAINER */}
       <main
         ref={mainScrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-none w-full"
+        className="flex-1 min-h-0 overflow-y-auto overscroll-none w-full flex flex-col"
       >
-        <div className="min-h-full w-full max-w-xl mx-auto px-4 py-3 sm:py-5 flex flex-col justify-between">
-          <div className="my-auto w-full">
-            {/* ==================== SCREEN 1: REGISTER ==================== */}
-            {screen === "register" && (
-              <section className="animate-card-enter">
-                <div className="text-center mb-4 sm:mb-5">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-2">
-                    <span>🔥</span> Uji Nyali Sebelum DP Gedung
+        <div className="my-auto w-full max-w-xl mx-auto px-4 py-2 sm:py-4 flex flex-col justify-center">
+          {/* ==================== SCREEN 1: REGISTER ==================== */}
+          {screen === "register" && (
+            <section className="animate-card-enter py-2">
+              <div className="text-center mb-3 sm:mb-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-1.5">
+                  <span>🔥</span> Uji Nyali Sebelum DP Gedung
+                </span>
+                <h1 className="text-lg sm:text-2xl font-extrabold text-white tracking-tight leading-tight">
+                  Buka Borokmu di Depan,
+                  <br />
+                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-500 to-amber-400">
+                    Biar Nggak Nyesel di KUA.
                   </span>
-                  <h1 className="text-xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
-                    Buka Borokmu di Depan,
-                    <br />
-                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-500 to-amber-400">
-                      Biar Nggak Nyesel di KUA.
-                    </span>
-                  </h1>
-                  <p className="text-xs sm:text-sm text-slate-400 mt-1.5 max-w-md mx-auto">
-                    Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur
-                    sesuai usia &amp; gendermu, hadapi kartu masalah pasangan,
-                    dan ukur Baterai Cinta kalian.
-                  </p>
-                </div>
+                </h1>
+                <p className="text-xs sm:text-sm text-slate-400 mt-1 max-w-md mx-auto">
+                  Jawab 20 pengakuan jujur sesuai usia &amp; gendermu, hadapi kartu
+                  masalah pasangan, dan ukur Baterai Cinta kalian.
+                </p>
+              </div>
 
-                <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sfxTap();
-                      setLandingTab("new");
-                      setRegError(null);
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
-                      landingTab === "new"
-                        ? "bg-rose-500 text-white shadow-md shadow-rose-500/20"
-                        : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    Daftar Pemain Baru
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      sfxTap();
-                      setLandingTab("invite");
-                      setRegError(null);
-                    }}
-                    className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
-                      landingTab === "invite"
-                        ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
-                        : "text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    Punya Kode Undangan?
-                  </button>
-                </div>
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-2.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfxTap();
+                    setLandingTab("new");
+                    setRegError(null);
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                    landingTab === "new"
+                      ? "bg-rose-500 text-white shadow-md shadow-rose-500/20"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Daftar Pemain Baru
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfxTap();
+                    setLandingTab("invite");
+                    setRegError(null);
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                    landingTab === "invite"
+                      ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                >
+                  Punya Kode Undangan?
+                </button>
+              </div>
 
-                <div className="bg-[#111827]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-2xl">
-                  {landingTab === "invite" && (
-                    <div className="mb-4 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30">
-                      <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1.5">
-                        Masukkan Kode Undangan Pasangan
-                      </label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={inputJoinCode}
-                          onChange={(e) => setInputJoinCode(e.target.value)}
-                          placeholder="Contoh: KAWIN-729"
-                          maxLength={12}
-                          className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            sfxTap();
-                            setInputJoinCode("KAWIN-888");
-                            showToast(
-                              "Kode demo KAWIN-888 terpasang (Pengundang: Laki-laki, 26 thn).",
-                              "info"
-                            );
-                          }}
-                          className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/30 whitespace-nowrap"
-                        >
-                          Kode Demo
-                        </button>
-                      </div>
-                      <p className="text-[11px] text-slate-400 mt-1">
-                        *Sistem otomatis memblokir jika jenis kelaminmu sama
-                        dengan pengirim kode.
-                      </p>
-                    </div>
-                  )}
-
-                  {regError && (
-                    <div
-                      key={regError.key}
-                      className="mb-4 p-3.5 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
-                    >
-                      <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
-                          <span className="text-base">🚫</span>
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-extrabold text-red-400">
-                            {regError.title}
-                          </h3>
-                          <p className="text-xs text-red-200/90 mt-0.5 leading-relaxed">
-                            {regError.text}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <form onSubmit={handleRegistration} className="space-y-3">
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                        Identitas Pemain
-                      </span>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Nama Panggilan
-                      </label>
+              <div className="bg-[#111827]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-2xl">
+                {landingTab === "invite" && (
+                  <div className="mb-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
+                      Masukkan Kode Undangan Pasangan
+                    </label>
+                    <div className="flex gap-2">
                       <input
                         type="text"
-                        required
-                        value={regName}
-                        onChange={(e) => setRegName(e.target.value)}
-                        placeholder="Misal: Raka / Nadya"
-                        className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                        value={inputJoinCode}
+                        onChange={(e) => setInputJoinCode(e.target.value)}
+                        placeholder="Contoh: KAWIN-729"
+                        maxLength={12}
+                        className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
                       />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          sfxTap();
+                          setInputJoinCode("KAWIN-888");
+                          showToast(
+                            "Kode demo KAWIN-888 terpasang (Pengundang: Laki-laki, 26 thn).",
+                            "info"
+                          );
+                        }}
+                        className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/30 whitespace-nowrap"
+                      >
+                        Kode Demo
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {regError && (
+                  <div
+                    key={regError.key}
+                    className="mb-3 p-3 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-7 h-7 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-sm">🚫</span>
+                      </div>
+                      <div>
+                        <h3 className="text-xs font-extrabold text-red-400">
+                          {regError.title}
+                        </h3>
+                        <p className="text-[11px] text-red-200/90 mt-0.5 leading-relaxed">
+                          {regError.text}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <form onSubmit={handleRegistration} className="space-y-2.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Nama Panggilan
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={regName}
+                      onChange={(e) => setRegName(e.target.value)}
+                      placeholder="Misal: Raka / Nadya"
+                      className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Email Aktif
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={regEmail}
+                      onChange={(e) => setRegEmail(e.target.value)}
+                      placeholder="nama@email.com"
+                      className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        Jenis Kelamin
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(["Laki-laki", "Perempuan"] as const).map((g) => (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => setRegGender(g)}
+                            className={`py-2 px-2 rounded-xl border text-xs font-bold text-center transition ${
+                              regGender === g
+                                ? "border-rose-500 bg-rose-500/15 text-white"
+                                : "border-slate-700 bg-slate-950/90 text-slate-400"
+                            }`}
+                          >
+                            {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div>
                       <label className="block text-xs font-semibold text-slate-300 mb-1">
-                        Email Aktif
+                        Usia (Wajib 18+)
                       </label>
                       <input
-                        type="email"
+                        type="number"
                         required
-                        value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
-                        placeholder="nama@email.com"
-                        className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                        min={10}
+                        max={80}
+                        value={regAge}
+                        onChange={(e) => setRegAge(e.target.value)}
+                        placeholder="Contoh: 24"
+                        className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-3 py-2 text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none transition"
                       />
                     </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1">
-                          Jenis Kelamin
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {(["Laki-laki", "Perempuan"] as const).map((g) => (
-                            <button
-                              key={g}
-                              type="button"
-                              onClick={() => setRegGender(g)}
-                              className={`py-2.5 px-2 rounded-xl border text-xs font-bold text-center transition ${
-                                regGender === g
-                                  ? "border-rose-500 bg-rose-500/15 text-white"
-                                  : "border-slate-700 bg-slate-950/90 text-slate-400"
-                              }`}
-                            >
-                              {g === "Laki-laki"
-                                ? "👨 Laki-laki"
-                                : "👩 Perempuan"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1">
-                          Usia (Wajib 18+)
-                        </label>
-                        <input
-                          type="number"
-                          required
-                          min={10}
-                          max={80}
-                          value={regAge}
-                          onChange={(e) => setRegAge(e.target.value)}
-                          placeholder="Contoh: 24"
-                          className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-3.5 py-2 text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none transition"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full mt-1 py-3 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile flex items-center justify-center gap-2"
-                    >
-                      <span>
-                        {landingTab === "new"
-                          ? "Lanjut ke 20 Pengakuan Hidup"
-                          : "Gabung Kode & Isi 20 Pengakuan"}
-                      </span>
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth="2.5"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M13 7l5 5m0 0l-5 5m5-5H6"
-                        />
-                      </svg>
-                    </button>
-                  </form>
-                </div>
-              </section>
-            )}
-
-            {/* ==================== SCREEN 2: QUIZ ==================== */}
-            {screen === "quiz" && activeQuizProfile && activeQuizQuestion && (
-              <section>
-                <div className="mb-3">
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
-                        {activeQuizProfile.name} (
-                        {activeQuizProfile.gender === "Laki-laki"
-                          ? "👨"
-                          : "👩"}{" "}
-                        {activeQuizProfile.age} thn)
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        {activeQuizQuestion.segmentLabel}
-                      </span>
-                    </div>
-                    <span className="font-mono font-extrabold text-rose-400 text-sm">
-                      {quizIndex + 1}
-                      <span className="text-slate-500">/20</span>
-                    </span>
                   </div>
 
-                  <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden p-0.5">
-                    <div
-                      className="h-full bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 rounded-full transition-all duration-300"
-                      style={{ width: `${((quizIndex + 1) / 20) * 100}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div
-                  key={`${quizTarget}-${quizIndex}`}
-                  className="bg-[#111827]/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl min-h-[210px] sm:min-h-[240px] flex flex-col justify-between animate-card-enter"
-                >
-                  <div>
-                    <div className="flex items-center justify-between gap-2 mb-3.5">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide border ${
-                          activeQuizQuestion.category === "Ketakutan Hidup"
-                            ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
-                            : activeQuizQuestion.category === "Kebiasaan Buruk"
-                            ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                            : "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                        }`}
-                      >
-                        {activeQuizQuestion.category}
-                      </span>
-                      <span className="text-[11px] font-mono text-slate-500">
-                        #{String(quizIndex + 1).padStart(2, "0")}
-                      </span>
-                    </div>
-
-                    <blockquote className="text-base sm:text-xl font-bold text-white leading-relaxed">
-                      &ldquo;{activeQuizQuestion.statement}&rdquo;
-                    </blockquote>
-                  </div>
-
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                  <button
+                    type="submit"
+                    className="w-full mt-2 py-3 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile flex items-center justify-center gap-2"
+                  >
                     <span>
-                      Jawab jujur — ini bakal jadi dek kartu pasanganmu!
+                      {landingTab === "new"
+                        ? "Lanjut ke 20 Pengakuan Hidup"
+                        : "Gabung Kode & Isi 20 Pengakuan"}
                     </span>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 mt-3">
-                  <button
-                    onClick={() => answerQuiz("iya")}
-                    className="w-full py-3 px-4 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/60 hover:border-rose-500 text-left flex items-center justify-between group btn-tactile"
-                  >
-                    <div>
-                      <span className="block text-sm sm:text-base font-extrabold text-rose-400 group-hover:text-rose-300">
-                        🔥 Iya lagi
-                      </span>
-                      <span className="block text-[11px] text-slate-400">
-                        Setuju banget — masuk ke Dek Masalah Utama
-                      </span>
-                    </div>
-                    <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
-                      MASALAH
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => answerQuiz("kayanya")}
-                    className="w-full py-3 px-4 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border-2 border-amber-500/50 hover:border-amber-400 text-left flex items-center justify-between group btn-tactile"
-                  >
-                    <div>
-                      <span className="block text-sm sm:text-base font-extrabold text-amber-400 group-hover:text-amber-300">
-                        🤔 Kayanya sih
-                      </span>
-                      <span className="block text-[11px] text-slate-400">
-                        Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
-                      </span>
-                    </div>
-                    <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
-                      WILDCARD
-                    </span>
-                  </button>
-
-                  <button
-                    onClick={() => answerQuiz("engga")}
-                    className="w-full py-3 px-4 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border-2 border-slate-700/80 hover:border-slate-500 text-left flex items-center justify-between group btn-tactile"
-                  >
-                    <div>
-                      <span className="block text-sm sm:text-base font-extrabold text-slate-200">
-                        🛡️ Engga
-                      </span>
-                      <span className="block text-[11px] text-slate-400">
-                        Bukan gua banget — dibuang dari dek permainan
-                      </span>
-                    </div>
-                    <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
-                      BUANG
-                    </span>
-                  </button>
-                </div>
-              </section>
-            )}
-
-            {/* ==================== SCREEN 3: MODE SELECTION ==================== */}
-            {screen === "mode" && player1 && (
-              <section className="animate-card-enter space-y-4">
-                <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-xl">
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
-                        Hasil Profiling Jujur
-                      </span>
-                      <h2 className="text-base sm:text-xl font-extrabold text-white">
-                        Profil Borok & Red Flag{" "}
-                        <span className="text-rose-400">{player1.name}</span>
-                      </h2>
-                    </div>
-                    <span className="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-700">
-                      {player1.gender} • {player1.age} thn
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-2 my-3">
-                    <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
-                      <span className="block text-xl font-mono font-extrabold text-rose-400">
-                        {p1Counts.iya}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-300">
-                        Iya lagi
-                      </span>
-                      <span className="block text-[10px] text-slate-500">
-                        Masalah Utama
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
-                      <span className="block text-xl font-mono font-extrabold text-amber-400">
-                        {p1Counts.kayanya}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-300">
-                        Kayanya sih
-                      </span>
-                      <span className="block text-[10px] text-slate-500">
-                        Kartu Wildcard
-                      </span>
-                    </div>
-                    <div className="p-2.5 rounded-2xl bg-slate-800/70 border border-slate-700 text-center">
-                      <span className="block text-xl font-mono font-extrabold text-slate-300">
-                        {p1Counts.engga}
-                      </span>
-                      <span className="text-[11px] font-bold text-slate-300">
-                        Engga
-                      </span>
-                      <span className="block text-[10px] text-slate-500">
-                        Dibuang
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90">
-                    <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">
-                      💣 Senjata Makan Tuan Teratasmu:
-                    </p>
-                    <ul className="space-y-1 text-xs text-slate-300">
-                      {p1TopConfessions.length === 0 ? (
-                        <li className="text-slate-400 italic">
-                          Kamu menjawab &ldquo;Engga&rdquo; semua! Pencitraan
-                          tingkat dewa — hati-hati kena kartu jebakan sistem.
-                        </li>
-                      ) : (
-                        p1TopConfessions.slice(0, 2).map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-2">
-                            <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 border border-slate-700">
-                              {item.tag}
-                            </span>
-                            <span className="line-clamp-1">
-                              &ldquo;{item.text}&rdquo;
-                            </span>
-                          </li>
-                        ))
-                      )}
-                    </ul>
-                  </div>
-                </div>
-
-                {/* MODE A: SOLO AI */}
-                <div className="bg-[#111827]/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-4 sm:p-5 transition">
-                  <div className="flex items-start justify-between gap-3 mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-lg shadow-lg shrink-0">
-                        🤖
-                      </div>
-                      <div>
-                        <h4 className="font-extrabold text-white text-sm sm:text-base">
-                          Mode Solo — Lawan Bot AI
-                        </h4>
-                        <p className="text-xs text-slate-400">
-                          Lawan jenis (
-                          <span className="text-rose-400 font-semibold">
-                            {botOppositeGender}
-                          </span>
-                          ) • Baterai mulai 50%.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-3.5 rounded-2xl bg-slate-950/90 border border-slate-800 mb-3">
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-bold text-slate-300">
-                        Pilih Usia Bot AI:
-                      </label>
-                      <span className="font-mono font-extrabold text-xs px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                        {botAgeSlider} Tahun
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={18}
-                      max={45}
-                      value={botAgeSlider}
-                      onChange={(e) =>
-                        setBotAgeSlider(parseInt(e.target.value, 10))
-                      }
-                      className="w-full my-1.5"
-                    />
-                    <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-2.5">
-                      <span>18 (Gen-Z)</span>
-                      <span>30 (Matang)</span>
-                      <span>45 (Senior)</span>
-                    </div>
-
-                    <div className="flex items-center gap-2.5 pt-2.5 border-t border-slate-800/80">
-                      <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-base shrink-0">
-                        {botPreview.emoji}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-extrabold text-xs sm:text-sm text-white">
-                            {botPreview.name} ({botAgeSlider} thn)
-                          </span>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                            {botPreview.vibe}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                          &ldquo;{botPreview.bio}&rdquo;
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={startSoloGame}
-                    className="w-full py-3 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
-                  >
-                    Mulai Main Lawan Bot AI →
-                  </button>
-                </div>
-
-                {/* MODE B: COUPLE */}
-                <div className="bg-[#111827]/95 border-2 border-slate-800 hover:border-emerald-500/50 rounded-3xl p-4 sm:p-5 transition">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-base shadow-lg shrink-0">
-                        💌
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="font-extrabold text-white text-xs sm:text-sm truncate">
-                          Mode Ajak Pasangan
-                        </h4>
-                        <span className="font-mono font-extrabold text-sm text-emerald-400 tracking-wider">
-                          {inviteCode}
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() =>
-                        copyTextSafe(
-                          inviteCode,
-                          `Kode undangan ${inviteCode} disalin! Kirim ke pasangan lawan jenismu.`
-                        )
-                      }
-                      className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold shrink-0 btn-tactile"
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
                     >
-                      Salin Kode
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M13 7l5 5m0 0l-5 5m5-5H6"
+                      />
+                    </svg>
+                  </button>
+                </form>
+              </div>
+            </section>
+          )}
 
-            {/* ==================== SCREEN 4: GAMEPLAY ==================== */}
-            {screen === "game" &&
-              currentCard &&
-              currentResponder &&
-              currentPartner && (
-                <section className="space-y-3">
-                  {/* BATERAI CINTA HUD */}
+          {/* ==================== SCREEN 2: QUIZ ==================== */}
+          {screen === "quiz" && activeQuizProfile && activeQuizQuestion && (
+            <section className="py-2">
+              <div className="mb-2.5">
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                      {activeQuizProfile.name} (
+                      {activeQuizProfile.gender === "Laki-laki" ? "👨" : "👩"}{" "}
+                      {activeQuizProfile.age} thn)
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {activeQuizQuestion.segmentLabel}
+                    </span>
+                  </div>
+                  <span className="font-mono font-extrabold text-rose-400 text-sm">
+                    {quizIndex + 1}
+                    <span className="text-slate-500">/20</span>
+                  </span>
+                </div>
+
+                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden p-0.5">
                   <div
-                    key={shakeHud}
-                    className={`bg-[#111827]/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-3.5 sm:p-4 shadow-xl relative overflow-visible ${
-                      shakeHud > 0 ? "animate-shake" : ""
+                    className="h-full bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 rounded-full transition-all duration-300"
+                    style={{ width: `${((quizIndex + 1) / 20) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              <div
+                key={`${quizTarget}-${quizIndex}`}
+                className="bg-[#111827]/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 sm:p-5 shadow-2xl mb-2.5 animate-card-enter"
+              >
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide border ${
+                      activeQuizQuestion.category === "Ketakutan Hidup"
+                        ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+                        : activeQuizQuestion.category === "Kebiasaan Buruk"
+                        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                        : "bg-rose-500/15 text-rose-400 border-rose-500/30"
                     }`}
                   >
-                    {deltaPop && (
-                      <div
-                        key={deltaPop.key}
-                        className="absolute right-6 -top-3 pointer-events-none z-30"
-                      >
-                        <span
-                          className={`inline-block font-mono font-extrabold text-base px-2.5 py-1 rounded-xl shadow-lg animate-delta ${
-                            deltaPop.val > 0
-                              ? "bg-emerald-500 text-slate-950"
-                              : "bg-red-500 text-white"
-                          }`}
-                        >
-                          {deltaPop.val > 0
-                            ? `+${deltaPop.val}%`
-                            : `${deltaPop.val}%`}
-                        </span>
-                      </div>
-                    )}
+                    {activeQuizQuestion.category}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    #{String(quizIndex + 1).padStart(2, "0")}
+                  </span>
+                </div>
 
-                    <div className="flex items-center justify-between mb-1.5">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base">🔋</span>
-                        <div>
-                          <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
-                            Baterai Cinta
-                          </span>
-                          <span
-                            className={`ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              battery >= 80
-                                ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
-                                : battery >= 45
-                                ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
-                                : "bg-red-500/15 text-red-400 border-red-500/30"
-                            }`}
-                          >
-                            {battery >= 80
-                              ? "Siap Besok Kawin!"
-                              : battery >= 45
-                              ? "Zona Pacaran Dulu"
-                              : "Zona Bahaya!"}
-                          </span>
-                        </div>
-                      </div>
-                      <span
-                        className={`font-mono font-extrabold text-lg sm:text-2xl ${
-                          battery >= 80
-                            ? "text-emerald-400"
-                            : battery >= 45
-                            ? "text-amber-400"
-                            : "text-red-400"
-                        }`}
-                      >
-                        {battery}%
+                <blockquote className="text-sm sm:text-lg font-bold text-white leading-relaxed">
+                  &ldquo;{activeQuizQuestion.statement}&rdquo;
+                </blockquote>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  onClick={() => answerQuiz("iya")}
+                  className="w-full py-2.5 px-3.5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/60 hover:border-rose-500 text-left flex items-center justify-between group btn-tactile"
+                >
+                  <div>
+                    <span className="block text-xs sm:text-sm font-extrabold text-rose-400 group-hover:text-rose-300">
+                      🔥 Iya lagi
+                    </span>
+                    <span className="block text-[10px] text-slate-400">
+                      Setuju banget — masuk ke Dek Masalah Utama
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300">
+                    MASALAH
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => answerQuiz("kayanya")}
+                  className="w-full py-2.5 px-3.5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border-2 border-amber-500/50 hover:border-amber-400 text-left flex items-center justify-between group btn-tactile"
+                >
+                  <div>
+                    <span className="block text-xs sm:text-sm font-extrabold text-amber-400 group-hover:text-amber-300">
+                      🤔 Kayanya sih
+                    </span>
+                    <span className="block text-[10px] text-slate-400">
+                      Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                    WILDCARD
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => answerQuiz("engga")}
+                  className="w-full py-2.5 px-3.5 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border-2 border-slate-700/80 hover:border-slate-500 text-left flex items-center justify-between group btn-tactile"
+                >
+                  <div>
+                    <span className="block text-xs sm:text-sm font-extrabold text-slate-200">
+                      🛡️ Engga
+                    </span>
+                    <span className="block text-[10px] text-slate-400">
+                      Bukan gua banget — dibuang dari dek permainan
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-400">
+                    BUANG
+                  </span>
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* ==================== SCREEN 3: MODE SELECTION ==================== */}
+          {screen === "mode" && player1 && (
+            <section className="animate-card-enter space-y-3 py-2">
+              <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-4 shadow-xl">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
+                      Hasil Profiling Jujur
+                    </span>
+                    <h2 className="text-sm sm:text-lg font-extrabold text-white">
+                      Profil Borok & Red Flag{" "}
+                      <span className="text-rose-400">{player1.name}</span>
+                    </h2>
+                  </div>
+                  <span className="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-700">
+                    {player1.gender} • {player1.age} thn
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2 my-2.5">
+                  <div className="p-2 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+                    <span className="block text-lg font-mono font-extrabold text-rose-400">
+                      {p1Counts.iya}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-300">
+                      Iya lagi
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+                    <span className="block text-lg font-mono font-extrabold text-amber-400">
+                      {p1Counts.kayanya}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-300">
+                      Kayanya
+                    </span>
+                  </div>
+                  <div className="p-2 rounded-2xl bg-slate-800/70 border border-slate-700 text-center">
+                    <span className="block text-lg font-mono font-extrabold text-slate-300">
+                      {p1Counts.engga}
+                    </span>
+                    <span className="text-[10px] font-bold text-slate-300">
+                      Engga
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* MODE A: SOLO AI */}
+              <div className="bg-[#111827]/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-4 transition">
+                <div className="flex items-center gap-3 mb-2.5">
+                  <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-base shadow-lg shrink-0">
+                    🤖
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-white text-sm">
+                      Mode Solo — Lawan Bot AI
+                    </h4>
+                    <p className="text-[11px] text-slate-400">
+                      Lawan jenis ({botOppositeGender}) • Baterai mulai 50%.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800 mb-2.5">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-slate-300">
+                      Pilih Usia Bot AI:
+                    </label>
+                    <span className="font-mono font-extrabold text-xs px-2 py-0.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                      {botAgeSlider} Tahun
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={18}
+                    max={45}
+                    value={botAgeSlider}
+                    onChange={(e) =>
+                      setBotAgeSlider(parseInt(e.target.value, 10))
+                    }
+                    className="w-full my-1"
+                  />
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-800/80 mt-2">
+                    <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm shrink-0">
+                      {botPreview.emoji}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="font-extrabold text-xs text-white">
+                        {botPreview.name} ({botAgeSlider} thn) • {botPreview.vibe}
                       </span>
                     </div>
-
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex-1 h-5 bg-slate-950 rounded-xl border-2 border-slate-700 p-0.5 relative overflow-hidden">
-                        <div
-                          className={`h-full rounded-lg transition-all duration-500 ease-out relative battery-shimmer bg-gradient-to-r ${
-                            battery >= 80
-                              ? "from-emerald-500 to-teal-400"
-                              : battery >= 45
-                              ? "from-amber-500 to-yellow-400"
-                              : "from-red-600 to-rose-500"
-                          }`}
-                          style={{ width: `${battery}%` }}
-                        />
-                        <div className="absolute top-0 bottom-0 left-[45%] w-0.5 bg-slate-600/70" />
-                        <div className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-emerald-400/70" />
-                      </div>
-                      <div className="w-1.5 h-3 bg-slate-700 rounded-r-md" />
-                    </div>
-
-                    <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-slate-800/80 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold px-2 py-0.5 rounded-lg bg-slate-800 text-slate-200">
-                          Ronde <span className="text-rose-400">{round}</span>/8
-                        </span>
-                        <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
-                          Giliran: {currentResponder.name}
-                        </span>
-                      </div>
-
-                      <div
-                        className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border font-mono font-bold ${
-                          timerSeconds <= 10
-                            ? "bg-red-500/20 border-red-500/60 text-red-400 animate-pulse"
-                            : "bg-slate-950 border-slate-700 text-slate-200"
-                        }`}
-                      >
-                        <span>⏱️</span>
-                        <span>{timerSeconds}s</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* STAGE 1: DILEMMA CARD */}
-                  {gameStage === "dilemma" && (
-                    <div
-                      key={`dilemma-${round}`}
-                      className={`bg-[#111827]/95 backdrop-blur-xl border-2 ${
-                        currentCard.isWildcard
-                          ? "border-amber-500/50"
-                          : "border-slate-800"
-                      } rounded-3xl p-4 sm:p-6 shadow-2xl animate-card-enter`}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
-                          {currentCard.category}
-                        </span>
-                        {currentCard.isWildcard ? (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                            ⚡ KARTU JEBAKAN
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-slate-800 text-slate-400">
-                            🔥 MASALAH UTAMA
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2.5 p-2.5 rounded-2xl bg-slate-950/80 border border-slate-800/90 mb-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-sm shrink-0">
-                          {currentPartner.emoji ||
-                            (currentPartner.gender === "Perempuan"
-                              ? "👩"
-                              : "👨")}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="text-xs font-extrabold text-white truncate">
-                            Pengakuan {currentPartner.name} ({currentPartner.age}{" "}
-                            thn)
-                          </p>
-                          <p className="text-[11px] text-slate-400 truncate">
-                            {currentCard.isWildcard
-                              ? 'Dia sempat ragu menjawab "Kayanya sih" soal ini...'
-                              : 'Dia ngaku jujur "Iya lagi" soal borok ini:'}
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="my-3">
-                        <p className="text-sm sm:text-lg font-bold text-white leading-relaxed">
-                          &ldquo;{currentCard.partnerPrompt}&rdquo;
-                        </p>
-                        <p className="text-xs text-slate-400 italic mt-2 pl-3 border-l-2 border-slate-700">
-                          Pengakuan asli: &ldquo;{currentCard.statement}&rdquo;
-                        </p>
-                      </div>
-
-                      <div className="p-3 rounded-2xl bg-slate-900/90 border border-slate-800 mb-4">
-                        <p className="text-xs font-bold text-slate-300">
-                          👉{" "}
-                          <span className="text-rose-400">
-                            {currentResponder.name}
-                          </span>
-                          , kamu siap hidup bareng pasangan yang punya
-                          sifat/ketakutan ini?
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <button
-                          onClick={chooseAcceptCard}
-                          className="py-3.5 px-3 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/70 hover:border-emerald-400 text-center btn-tactile"
-                        >
-                          <span className="block text-sm sm:text-lg font-extrabold text-emerald-400">
-                            💚 TERIMA
-                          </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Uji Konsekuensi (+10% / -12%)
-                          </span>
-                        </button>
-
-                        <button
-                          onClick={chooseRejectCard}
-                          className="py-3.5 px-3 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/70 hover:border-rose-400 text-center btn-tactile"
-                        >
-                          <span className="block text-sm sm:text-lg font-extrabold text-rose-400">
-                            🛑 TOLAK
-                          </span>
-                          <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Cari Jalan Tengah (+5% / -15%)
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* STAGE 2A: CONSEQUENCE CARD */}
-                  {gameStage === "consequence" && (
-                    <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-4 sm:p-6 shadow-2xl animate-card-flip">
-                      <div className="flex items-center justify-between mb-2.5">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                          ⚠️ KARTU KONSEKUENSI
-                        </span>
-                        <span className="text-xs font-bold text-slate-400">
-                          {currentResponder.name}
-                        </span>
-                      </div>
-
-                      {mode === "solo" && currentPartner.reactAccept && (
-                        <div className="mb-3 p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-200">
-                          <span className="font-bold text-indigo-300">
-                            {currentPartner.name} ({currentPartner.age} thn):
-                          </span>{" "}
-                          &ldquo;{currentPartner.reactAccept}&rdquo;
-                        </div>
-                      )}
-
-                      <div className="p-3.5 rounded-2xl bg-slate-950 border border-amber-500/30 mb-3">
-                        <p className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
-                          &ldquo;{currentCard.consequenceQuestion}&rdquo;
-                        </p>
-                        {personalTrap && (
-                          <div className="mt-2.5 pt-2.5 border-t border-slate-800/90">
-                            <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-0.5">
-                              🪞 Cermin Pengakuanmu Sendiri di Awal:
-                            </span>
-                            <p className="text-xs text-slate-300 italic">
-                              Padahal di awal {currentResponder.name} sendiri
-                              ngaku: &ldquo;{personalTrap.statement}&rdquo;
-                            </p>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <button
-                          onClick={() => resolveConsequence(true)}
-                          className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-between btn-tactile"
-                        >
-                          <span>💪 Tetap Terima Konsekuensinya</span>
-                          <span className="font-mono bg-black/25 px-2 py-0.5 rounded-lg text-emerald-200">
-                            +10%
-                          </span>
-                        </button>
-
-                        <button
-                          onClick={() => resolveConsequence(false)}
-                          className="w-full py-3 px-4 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border-2 border-red-500/60 text-red-300 font-extrabold text-xs sm:text-sm flex items-center justify-between btn-tactile"
-                        >
-                          <span>😰 Ragu / Menyesal Pilih Terima</span>
-                          <span className="font-mono bg-red-500/20 px-2 py-0.5 rounded-lg text-red-300">
-                            -12%
-                          </span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* STAGE 2B: SOLO NEGOTIATION */}
-                  {gameStage === "negotiate-solo" && (
-                    <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl animate-card-flip">
-                      <div className="flex items-center justify-between mb-2.5">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          🤝 DISKUSI JALAN TENGAH
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          Sepakat:{" "}
-                          <strong className="text-emerald-400">+5%</strong> |
-                          Beda: <strong className="text-red-400">-15%</strong>
-                        </span>
-                      </div>
-
-                      <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 mb-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm">{currentPartner.emoji}</span>
-                          <span className="text-xs font-extrabold text-white">
-                            {currentPartner.name} ({currentPartner.age} thn)
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
-                            {currentPartner.vibe}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          &ldquo;{currentPartner.reactReject}&rdquo;
-                        </p>
-                        <p className="text-[11px] text-amber-400/90 mt-1 font-medium">
-                          💡 Petunjuk gaya kompromi:{" "}
-                          {currentPartner.tier === "young"
-                            ? "Aku maunya yang tetep ngejaga perasaan & perhatian kita sih..."
-                            : currentPartner.tier === "mid"
-                            ? "Menurutku kita butuh aturan yang realistis dan adil buat masing-masing."
-                            : "Pilih opsi yang paling praktis, terukur, dan minim drama ke depannya."}
-                        </p>
-                      </div>
-
-                      <p className="text-xs font-bold text-slate-300 mb-2">
-                        Pilih 1 opsi kompromi yang bakal disetujui{" "}
-                        {currentPartner.name}:
-                      </p>
-
-                      <div className="space-y-2">
-                        {currentCard.compromises.map((opt, idx) => {
-                          const tier = currentPartner.tier || "mid";
-                          const botPrefIdx = currentCard.botPref[tier] ?? 0;
-                          return (
-                            <button
-                              key={idx}
-                              onClick={() =>
-                                resolveSoloNegotiation(idx, botPrefIdx)
-                              }
-                              className="w-full p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-left flex items-start gap-2.5 transition btn-tactile"
-                            >
-                              <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-amber-400 shrink-0 mt-0.5">
-                                {String.fromCharCode(65 + idx)}
-                              </span>
-                              <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
-                                {opt}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* STAGE 2C: COUPLE NEGOTIATION STEP 1 */}
-                  {gameStage === "negotiate-couple-1" && (
-                    <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl animate-card-flip">
-                      <div className="flex items-center justify-between mb-2.5">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          🤝 NEGOSIASI PASANGAN (TAHAP 1/2)
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-300 mb-2.5">
-                        <strong className="text-rose-400">
-                          {currentResponder.name}
-                        </strong>{" "}
-                        menolak masalah ini! Pilih kompromi diam-diam sebelum
-                        gantian ke{" "}
-                        <strong className="text-emerald-400">
-                          {currentPartner.name}
-                        </strong>
-                        :
-                      </p>
-
-                      <div className="space-y-2">
-                        {currentCard.compromises.map((opt, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              sfxTap();
-                              setCoupleP1Choice(idx);
-                              setGameStage("negotiate-couple-2");
-                            }}
-                            className="w-full p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-rose-400 text-left flex items-start gap-2.5 transition btn-tactile"
-                          >
-                            <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-rose-400 shrink-0 mt-0.5">
-                              {String.fromCharCode(65 + idx)}
-                            </span>
-                            <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
-                              {opt}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* STAGE 2D: COUPLE NEGOTIATION STEP 2 */}
-                  {gameStage === "negotiate-couple-2" && (
-                    <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-3xl p-4 sm:p-6 shadow-2xl animate-card-flip">
-                      <div className="flex items-center justify-between mb-2.5">
-                        <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          📲 GILIRAN {currentPartner.name.toUpperCase()} (TAHAP
-                          2/2)
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-slate-300 mb-2.5">
-                        <strong className="text-rose-400">
-                          {currentResponder.name}
-                        </strong>{" "}
-                        sudah mengunci pilihannya. Sekarang{" "}
-                        <strong className="text-emerald-400">
-                          {currentPartner.name}
-                        </strong>{" "}
-                        pilih jalan tengah yang sama agar sepakat (+5%):
-                      </p>
-
-                      <div className="space-y-2">
-                        {currentCard.compromises.map((opt, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => resolveCoupleNegotiation(idx)}
-                            className="w-full p-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-emerald-400 text-left flex items-start gap-2.5 transition btn-tactile"
-                          >
-                            <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-emerald-400 shrink-0 mt-0.5">
-                              {String.fromCharCode(65 + idx)}
-                            </span>
-                            <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
-                              {opt}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* BOTTOM AFK BAR */}
-                  <div className="flex items-center justify-between px-2">
-                    <span className="text-[11px] font-mono text-slate-500">
-                      AFK Berturut-turut: {consecutiveTimeouts}/3
-                    </span>
-                    <button
-                      onClick={() => {
-                        setTimerActive(false);
-                        handleTimeoutPenalty();
-                      }}
-                      className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
-                    >
-                      💤 Simulasi Timeout / Pasangan AFK (-15%)
-                    </button>
-                  </div>
-                </section>
-              )}
-
-            {/* ==================== SCREEN 5: ENDING ==================== */}
-            {screen === "ending" && player1 && player2 && (
-              <section className="animate-card-enter space-y-4">
-                <div
-                  className={`bg-[#111827]/95 border-2 rounded-3xl p-5 sm:p-6 text-center shadow-2xl relative overflow-hidden ${endingVerdict.border}`}
-                >
-                  <div
-                    className={`w-14 h-14 mx-auto rounded-2xl border flex items-center justify-center text-3xl mb-3 shadow-lg ${endingVerdict.iconBg}`}
-                  >
-                    {endingVerdict.emoji}
-                  </div>
-
-                  <span
-                    className={`inline-block px-3 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest border mb-1.5 ${endingVerdict.badgeBg}`}
-                  >
-                    BATERAI CINTA AKHIR: {battery}%
-                  </span>
-
-                  <h1
-                    className={`text-2xl sm:text-4xl font-extrabold tracking-tight mt-1 ${endingVerdict.titleClass}`}
-                  >
-                    {endingVerdict.title}
-                  </h1>
-
-                  <p className="text-xs sm:text-sm text-slate-300 mt-2.5 leading-relaxed max-w-md mx-auto">
-                    {endingVerdict.subtitle}
-                  </p>
-
-                  <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
-                    <span className="font-bold text-white">
-                      {player1.name} ({player1.age})
-                    </span>
-                    <span>⚡</span>
-                    <span className="font-bold text-rose-400">
-                      {player2.name} ({player2.age})
-                    </span>
                   </div>
                 </div>
 
                 <button
-                  onClick={downloadStoryCardPNG}
-                  className="w-full py-3 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:brightness-110 text-slate-950 font-extrabold text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 btn-tactile"
+                  onClick={startSoloGame}
+                  className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-rose-500/25 btn-tactile"
                 >
-                  <span>📸 Unduh Kartu Hasil IG Story (PNG)</span>
+                  Mulai Main Lawan Bot AI →
                 </button>
+              </div>
 
-                <div className="grid grid-cols-4 gap-2">
-                  <div className="p-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
-                    <span className="block font-mono font-extrabold text-base text-emerald-400">
-                      {stats.terimaMantap}
-                    </span>
-                    <span className="text-[10px] text-slate-400 leading-tight block">
-                      Terima (+10%)
-                    </span>
+              {/* MODE B: COUPLE */}
+              <div className="bg-[#111827]/95 border-2 border-slate-800 hover:border-emerald-500/50 rounded-3xl p-4 transition">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-sm shadow-lg shrink-0">
+                      💌
+                    </div>
+                    <div className="min-w-0">
+                      <h4 className="font-extrabold text-white text-xs">
+                        Mode Ajak Pasangan
+                      </h4>
+                      <span className="font-mono font-extrabold text-xs text-emerald-400 tracking-wider">
+                        {inviteCode}
+                      </span>
+                    </div>
                   </div>
-                  <div className="p-2 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
-                    <span className="block font-mono font-extrabold text-base text-rose-400">
-                      {stats.menyesal}
-                    </span>
-                    <span className="text-[10px] text-slate-400 leading-tight block">
-                      Nyesel (-12%)
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
-                    <span className="block font-mono font-extrabold text-base text-amber-400">
-                      {stats.kompromiSepakat}
-                    </span>
-                    <span className="text-[10px] text-slate-400 leading-tight block">
-                      Sepakat (+5%)
-                    </span>
-                  </div>
-                  <div className="p-2 rounded-2xl bg-red-500/10 border border-red-500/25 text-center">
-                    <span className="block font-mono font-extrabold text-base text-red-400">
-                      {stats.deadlockOrAfk}
-                    </span>
-                    <span className="text-[10px] text-slate-400 leading-tight block">
-                      Gagal/AFK (-15%)
-                    </span>
-                  </div>
+                  <button
+                    onClick={() =>
+                      copyTextSafe(
+                        inviteCode,
+                        `Kode undangan ${inviteCode} disalin!`
+                      )
+                    }
+                    className="px-3 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold shrink-0 btn-tactile"
+                  >
+                    Salin Kode
+                  </button>
                 </div>
+              </div>
+            </section>
+          )}
 
-                <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-4 sm:p-5">
-                  <div className="flex items-center justify-between mb-2.5">
-                    <h3 className="text-sm font-extrabold text-white">
-                      📋 Rapor Kecocokan Tiap Ronde
-                    </h3>
-                    <button
-                      onClick={() => {
-                        const summary = [
-                          `=== HASIL BESOK KAWIN? ===`,
-                          `Pasangan: ${player1.name} & ${player2.name}`,
-                          `Baterai Cinta Akhir: ${battery}% -> ${endingVerdict.title}`,
-                          `Statistik: Terima Mantap (${stats.terimaMantap}), Menyesal (${stats.menyesal}), Sepakat Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
-                          `Mainkan sekarang untuk uji red flag hubunganmu!`,
-                        ].join("\n");
-                        copyTextSafe(
-                          summary,
-                          "Rapor kecocokan berhasil disalin!"
-                        );
-                      }}
-                      className="text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-4"
+          {/* ==================== SCREEN 4: GAMEPLAY ==================== */}
+          {screen === "game" &&
+            currentCard &&
+            currentResponder &&
+            currentPartner && (
+              <section className="space-y-2.5 py-1">
+                {/* BATERAI CINTA HUD */}
+                <div
+                  key={shakeHud}
+                  className={`bg-[#111827]/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-3 shadow-xl relative overflow-visible ${
+                    shakeHud > 0 ? "animate-shake" : ""
+                  }`}
+                >
+                  {deltaPop && (
+                    <div
+                      key={deltaPop.key}
+                      className="absolute right-6 -top-3 pointer-events-none z-30"
                     >
-                      Salin Rapor
-                    </button>
-                  </div>
-
-                  <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-                    {history.map((item, idx) => (
-                      <div
-                        key={idx}
-                        className="p-2.5 rounded-2xl bg-slate-950/90 border border-slate-800/90 flex items-start justify-between gap-3"
+                      <span
+                        className={`inline-block font-mono font-extrabold text-sm px-2 py-0.5 rounded-xl shadow-lg animate-delta ${
+                          deltaPop.val > 0
+                            ? "bg-emerald-500 text-slate-950"
+                            : "bg-red-500 text-white"
+                        }`}
                       >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <span className="font-mono text-[10px] font-bold text-slate-500">
-                              R{item.round}
-                            </span>
-                            <span className="text-[10px] font-bold text-slate-400">
-                              {item.category}
-                            </span>
-                            {item.isWildcard && (
-                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
-                                WILDCARD
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-slate-200 font-medium line-clamp-2">
-                            {item.problem}
-                          </p>
-                          <p className="text-[11px] font-bold text-slate-400 mt-0.5">
-                            → {item.outcomeLabel}
-                          </p>
-                        </div>
-                        <span
-                          className={`font-mono font-extrabold text-xs px-2 py-1 rounded-lg border shrink-0 ${
-                            item.delta > 0
-                              ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
-                              : "text-red-400 bg-red-500/15 border-red-500/30"
-                          }`}
-                        >
-                          {item.delta > 0 ? `+${item.delta}%` : `${item.delta}%`}
-                        </span>
-                      </div>
-                    ))}
+                        {deltaPop.val > 0
+                          ? `+${deltaPop.val}%`
+                          : `${deltaPop.val}%`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between mb-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm">🔋</span>
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+                        Baterai Cinta
+                      </span>
+                    </div>
+                    <span
+                      className={`font-mono font-extrabold text-base sm:text-xl ${
+                        battery >= 80
+                          ? "text-emerald-400"
+                          : battery >= 45
+                          ? "text-amber-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {battery}%
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <div className="flex-1 h-4 bg-slate-950 rounded-lg border-2 border-slate-700 p-0.5 relative overflow-hidden">
+                      <div
+                        className={`h-full rounded transition-all duration-500 ease-out relative battery-shimmer bg-gradient-to-r ${
+                          battery >= 80
+                            ? "from-emerald-500 to-teal-400"
+                            : battery >= 45
+                            ? "from-amber-500 to-yellow-400"
+                            : "from-red-600 to-rose-500"
+                        }`}
+                        style={{ width: `${battery}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-slate-800/80 text-[11px]">
+                    <span className="font-mono font-bold text-slate-300">
+                      Ronde <span className="text-rose-400">{round}</span>/8 •{" "}
+                      {currentResponder.name}
+                    </span>
+                    <span
+                      className={`font-mono font-bold px-2 py-0.5 rounded ${
+                        timerSeconds <= 10
+                          ? "bg-red-500/20 text-red-400 animate-pulse"
+                          : "bg-slate-950 text-slate-300"
+                      }`}
+                    >
+                      ⏱️ {timerSeconds}s
+                    </span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pb-2">
-                  <button
-                    onClick={() => {
-                      sfxTap();
-                      setTimerActive(false);
-                      goScreen("mode");
-                    }}
-                    className="py-3 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile"
+                {/* STAGE 1: DILEMMA CARD */}
+                {gameStage === "dilemma" && (
+                  <div
+                    key={`dilemma-${round}`}
+                    className={`bg-[#111827]/95 backdrop-blur-xl border-2 ${
+                      currentCard.isWildcard
+                        ? "border-amber-500/50"
+                        : "border-slate-800"
+                    } rounded-3xl p-4 shadow-2xl animate-card-enter`}
                   >
-                    🔄 Ganti Pasangan / Mode
-                  </button>
-                  <button
-                    onClick={fullResetGame}
-                    className="py-3 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
-                  >
-                    ✨ Main Ulang Dari Awal
-                  </button>
-                </div>
+                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                        {currentCard.category}
+                      </span>
+                      {currentCard.isWildcard && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          ⚡ WILDCARD
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="mb-2.5">
+                      <p className="text-xs sm:text-base font-bold text-white leading-snug">
+                        &ldquo;{currentCard.partnerPrompt}&rdquo;
+                      </p>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-slate-900/90 border border-slate-800 mb-3 text-xs">
+                      <span className="text-slate-300 font-semibold">
+                        👉 {currentResponder.name}, siap hidup bareng sifat ini?
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={chooseAcceptCard}
+                        className="py-3 px-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/70 text-center btn-tactile"
+                      >
+                        <span className="block text-xs sm:text-sm font-extrabold text-emerald-400">
+                          💚 TERIMA
+                        </span>
+                        <span className="block text-[9px] text-slate-400 mt-0.5">
+                          Uji Konsekuensi
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={chooseRejectCard}
+                        className="py-3 px-2 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/70 text-center btn-tactile"
+                      >
+                        <span className="block text-xs sm:text-sm font-extrabold text-rose-400">
+                          🛑 TOLAK
+                        </span>
+                        <span className="block text-[9px] text-slate-400 mt-0.5">
+                          Cari Kompromi
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STAGE 2A: CONSEQUENCE CARD */}
+                {gameStage === "consequence" && (
+                  <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-4 shadow-2xl animate-card-flip">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 mb-2">
+                      ⚠️ KONSEKUENSI
+                    </span>
+
+                    <p className="text-xs sm:text-sm font-extrabold text-white leading-snug mb-3">
+                      &ldquo;{currentCard.consequenceQuestion}&rdquo;
+                    </p>
+
+                    <div className="space-y-2">
+                      <button
+                        onClick={() => resolveConsequence(true)}
+                        className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-extrabold text-xs flex items-center justify-between btn-tactile"
+                      >
+                        <span>💪 Tetap Terima</span>
+                        <span className="font-mono bg-black/25 px-1.5 py-0.5 rounded text-emerald-200">
+                          +10%
+                        </span>
+                      </button>
+
+                      <button
+                        onClick={() => resolveConsequence(false)}
+                        className="w-full py-2.5 px-3 rounded-2xl bg-red-500/15 border-2 border-red-500/60 text-red-300 font-extrabold text-xs flex items-center justify-between btn-tactile"
+                      >
+                        <span>😰 Menyesal / Ragu</span>
+                        <span className="font-mono bg-red-500/20 px-1.5 py-0.5 rounded text-red-300">
+                          -12%
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* STAGE 2B: SOLO NEGOTIATION */}
+                {gameStage === "negotiate-solo" && (
+                  <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-4 shadow-2xl animate-card-flip">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40 mb-2">
+                      🤝 JALAN TENGAH
+                    </span>
+
+                    <p className="text-xs font-bold text-slate-300 mb-2">
+                      Pilih 1 opsi kompromi dengan {currentPartner.name}:
+                    </p>
+
+                    <div className="space-y-1.5">
+                      {currentCard.compromises.map((opt, idx) => {
+                        const tier = currentPartner.tier || "mid";
+                        const botPrefIdx = currentCard.botPref[tier] ?? 0;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() =>
+                              resolveSoloNegotiation(idx, botPrefIdx)
+                            }
+                            className="w-full p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-left flex items-start gap-2 transition btn-tactile"
+                          >
+                            <span className="w-5 h-5 rounded bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-[10px] text-amber-400 shrink-0 mt-0.5">
+                              {String.fromCharCode(65 + idx)}
+                            </span>
+                            <span className="text-[11px] sm:text-xs font-semibold text-slate-200 leading-snug">
+                              {opt}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* STAGE 2C & 2D: COUPLE NEGOTIATION */}
+                {gameStage === "negotiate-couple-1" && (
+                  <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-4 shadow-2xl animate-card-flip">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-500/20 text-rose-300 mb-2">
+                      🤝 NEGOSIASI (1/2)
+                    </span>
+                    <p className="text-xs text-slate-300 mb-2">
+                      {currentResponder.name}, pilih kompromi diam-diam:
+                    </p>
+                    <div className="space-y-1.5">
+                      {currentCard.compromises.map((opt, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            sfxTap();
+                            setCoupleP1Choice(idx);
+                            setGameStage("negotiate-couple-2");
+                          }}
+                          className="w-full p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-left flex items-start gap-2 transition btn-tactile"
+                        >
+                          <span className="w-5 h-5 rounded bg-slate-800 flex items-center justify-center font-mono font-bold text-[10px] text-rose-400 shrink-0">
+                            {String.fromCharCode(65 + idx)}
+                          </span>
+                          <span className="text-[11px] text-slate-200">
+                            {opt}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {gameStage === "negotiate-couple-2" && (
+                  <div className="bg-[#111827]/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-3xl p-4 shadow-2xl animate-card-flip">
+                    <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-emerald-500/20 text-emerald-300 mb-2">
+                      📲 GILIRAN {currentPartner.name.toUpperCase()} (2/2)
+                    </span>
+                    <p className="text-xs text-slate-300 mb-2">
+                      {currentPartner.name}, pilih opsi yang sama agar sepakat:
+                    </p>
+                    <div className="space-y-1.5">
+                      {currentCard.compromises.map((opt, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => resolveCoupleNegotiation(idx)}
+                          className="w-full p-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-left flex items-start gap-2 transition btn-tactile"
+                        >
+                          <span className="w-5 h-5 rounded bg-slate-800 flex items-center justify-center font-mono font-bold text-[10px] text-emerald-400 shrink-0">
+                            {String.fromCharCode(65 + idx)}
+                          </span>
+                          <span className="text-[11px] text-slate-200">
+                            {opt}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             )}
-          </div>
 
-          {/* FOOTER */}
-          <footer className="w-full pt-3 pb-1 text-center text-[10px] text-slate-600 shrink-0">
-            BESOK KAWIN? • Dating & Red Flag Card Game
-          </footer>
+          {/* ==================== SCREEN 5: ENDING ==================== */}
+          {screen === "ending" && player1 && player2 && (
+            <section className="animate-card-enter space-y-3 py-2">
+              <div
+                className={`bg-[#111827]/95 border-2 rounded-3xl p-4 sm:p-5 text-center shadow-2xl ${endingVerdict.border}`}
+              >
+                <div
+                  className={`w-12 h-12 mx-auto rounded-2xl border flex items-center justify-center text-2xl mb-2 ${endingVerdict.iconBg}`}
+                >
+                  {endingVerdict.emoji}
+                </div>
+
+                <span
+                  className={`inline-block px-3 py-0.5 rounded-full text-[10px] font-mono font-extrabold uppercase tracking-widest border mb-1 ${endingVerdict.badgeBg}`}
+                >
+                  BATERAI CINTA: {battery}%
+                </span>
+
+                <h1
+                  className={`text-xl sm:text-3xl font-extrabold tracking-tight ${endingVerdict.titleClass}`}
+                >
+                  {endingVerdict.title}
+                </h1>
+
+                <p className="text-xs text-slate-300 mt-1.5 leading-relaxed max-w-sm mx-auto">
+                  {endingVerdict.subtitle}
+                </p>
+              </div>
+
+              <button
+                onClick={downloadStoryCardPNG}
+                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 text-slate-950 font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 btn-tactile"
+              >
+                <span>📸 Unduh Kartu Hasil IG Story (PNG)</span>
+              </button>
+
+              <div className="grid grid-cols-2 sm:grid-cols-2 gap-2 pb-2">
+                <button
+                  onClick={() => {
+                    sfxTap();
+                    setTimerActive(false);
+                    goScreen("mode");
+                  }}
+                  className="py-2.5 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs border border-slate-700 btn-tactile"
+                >
+                  🔄 Ganti Pasangan / Mode
+                </button>
+                <button
+                  onClick={fullResetGame}
+                  className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-500 to-pink-600 hover:brightness-110 text-white font-extrabold text-xs shadow-lg shadow-rose-500/25 btn-tactile"
+                >
+                  ✨ Main Ulang Dari Awal
+                </button>
+              </div>
+            </section>
+          )}
         </div>
+
+        {/* FOOTER */}
+        <footer className="w-full pt-2 pb-1 text-center text-[10px] text-slate-600 shrink-0">
+          BESOK KAWIN? • Dating & Red Flag Card Game
+        </footer>
       </main>
     </div>
   );
