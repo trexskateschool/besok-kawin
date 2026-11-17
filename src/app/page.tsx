@@ -38,14 +38,13 @@ interface DeckCard extends QuestionItem {
   responderKey: "player1" | "player2";
 }
 
-interface RoundDecision {
-  playerName: string;
-  category: string;
-  isWildcard: boolean;
-  problem: string;
-  outcomeLabel: string;
-  delta: number;
-  statType: "terimaMantap" | "menyesal" | "kompromiSepakat" | "deadlockOrAfk";
+interface CardRoundState {
+  status: "dilemma" | "negotiating" | "resolved";
+  responderChoice?: number;
+  ownerChoice?: number;
+  delta?: number;
+  outcomeLabel?: string;
+  statType?: "terimaMantap" | "menyesal" | "kompromiSepakat" | "deadlockOrAfk";
 }
 
 interface HistoryItem {
@@ -393,13 +392,16 @@ export default function BesokKawinGame() {
   };
 
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const showToast = (message: string, type: ToastItem["type"] = "info") => {
-    const id = Date.now() + Math.random();
-    setToasts((prev) => [...prev, { id, message, type }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
-  };
+  const showToast = useCallback(
+    (message: string, type: ToastItem["type"] = "info") => {
+      const id = Date.now() + Math.random();
+      setToasts((prev) => [...prev, { id, message, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 3200);
+    },
+    []
+  );
 
   const toggleRomanticBgm = () => {
     const next = !bgmEnabled;
@@ -489,13 +491,16 @@ export default function BesokKawinGame() {
   const [round, setRound] = useState(1);
   const maxRounds = 8;
 
-  // Solo deck & Multiplayer separate decks
+  // Solo deck & Multiplayer separate decks + dual card states
   const [soloDeck, setSoloDeck] = useState<DeckCard[]>([]);
   const [p1OnlineDeck, setP1OnlineDeck] = useState<DeckCard[]>([]);
   const [p2OnlineDeck, setP2OnlineDeck] = useState<DeckCard[]>([]);
-  const [roomDecisions, setRoomDecisions] = useState<
-    Record<string, RoundDecision>
-  >({});
+  const [c1State, setC1State] = useState<CardRoundState>({
+    status: "dilemma",
+  });
+  const [c2State, setC2State] = useState<CardRoundState>({
+    status: "dilemma",
+  });
   const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
 
   const [gameStage, setGameStage] = useState<
@@ -514,6 +519,7 @@ export default function BesokKawinGame() {
   const [endingReason, setEndingReason] = useState("");
 
   const prevBatteryRef = useRef(50);
+  const lastSummaryIdRef = useRef<number>(0);
 
   const applyBatteryDelta = (delta: number) => {
     setBattery((prev) => Math.max(0, Math.min(100, prev + delta)));
@@ -532,10 +538,28 @@ export default function BesokKawinGame() {
     }
   }, [round, screen, mode]);
 
+  // Derived online card states for current user
+  const myResponderCardState = myRole === "player1" ? c1State : c2State;
+  const myOwnedCardState = myRole === "player1" ? c2State : c1State;
+
+  const needsResponderAction =
+    mode === "couple" && myResponderCardState.status === "dilemma";
+  const needsOwnerCompromiseAction =
+    mode === "couple" &&
+    !needsResponderAction &&
+    myOwnedCardState.status === "negotiating" &&
+    myOwnedCardState.ownerChoice === undefined;
+
   // Turn Timer Effect
   useEffect(() => {
     if (screen !== "game" || !timerActive) return;
-    if (mode === "couple" && roomDecisions[`r${round}_${myRole}`]) return;
+    if (
+      mode === "couple" &&
+      !needsResponderAction &&
+      !needsOwnerCompromiseAction
+    ) {
+      return;
+    }
 
     const interval = setInterval(() => {
       setTimerSeconds((prev) => {
@@ -550,7 +574,14 @@ export default function BesokKawinGame() {
     }, 1000);
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [screen, timerActive, round, mode, myRole, roomDecisions]);
+  }, [
+    screen,
+    timerActive,
+    round,
+    mode,
+    needsResponderAction,
+    needsOwnerCompromiseAction,
+  ]);
 
   // REAL-TIME LISTENER FIRESTORE (Sinkronisasi 2 HP secara langsung)
   useEffect(() => {
@@ -566,10 +597,22 @@ export default function BesokKawinGame() {
       if (data.player2) setPlayer2(data.player2);
       if (data.p1Deck) setP1OnlineDeck(data.p1Deck);
       if (data.p2Deck) setP2OnlineDeck(data.p2Deck);
-      if (data.decisions) setRoomDecisions(data.decisions);
+      if (data.c1) setC1State(data.c1);
+      if (data.c2) setC2State(data.c2);
       if (data.history) setHistory(data.history);
       if (data.stats) setStats(data.stats);
       if (data.endingReason) setEndingReason(data.endingReason);
+
+      if (
+        data.lastRoundSummary &&
+        data.lastRoundSummary.id !== lastSummaryIdRef.current
+      ) {
+        lastSummaryIdRef.current = data.lastRoundSummary.id;
+        showToast(
+          data.lastRoundSummary.text,
+          data.lastRoundSummary.delta >= 0 ? "success" : "warning"
+        );
+      }
 
       if (typeof data.battery === "number") {
         const diff = data.battery - prevBatteryRef.current;
@@ -616,7 +659,7 @@ export default function BesokKawinGame() {
     });
 
     return () => unsubscribe();
-  }, [inviteCode, mode, screen, myRole, goScreen]);
+  }, [inviteCode, mode, screen, myRole, goScreen, showToast]);
 
   // Registration Handler
   const handleRegistration = async (e: React.FormEvent) => {
@@ -719,7 +762,7 @@ export default function BesokKawinGame() {
         setIsCheckingRoom(false);
         goScreen("quiz");
         return;
-            } catch (err: unknown) {
+      } catch (err: unknown) {
         const detail = err instanceof Error ? err.message : String(err);
         sfxPenalty();
         setRegError({
@@ -730,7 +773,6 @@ export default function BesokKawinGame() {
         setIsCheckingRoom(false);
         return;
       }
-
     }
 
     // Pemain 1 (Pembuat Room Baru)
@@ -777,11 +819,10 @@ export default function BesokKawinGame() {
   };
 
   const finishQuizPhase = async (completedProfile: PlayerProfile) => {
-    // Jika Pemain 2 selesai kuis -> Simpan ke Firestore & mulai permainan serentak!
+    // Pemain 2 selesai kuis -> Simpan ke Firestore & mulai permainan serentak!
     if (myRole === "player2" && player1 && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
-        // P1 menjawab kartu dari P2; P2 menjawab kartu dari P1
         const p1Deck = buildDeckFromPartnerProfile(
           completedProfile,
           "player1",
@@ -804,7 +845,8 @@ export default function BesokKawinGame() {
             status: "playing",
             round: 1,
             battery: 50,
-            decisions: {},
+            c1: { status: "dilemma" },
+            c2: { status: "dilemma" },
             history: [],
             stats: {
               terimaMantap: 0,
@@ -816,7 +858,6 @@ export default function BesokKawinGame() {
           });
         });
         setIsSavingRoom(false);
-        // Listener onSnapshot akan otomatis mengarahkan ke screen "game"
       } catch (err) {
         console.error(err);
         setIsSavingRoom(false);
@@ -828,7 +869,7 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Jika Pemain 1 selesai kuis -> Simpan room online berstatus "waiting" agar kode langsung valid dipakai pasangan
+    // Pemain 1 selesai kuis -> Buat room online berstatus "waiting"
     if (myRole === "player1" && inviteCode && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -840,7 +881,8 @@ export default function BesokKawinGame() {
           status: "waiting",
           round: 1,
           battery: 50,
-          decisions: {},
+          c1: { status: "dilemma" },
+          c2: { status: "dilemma" },
           history: [],
           stats: {
             terimaMantap: 0,
@@ -918,118 +960,241 @@ export default function BesokKawinGame() {
     goScreen("game");
   };
 
-  // Submit Decision for Online Multiplayer (Simultaneous Round Resolution)
-  const submitOnlineRoundDecision = async (decision: RoundDecision) => {
+  // Helper: Check if both c1 & c2 are resolved in transaction and advance round
+  const finalizeRoundIfBothResolved = (
+    data: Record<string, unknown>,
+    c1: CardRoundState,
+    c2: CardRoundState
+  ) => {
+    const p1Deck: DeckCard[] = (data.p1Deck as DeckCard[]) || [];
+    const p2Deck: DeckCard[] = (data.p2Deck as DeckCard[]) || [];
+    const curRound = (data.round as number) || 1;
+    const card1 = p1Deck[curRound - 1];
+    const card2 = p2Deck[curRound - 1];
+
+    const roundDelta = (c1.delta ?? 0) + (c2.delta ?? 0);
+    const nextBattery = Math.max(
+      0,
+      Math.min(100, ((data.battery as number) ?? 50) + roundDelta)
+    );
+
+    const prevHistory: HistoryItem[] = (data.history as HistoryItem[]) || [];
+    const newItems: HistoryItem[] = [
+      {
+        round: curRound,
+        category: card1?.category || "Masalah",
+        isWildcard: Boolean(card1?.isWildcard),
+        problem: card1?.partnerPrompt || "",
+        outcomeLabel: c1.outcomeLabel || "",
+        delta: c1.delta ?? 0,
+        type:
+          (c1.delta ?? 0) > 5
+            ? "good"
+            : (c1.delta ?? 0) > 0
+            ? "neutral"
+            : "bad",
+      },
+      {
+        round: curRound,
+        category: card2?.category || "Masalah",
+        isWildcard: Boolean(card2?.isWildcard),
+        problem: card2?.partnerPrompt || "",
+        outcomeLabel: c2.outcomeLabel || "",
+        delta: c2.delta ?? 0,
+        type:
+          (c2.delta ?? 0) > 5
+            ? "good"
+            : (c2.delta ?? 0) > 0
+            ? "neutral"
+            : "bad",
+      },
+    ];
+
+    const prevStats = (data.stats as typeof stats) || {
+      terimaMantap: 0,
+      menyesal: 0,
+      kompromiSepakat: 0,
+      deadlockOrAfk: 0,
+    };
+    const updatedStats = { ...prevStats };
+    if (c1.statType)
+      updatedStats[c1.statType] = (updatedStats[c1.statType] || 0) + 1;
+    if (c2.statType)
+      updatedStats[c2.statType] = (updatedStats[c2.statType] || 0) + 1;
+
+    const isGameOver = nextBattery <= 0 || curRound >= maxRounds;
+    const nextReason =
+      nextBattery <= 0
+        ? "Baterai Cinta habis menyentuh 0% sebelum ronde selesai!"
+        : "";
+
+    const summaryText = `Ronde ${curRound} selesai (${
+      roundDelta >= 0 ? `+${roundDelta}%` : `${roundDelta}%`
+    }) • ${c1.outcomeLabel} & ${c2.outcomeLabel}`;
+
+    return {
+      battery: nextBattery,
+      history: [...prevHistory, ...newItems],
+      stats: updatedStats,
+      round: isGameOver ? curRound : curRound + 1,
+      status: isGameOver ? "finished" : "playing",
+      endingReason: nextReason,
+      c1: isGameOver ? c1 : { status: "dilemma" },
+      c2: isGameOver ? c2 : { status: "dilemma" },
+      lastRoundSummary: {
+        id: Date.now() + Math.random(),
+        text: summaryText,
+        delta: roundDelta,
+      },
+      updatedAt: Date.now(),
+    };
+  };
+
+  // Online Action 1: Responder resolves card (Accept + Consequence OR Timeout)
+  const submitOnlineResponderDirect = async (
+    delta: number,
+    outcomeLabel: string,
+    statType: CardRoundState["statType"]
+  ) => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     setIsSubmittingDecision(true);
     setTimerActive(false);
 
     try {
       const roomRef = doc(db, "rooms", inviteCode);
-      const myKey = `r${round}_${myRole}`;
-      const partnerRole = myRole === "player1" ? "player2" : "player1";
-      const partnerKey = `r${round}_${partnerRole}`;
-
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(roomRef);
         if (!snap.exists()) return;
         const data = snap.data();
-
-        // Cegah submit ganda di ronde yang sama
         if (data.status === "finished") return;
 
-        const currentDecisions: Record<string, RoundDecision> = {
-          ...(data.decisions || {}),
-          [myKey]: decision,
+        const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
+        const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
+
+        const resolvedCard: CardRoundState = {
+          status: "resolved",
+          delta,
+          outcomeLabel,
+          statType,
         };
 
-        const partnerDecision = currentDecisions[partnerKey];
+        if (myRole === "player1") Object.assign(c1, resolvedCard);
+        else Object.assign(c2, resolvedCard);
 
-        // Jika pasangan BELUM selesai menjawab ronde ini -> simpan pilihan kita & tunggu pasangan
-        if (!partnerDecision) {
+        if (c1.status === "resolved" && c2.status === "resolved") {
+          tx.update(roomRef, finalizeRoundIfBothResolved(data, c1, c2));
+        } else {
           tx.update(roomRef, {
-            decisions: currentDecisions,
+            c1,
+            c2,
             updatedAt: Date.now(),
           });
-          return;
         }
+      });
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal mengirim jawaban. Periksa koneksi.", "error");
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
 
-        // Jika KEDUA pemain sudah selesai menjawab ronde ini -> hitung skor gabungan & lanjut ronde berikutnya serentak!
-        const p1Dec =
-          myRole === "player1" ? decision : partnerDecision;
-        const p2Dec =
-          myRole === "player2" ? decision : partnerDecision;
+  // Online Action 2: Responder rejects card & picks their compromise choice (0, 1, 2)
+  const submitOnlineResponderRejectChoice = async (chosenIdx: number) => {
+    if (!inviteCode || !isFirebaseReady || !db) return;
+    setIsSubmittingDecision(true);
+    setTimerActive(false);
 
-        const combinedDelta = p1Dec.delta + p2Dec.delta;
-        const nextBattery = Math.max(
-          0,
-          Math.min(100, (data.battery ?? 50) + combinedDelta)
-        );
+    try {
+      const roomRef = doc(db, "rooms", inviteCode);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.status === "finished") return;
 
-        const prevHistory: HistoryItem[] = data.history || [];
-        const newHistoryItems: HistoryItem[] = [
-          {
-            round,
-            category: p1Dec.category,
-            isWildcard: p1Dec.isWildcard,
-            problem: p1Dec.problem,
-            outcomeLabel: `${p1Dec.playerName}: ${p1Dec.outcomeLabel}`,
-            delta: p1Dec.delta,
-            type:
-              p1Dec.delta > 5
-                ? "good"
-                : p1Dec.delta > 0
-                ? "neutral"
-                : "bad",
-          },
-          {
-            round,
-            category: p2Dec.category,
-            isWildcard: p2Dec.isWildcard,
-            problem: p2Dec.problem,
-            outcomeLabel: `${p2Dec.playerName}: ${p2Dec.outcomeLabel}`,
-            delta: p2Dec.delta,
-            type:
-              p2Dec.delta > 5
-                ? "good"
-                : p2Dec.delta > 0
-                ? "neutral"
-                : "bad",
-          },
-        ];
+        const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
+        const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
 
-        const prevStats = data.stats || {
-          terimaMantap: 0,
-          menyesal: 0,
-          kompromiSepakat: 0,
-          deadlockOrAfk: 0,
-        };
-        const updatedStats = {
-          ...prevStats,
-          [p1Dec.statType]: (prevStats[p1Dec.statType] || 0) + 1,
-          [p2Dec.statType]: (prevStats[p2Dec.statType] || 0) + 1,
-        };
-
-        const isGameOver = nextBattery <= 0 || round >= maxRounds;
-        const nextReason =
-          nextBattery <= 0
-            ? "Baterai Cinta habis menyentuh 0% sebelum ronde selesai!"
-            : "";
+        const targetCard = myRole === "player1" ? c1 : c2;
+        targetCard.status = "negotiating";
+        targetCard.responderChoice = chosenIdx;
 
         tx.update(roomRef, {
-          decisions: currentDecisions,
-          battery: nextBattery,
-          history: [...prevHistory, ...newHistoryItems],
-          stats: updatedStats,
-          round: isGameOver ? round : round + 1,
-          status: isGameOver ? "finished" : "playing",
-          endingReason: nextReason,
+          c1,
+          c2,
           updatedAt: Date.now(),
         });
       });
+      showToast(
+        `Opsi ${String.fromCharCode(
+          65 + chosenIdx
+        )} terkunci! Menunggu pasangan memilih kompromi yang sama...`,
+        "info"
+      );
     } catch (err) {
-      console.error("Gagal mengirim jawaban ronde:", err);
-      showToast("Koneksi terganggu saat mengirim jawaban.", "error");
+      console.error(err);
+      showToast("Gagal mengirim pilihan kompromi.", "error");
+    } finally {
+      setIsSubmittingDecision(false);
+    }
+  };
+
+  // Online Action 3: Owner of rejected card picks their compromise choice (0, 1, 2) -> Resolves Match or Deadlock!
+  const submitOnlineOwnerCompromiseChoice = async (ownerIdx: number) => {
+    if (!inviteCode || !isFirebaseReady || !db || !player1 || !player2) return;
+    setIsSubmittingDecision(true);
+    setTimerActive(false);
+
+    try {
+      const roomRef = doc(db, "rooms", inviteCode);
+      await runTransaction(db, async (tx) => {
+        const snap = await tx.get(roomRef);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        if (data.status === "finished") return;
+
+        const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
+        const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
+
+        // My owned card is c2 if I am player1, or c1 if I am player2
+        const ownedCard = myRole === "player1" ? c2 : c1;
+        const responderIdx = ownedCard.responderChoice ?? 0;
+        const isTimeout = ownerIdx === -1;
+        const isMatch = !isTimeout && responderIdx === ownerIdx;
+
+        const responderName =
+          myRole === "player1" ? player2.name : player1.name;
+        const ownerName = myRole === "player1" ? player1.name : player2.name;
+
+        ownedCard.ownerChoice = ownerIdx;
+        ownedCard.status = "resolved";
+        ownedCard.delta = isMatch ? 8 : -10;
+        ownedCard.statType = isMatch ? "kompromiSepakat" : "deadlockOrAfk";
+        ownedCard.outcomeLabel = isMatch
+          ? `💘 Kompromi Match! (Opsi ${String.fromCharCode(65 + ownerIdx)})`
+          : isTimeout
+          ? `⏱️ Timeout Kompromi (${ownerName})`
+          : `💥 Deadlock Kompromi (${responderName}: ${String.fromCharCode(
+              65 + responderIdx
+            )} vs ${ownerName}: ${String.fromCharCode(65 + ownerIdx)})`;
+
+        if (isMatch) sfxCharge();
+        else sfxPenalty();
+
+        if (c1.status === "resolved" && c2.status === "resolved") {
+          tx.update(roomRef, finalizeRoundIfBothResolved(data, c1, c2));
+        } else {
+          tx.update(roomRef, {
+            c1,
+            c2,
+            updatedAt: Date.now(),
+          });
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal mengirim pilihan kompromi.", "error");
     } finally {
       setIsSubmittingDecision(false);
     }
@@ -1060,21 +1225,22 @@ export default function BesokKawinGame() {
     setTimerActive(true);
   };
 
-  // Active Card for Current User
+  // Active Cards for Current User
   const myActiveDeck =
     mode === "solo"
       ? soloDeck
       : myRole === "player1"
       ? p1OnlineDeck
       : p2OnlineDeck;
+  const myOwnedDeck = myRole === "player1" ? p2OnlineDeck : p1OnlineDeck;
+
   const currentCard = myActiveDeck[round - 1];
+  const myOwnedCard = myOwnedDeck[round - 1];
+
   const meProfile =
     mode === "solo" ? player1 : myRole === "player1" ? player1 : player2;
   const partnerProfile =
     mode === "solo" ? player2 : myRole === "player1" ? player2 : player1;
-
-  const hasSubmittedCurrentRound =
-    mode === "couple" && Boolean(roomDecisions[`r${round}_${myRole}`]);
 
   // Timeout Handler
   const handleTimeoutPenalty = async () => {
@@ -1082,16 +1248,17 @@ export default function BesokKawinGame() {
     if (!currentCard || !meProfile) return;
 
     if (mode === "couple") {
-      showToast("⏱️ Waktu habis! Dihitung telat merespons (-10%).", "error");
-      await submitOnlineRoundDecision({
-        playerName: meProfile.name,
-        category: currentCard.category,
-        isWildcard: currentCard.isWildcard,
-        problem: currentCard.partnerPrompt,
-        outcomeLabel: "Timeout / Telat Jawab",
-        delta: -10,
-        statType: "deadlockOrAfk",
-      });
+      if (needsResponderAction) {
+        showToast("⏱️ Waktu habis! Dihitung telat merespons (-10%).", "error");
+        await submitOnlineResponderDirect(
+          -10,
+          `${meProfile.name}: Timeout / Telat Jawab`,
+          "deadlockOrAfk"
+        );
+      } else if (needsOwnerCompromiseAction) {
+        showToast("⏱️ Waktu habis memilih kompromi (-10%).", "error");
+        await submitOnlineOwnerCompromiseChoice(-1);
+      }
       return;
     }
 
@@ -1147,28 +1314,20 @@ export default function BesokKawinGame() {
     if (mode === "couple") {
       if (isFirm) {
         sfxCharge();
-        showToast("Komitmen terkunci (+8%)! Menunggu pasangan...", "success");
-        await submitOnlineRoundDecision({
-          playerName: meProfile.name,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: "Terima Konsekuensi Mantap",
-          delta: 8,
-          statType: "terimaMantap",
-        });
+        showToast("Komitmen terkunci (+8%)!", "success");
+        await submitOnlineResponderDirect(
+          8,
+          `${meProfile.name}: Terima Konsekuensi Mantap`,
+          "terimaMantap"
+        );
       } else {
         sfxPenalty();
-        showToast("Menyesal pilih terima (-10%)! Menunggu pasangan...", "error");
-        await submitOnlineRoundDecision({
-          playerName: meProfile.name,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: "Menyesal Pilih Terima",
-          delta: -10,
-          statType: "menyesal",
-        });
+        showToast("Menyesal pilih terima (-10%)!", "error");
+        await submitOnlineResponderDirect(
+          -10,
+          `${meProfile.name}: Menyesal Pilih Terima`,
+          "menyesal"
+        );
       }
       return;
     }
@@ -1216,58 +1375,13 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Stage 2B: Compromise Resolution
+  // Stage 2B: Compromise Resolution (Responder side)
   const resolveNegotiation = async (chosenIdx: number) => {
     if (!currentCard || !meProfile || !partnerProfile) return;
 
     if (mode === "couple") {
-      // Evaluasi solusi kompromi berdasarkan kecocokan usia pasangan
-      const partnerTier =
-        partnerProfile.age <= 23
-          ? "young"
-          : partnerProfile.age <= 33
-          ? "mid"
-          : "mature";
-      const idealIdx = currentCard.botPref[partnerTier] ?? 0;
-      const isGoodCompromise = chosenIdx === idealIdx;
-
-      if (isGoodCompromise) {
-        sfxCharge();
-        showToast(
-          `Kompromi Opsi ${String.fromCharCode(
-            65 + chosenIdx
-          )} pas banget (+5%)! Menunggu pasangan...`,
-          "success"
-        );
-        await submitOnlineRoundDecision({
-          playerName: meProfile.name,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `Tolak → Kompromi Sehat (Opsi ${String.fromCharCode(
-            65 + chosenIdx
-          )})`,
-          delta: 5,
-          statType: "kompromiSepakat",
-        });
-      } else {
-        sfxPenalty();
-        showToast(
-          `Kompromi kurang cocok dengan karakter ${partnerProfile.name} (-8%)!`,
-          "warning"
-        );
-        await submitOnlineRoundDecision({
-          playerName: meProfile.name,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `Tolak → Kompromi Kaku (Opsi ${String.fromCharCode(
-            65 + chosenIdx
-          )})`,
-          delta: -8,
-          statType: "deadlockOrAfk",
-        });
-      }
+      sfxFlip();
+      await submitOnlineResponderRejectChoice(chosenIdx);
       return;
     }
 
@@ -1529,7 +1643,8 @@ export default function BesokKawinGame() {
     setMode("solo");
     setPlayer1(null);
     setPlayer2(null);
-    setRoomDecisions({});
+    setC1State({ status: "dilemma" });
+    setC2State({ status: "dilemma" });
     setHistory([]);
     setRegName("");
     setRegEmail("");
@@ -1556,7 +1671,6 @@ export default function BesokKawinGame() {
     player1?.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
   const botPreview = getBotPersonaConfig(botOppositeGender, botAgeSlider);
 
-  // Mirror confession from current user's own quiz
   const myConfessions =
     meProfile?.questions.filter(
       (q) =>
@@ -1923,7 +2037,6 @@ export default function BesokKawinGame() {
           {/* ==================== SCREEN 3: LOBBY / MODE ==================== */}
           {screen === "mode" && player1 && (
             <section className="animate-card-enter space-y-3 py-2">
-              {/* KARTU UNDANGAN & LOBBY REAL-TIME */}
               <div className="bg-[#111827]/95 border-2 border-emerald-500/40 rounded-3xl p-4 shadow-xl text-center">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 mb-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -1956,9 +2069,8 @@ export default function BesokKawinGame() {
                 </button>
               </div>
 
-              {/* RINGKASAN PROFIL P1 */}
               <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-3.5">
-                <div className="flex items-center justify-between text-xs mb-2">
+                <div className="flex items-center justify-between text-xs">
                   <span className="font-bold text-slate-300">
                     Profil Borok {player1.name}:
                   </span>
@@ -1969,7 +2081,6 @@ export default function BesokKawinGame() {
                 </div>
               </div>
 
-              {/* ALTERNATIF SOLO BOT */}
               <div className="bg-[#111827]/95 border border-slate-800 rounded-3xl p-4">
                 <h4 className="font-extrabold text-white text-xs sm:text-sm mb-1.5">
                   Atau Latihan Sendiri Lawan Bot AI ({botPreview.name},{" "}
@@ -1995,7 +2106,7 @@ export default function BesokKawinGame() {
             </section>
           )}
 
-          {/* ==================== SCREEN 4: GAMEPLAY (SIMULTANEOUS) ==================== */}
+          {/* ==================== SCREEN 4: GAMEPLAY ==================== */}
           {screen === "game" &&
             currentCard &&
             meProfile &&
@@ -2058,7 +2169,8 @@ export default function BesokKawinGame() {
                   <div className="flex justify-between mt-2 text-[11px] text-slate-400">
                     <span>
                       Ronde <strong className="text-rose-400">{round}</strong>/8
-                      • HP Kamu: <strong className="text-white">{meProfile.name}</strong>
+                      • HP Kamu:{" "}
+                      <strong className="text-white">{meProfile.name}</strong>
                     </span>
                     <span
                       className={`font-mono font-bold ${
@@ -2070,28 +2182,9 @@ export default function BesokKawinGame() {
                   </div>
                 </div>
 
-                {/* JIKA SUDAH JAWAB RONDE INI & SEDANG MENUNGGU PASANGAN */}
-                {hasSubmittedCurrentRound ? (
-                  <div className="bg-[#111827]/95 border-2 border-emerald-500/40 rounded-3xl p-6 text-center shadow-2xl animate-card-enter">
-                    <div className="text-3xl mb-2 animate-bounce">⏳</div>
-                    <h3 className="text-base font-extrabold text-white">
-                      Jawabanmu Terkunci!
-                    </h3>
-                    <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-                      Menunggu{" "}
-                      <strong className="text-emerald-400">
-                        {partnerProfile.name}
-                      </strong>{" "}
-                      menyelesaikan kartu masalah dari kamu di Ronde {round}...
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-3">
-                      Layar akan otomatis lanjut ke Ronde {round + 1} begitu
-                      kalian berdua selesai.
-                    </p>
-                  </div>
-                ) : (
+                {/* PRIORITY 1: JAWAB KARTU MASALAH MILIK PASANGAN */}
+                {(mode === "solo" || needsResponderAction) && (
                   <>
-                    {/* STAGE 1: DILEMMA CARD DARI PASANGAN */}
                     {gameStage === "dilemma" && (
                       <div className="bg-[#111827]/95 border-2 border-slate-800 rounded-3xl p-4 shadow-2xl animate-card-enter">
                         <div className="flex items-center justify-between gap-2 mb-2">
@@ -2131,14 +2224,13 @@ export default function BesokKawinGame() {
                               🛑 TOLAK
                             </span>
                             <span className="block text-[9px] text-slate-400 mt-0.5">
-                              Cari Kompromi
+                              Ajak Kompromi
                             </span>
                           </button>
                         </div>
                       </div>
                     )}
 
-                    {/* STAGE 2A: CONSEQUENCE */}
                     {gameStage === "consequence" && (
                       <div className="bg-[#111827]/95 border-2 border-amber-500/60 rounded-3xl p-4 shadow-2xl animate-card-flip">
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40 mb-2">
@@ -2174,15 +2266,19 @@ export default function BesokKawinGame() {
                       </div>
                     )}
 
-                    {/* STAGE 2B: NEGOTIATE COMPROMISE */}
                     {gameStage === "negotiate" && (
                       <div className="bg-[#111827]/95 border-2 border-rose-500/50 rounded-3xl p-4 shadow-2xl animate-card-flip">
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-500/20 text-rose-300 mb-2">
-                          🤝 SOLUSI KOMPROMI
+                          🤝 PILIH JALAN TENGAH (1/2)
                         </span>
                         <p className="text-xs font-bold text-slate-300 mb-2">
-                          Pilih solusi kompromi terbaik untuk sifat{" "}
-                          {partnerProfile.name}:
+                          Kamu menolak sifat {partnerProfile.name}. Pilih opsi
+                          kompromimu — kalau {partnerProfile.name} memilih opsi
+                          yang sama, kalian{" "}
+                          <strong className="text-emerald-400">
+                            MATCH (+8%)
+                          </strong>
+                          !
                         </p>
                         <div className="space-y-1.5">
                           {currentCard.compromises.map((opt, idx) => (
@@ -2203,6 +2299,92 @@ export default function BesokKawinGame() {
                     )}
                   </>
                 )}
+
+                {/* PRIORITY 2: PASANGAN MENOLAK MASALAHMU -> GILIRAN KAMU PILIH KOMPROMI YANG SAMA */}
+                {mode === "couple" &&
+                  needsOwnerCompromiseAction &&
+                  myOwnedCard && (
+                    <div className="bg-[#111827]/95 border-2 border-amber-500/70 rounded-3xl p-4 shadow-2xl animate-card-flip">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          🚨 {partnerProfile.name.toUpperCase()} MENOLAK
+                          MASALAHMU!
+                        </span>
+                        <span className="text-[10px] font-bold text-emerald-400">
+                          Uji Match Kompromi
+                        </span>
+                      </div>
+
+                      <p className="text-xs font-bold text-white leading-snug mb-1.5">
+                        Pengakuanmu: &ldquo;{myOwnedCard.statement}&rdquo;
+                      </p>
+                      <p className="text-[11px] text-slate-300 mb-3">
+                        <strong className="text-amber-300">
+                          {partnerProfile.name}
+                        </strong>{" "}
+                        sudah memilih jalan tengahnya. Pilih solusi kompromi yang
+                        sama supaya{" "}
+                        <strong className="text-emerald-400">
+                          MATCH (+8%)
+                        </strong>
+                        :
+                      </p>
+
+                      <div className="space-y-1.5">
+                        {myOwnedCard.compromises.map((opt, idx) => (
+                          <button
+                            key={idx}
+                            disabled={isSubmittingDecision}
+                            onClick={() =>
+                              submitOnlineOwnerCompromiseChoice(idx)
+                            }
+                            className="w-full p-2.5 rounded-xl bg-slate-900 hover:bg-amber-500/10 border border-slate-700 hover:border-amber-500/60 text-left flex items-start gap-2 text-[11px] sm:text-xs text-slate-200 btn-tactile disabled:opacity-50"
+                          >
+                            <span className="font-mono font-bold text-amber-400">
+                              {String.fromCharCode(65 + idx)}.
+                            </span>
+                            <span>{opt}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                {/* PRIORITY 3: MENUNGGU PASANGAN SELESAI DI RONDE INI */}
+                {mode === "couple" &&
+                  !needsResponderAction &&
+                  !needsOwnerCompromiseAction && (
+                    <div className="bg-[#111827]/95 border-2 border-emerald-500/40 rounded-3xl p-6 text-center shadow-2xl animate-card-enter">
+                      <div className="text-3xl mb-2 animate-bounce">⏳</div>
+                      <h3 className="text-base font-extrabold text-white">
+                        Pilihanmu Sudah Terkunci!
+                      </h3>
+                      <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
+                        {myResponderCardState.status === "negotiating" &&
+                        myResponderCardState.ownerChoice === undefined ? (
+                          <>
+                            Menunggu{" "}
+                            <strong className="text-amber-400">
+                              {partnerProfile.name}
+                            </strong>{" "}
+                            memilih jalan tengah untuk masalahnya yang baru saja
+                            kamu tolak...
+                          </>
+                        ) : (
+                          <>
+                            Menunggu{" "}
+                            <strong className="text-emerald-400">
+                              {partnerProfile.name}
+                            </strong>{" "}
+                            menyelesaikan kartunya di Ronde {round}...
+                          </>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-500 mt-3">
+                        Layar akan otomatis lanjut begitu kalian berdua selesai.
+                      </p>
+                    </div>
+                  )}
               </section>
             )}
 
