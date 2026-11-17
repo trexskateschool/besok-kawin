@@ -1,0 +1,2762 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>BESOK KAWIN? — Dating & Red Flag Card Game</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            obsidian: '#090d16',
+            cardbg: '#111827',
+            cardborder: '#1f2937',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Game Styling & Smooth Keyframe Animations */
+    body {
+      background-color: #090d16;
+      color: #f8fafc;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow-x: hidden;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    /* Ambient subtle grid background */
+    .bg-grid-pattern {
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(244, 63, 94, 0.12), transparent 35%),
+        radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.08), transparent 40%),
+        linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 28px 28px, 28px 28px;
+    }
+
+    /* Card Transitions */
+    @keyframes cardEnter {
+      0% {
+        opacity: 0;
+        transform: translateY(18px) scale(0.96);
+      }
+      100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes cardFlipIn {
+      0% {
+        opacity: 0;
+        transform: rotateY(-14deg) scale(0.95);
+      }
+      100% {
+        opacity: 1;
+        transform: rotateY(0deg) scale(1);
+      }
+    }
+
+    @keyframes pulseShake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    @keyframes floatUpFade {
+      0% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-28px) scale(1.15);
+      }
+    }
+
+    .animate-card-enter {
+      animation: cardEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .animate-card-flip {
+      animation: cardFlipIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .animate-shake {
+      animation: pulseShake 0.4s ease-in-out;
+    }
+
+    .animate-delta {
+      animation: floatUpFade 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    /* Battery Liquid Shimmer */
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+
+    .battery-shimmer::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+      animation: shimmer 2.2s infinite;
+    }
+
+    /* Custom Range Slider */
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 8px;
+      border-radius: 999px;
+      background: #1f2937;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      margin-top: -6px;
+      background-color: #f43f5e;
+      height: 20px;
+      width: 20px;
+      border-radius: 50%;
+      border: 3px solid #fff;
+      box-shadow: 0 0 12px rgba(244, 63, 94, 0.6);
+    }
+
+    /* Tactile Game Button Press */
+    .btn-tactile {
+      transition: transform 0.12s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+    }
+    .btn-tactile:active {
+      transform: scale(0.97);
+    }
+
+    /* Custom Scrollbar for Rapor */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 999px;
+    }
+  </style>
+</head>
+<body class="bg-grid-pattern min-h-screen flex flex-col justify-between selection:bg-rose-500 selection:text-white">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="w-full border-b border-slate-800/80 bg-obsidian/80 backdrop-blur-md sticky top-0 z-40">
+    <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
+          <!-- Heart + Warning Bolt SVG Icon -->
+          <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.3">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-extrabold tracking-tight text-base sm:text-lg text-white">BESOK KAWIN?</span>
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">18+</span>
+          </div>
+          <p class="text-[11px] text-slate-400 leading-none">Dating & Red Flag Card Game</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Sound FX Toggle -->
+        <button id="soundToggleBtn" onclick="toggleSound()" title="Suara Efek" class="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/70 transition">
+          <svg id="soundOnIcon" class="w-4 h-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+          </svg>
+          <svg id="soundOffIcon" class="w-4 h-4 text-slate-500 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+          </svg>
+        </button>
+
+        <!-- Quick Reset Button (shown after login) -->
+        <button id="headerResetBtn" onclick="confirmResetApp()" class="hidden text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/70 transition">
+          Keluar
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- TOAST NOTIFICATION CONTAINER -->
+  <div id="toastContainer" class="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- MAIN APP CONTAINER -->
+  <main class="flex-1 w-full max-w-xl mx-auto px-4 py-6 flex flex-col justify-center">
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 1: REGISTRASI & VALIDASI 18+                                   -->
+    <!-- ===================================================================== -->
+    <section id="screen-register" class="animate-card-enter">
+      <div class="text-center mb-6">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-3">
+          <span>🔥</span> Uji Nyali Sebelum DP Gedung
+        </span>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+          Buka Borokmu di Depan,<br/>
+          <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-500 to-amber-400">Biar Nggak Nyesel di KUA.</span>
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-400 mt-2 max-w-md mx-auto">
+          Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian sanggup bertahan.
+        </p>
+      </div>
+
+      <!-- Mode Switch Tabs on Landing: Daftar Baru vs Punya Kode Undangan -->
+      <div class="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 mb-4">
+        <button id="tabNewPlayer" onclick="switchLandingTab('new')" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold bg-rose-500 text-white shadow-md shadow-rose-500/20 transition">
+          Daftar Pemain Baru
+        </button>
+        <button id="tabJoinInvite" onclick="switchLandingTab('invite')" class="py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition">
+          Punya Kode Undangan?
+        </button>
+      </div>
+
+      <!-- Card Form Container -->
+      <div class="bg-cardbg/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl">
+        
+        <!-- Invite Code Input Box (Only visible when 'Punya Kode Undangan?' tab active) -->
+        <div id="inviteCodeBanner" class="hidden mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+          <label class="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1.5">
+            Masukkan Kode Undangan Pasangan
+          </label>
+          <div class="flex gap-2">
+            <input type="text" id="inputJoinCode" placeholder="Contoh: KAWIN-729" maxlength="12"
+              class="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none" />
+            <button type="button" onclick="fillDemoInviteCode()" class="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/30 whitespace-nowrap">
+              Kode Demo
+            </button>
+          </div>
+          <p class="text-[11px] text-slate-400 mt-1.5">
+            *Sistem otomatis memblokir jika jenis kelaminmu sama dengan pengirim kode.
+          </p>
+        </div>
+
+        <!-- Inline Error Alert Box (For <18 Validation or Same-Gender Rejection) -->
+        <div id="registerErrorBox" class="hidden mb-5 p-4 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake">
+          <div class="flex items-start gap-3">
+            <div class="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <span class="text-base">🚫</span>
+            </div>
+            <div>
+              <h3 id="registerErrorTitle" class="text-sm font-extrabold text-red-400">Akses Ditolak!</h3>
+              <p id="registerErrorText" class="text-xs text-red-200/90 mt-0.5 leading-relaxed"></p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Registration Form -->
+        <form id="registerForm" onsubmit="handleRegistration(event)" class="space-y-4">
+          <div class="flex items-center justify-between">
+            <span id="formHeaderLabel" class="text-xs font-bold uppercase tracking-wider text-slate-400">Identitas Pemain</span>
+            <button type="button" onclick="quickFillDemoUser()" class="text-xs font-semibold text-rose-400 hover:text-rose-300 underline underline-offset-4">
+              ⚡ Isi Cepat (Demo)
+            </button>
+          </div>
+
+          <!-- Nama Panggilan -->
+          <div>
+            <label for="regName" class="block text-xs font-semibold text-slate-300 mb-1.5">Nama Panggilan</label>
+            <input type="text" id="regName" required placeholder="Misal: Raka / Nadya"
+              class="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition" />
+          </div>
+
+          <!-- Email -->
+          <div>
+            <label for="regEmail" class="block text-xs font-semibold text-slate-300 mb-1.5">Email Aktif</label>
+            <input type="email" id="regEmail" required placeholder="nama@email.com"
+              class="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition" />
+          </div>
+
+          <!-- Jenis Kelamin & Usia Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <!-- Jenis Kelamin -->
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5">Jenis Kelamin</label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="cursor-pointer">
+                  <input type="radio" name="regGender" value="Laki-laki" class="peer sr-only" checked />
+                  <div class="py-3 px-2 rounded-xl border border-slate-700 bg-slate-950/90 peer-checked:border-rose-500 peer-checked:bg-rose-500/15 peer-checked:text-white text-slate-400 text-xs font-bold text-center transition">
+                    👨 Laki-laki
+                  </div>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="radio" name="regGender" value="Perempuan" class="peer sr-only" />
+                  <div class="py-3 px-2 rounded-xl border border-slate-700 bg-slate-950/90 peer-checked:border-rose-500 peer-checked:bg-rose-500/15 peer-checked:text-white text-slate-400 text-xs font-bold text-center transition">
+                    👩 Perempuan
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- Usia -->
+            <div>
+              <label for="regAge" class="block text-xs font-semibold text-slate-300 mb-1.5">Usia (Wajib 18+)</label>
+              <input type="number" id="regAge" required min="10" max="80" placeholder="Contoh: 24"
+                class="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none transition" />
+            </div>
+          </div>
+
+          <button type="submit" class="w-full mt-2 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile flex items-center justify-center gap-2">
+            <span id="submitBtnText">Lanjut ke 20 Pengakuan Hidup</span>
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </button>
+        </form>
+      </div>
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 2: FASE 20 PERTANYAAN KEHIDUPAN                                -->
+    <!-- ===================================================================== -->
+    <section id="screen-quiz" class="hidden">
+      <!-- Top Quiz Status -->
+      <div class="mb-4">
+        <div class="flex items-center justify-between text-xs mb-2">
+          <div class="flex items-center gap-2">
+            <span id="quizPlayerBadge" class="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">Pemain</span>
+            <span id="quizSegmentBadge" class="text-[11px] text-slate-400">Segmen</span>
+          </div>
+          <span class="font-mono font-extrabold text-rose-400 text-sm">
+            <span id="quizCurrentNum">1</span><span class="text-slate-500">/20</span>
+          </span>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5">
+          <div id="quizProgressBar" class="h-full bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 rounded-full transition-all duration-300" style="width: 5%"></div>
+        </div>
+      </div>
+
+      <!-- Question Card -->
+      <div id="quizCardContainer" class="bg-cardbg/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl min-h-[270px] flex flex-col justify-between animate-card-enter">
+        <div>
+          <!-- Category Pill -->
+          <div class="flex items-center justify-between gap-2 mb-5">
+            <span id="quizCategoryBadge" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide bg-rose-500/15 text-rose-400 border border-rose-500/30">
+              Ketakutan Hidup
+            </span>
+            <span id="quizQuestionTag" class="text-[11px] font-mono text-slate-500">#01</span>
+          </div>
+
+          <!-- First-person Statement -->
+          <blockquote id="quizStatementText" class="text-lg sm:text-xl font-bold text-white leading-relaxed">
+            "Gua sering ngerasa hidup gua jalan di tempat, sementara temen-temen seumuran udah pada mapan atau nikah."
+          </blockquote>
+        </div>
+
+        <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <span>Jawab jujur — ini bakal jadi dek kartu pasanganmu!</span>
+        </div>
+      </div>
+
+      <!-- 3 Answer Buttons -->
+      <div class="grid grid-cols-1 gap-2.5 mt-4">
+        <button onclick="answerQuiz('iya')" class="w-full py-3.5 px-5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/60 hover:border-rose-500 text-left flex items-center justify-between group btn-tactile">
+          <div>
+            <span class="block text-sm sm:text-base font-extrabold text-rose-400 group-hover:text-rose-300">🔥 Iya lagi</span>
+            <span class="block text-[11px] text-slate-400">Setuju banget — masuk ke Dek Masalah Utama</span>
+          </div>
+          <span class="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">MASALAH</span>
+        </button>
+
+        <button onclick="answerQuiz('kayanya')" class="w-full py-3.5 px-5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border-2 border-amber-500/50 hover:border-amber-400 text-left flex items-center justify-between group btn-tactile">
+          <div>
+            <span class="block text-sm sm:text-base font-extrabold text-amber-400 group-hover:text-amber-300">🤔 Kayanya sih</span>
+            <span class="block text-[11px] text-slate-400">Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)</span>
+          </div>
+          <span class="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">WILDCARD</span>
+        </button>
+
+        <button onclick="answerQuiz('engga')" class="w-full py-3.5 px-5 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border-2 border-slate-700/80 hover:border-slate-500 text-left flex items-center justify-between group btn-tactile">
+          <div>
+            <span class="block text-sm sm:text-base font-extrabold text-slate-200">🛡️ Engga</span>
+            <span class="block text-[11px] text-slate-400">Bukan gua banget — dibuang dari dek permainan</span>
+          </div>
+          <span class="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">BUANG</span>
+        </button>
+      </div>
+
+      <!-- Demo Helper: Auto-Fill Remaining Answers -->
+      <div class="mt-4 text-center">
+        <button onclick="autoCompleteQuizDemo()" class="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition">
+          ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
+        </button>
+      </div>
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 3: PROFIL BOROK & PEMILIHAN MODE PERMAINAN                     -->
+    <!-- ===================================================================== -->
+    <section id="screen-mode" class="hidden animate-card-enter space-y-5">
+      <!-- Summary Card: Profil Borok & Red Flag -->
+      <div class="bg-cardbg/95 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl">
+        <div class="flex items-center justify-between mb-3">
+          <div>
+            <span class="text-[11px] font-bold uppercase tracking-wider text-rose-400">Hasil Profiling Jujur</span>
+            <h2 class="text-lg sm:text-xl font-extrabold text-white">Profil Borok & Red Flag <span id="profilePlayerName" class="text-rose-400">Kamu</span></h2>
+          </div>
+          <span id="profilePlayerMeta" class="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-700">24 thn</span>
+        </div>
+
+        <!-- 3 Stat Boxes -->
+        <div class="grid grid-cols-3 gap-2.5 my-4">
+          <div class="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+            <span id="countIyaBadge" class="block text-2xl font-mono font-extrabold text-rose-400">0</span>
+            <span class="text-[11px] font-bold text-slate-300">Iya lagi</span>
+            <span class="block text-[10px] text-slate-500">Masalah Utama</span>
+          </div>
+          <div class="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+            <span id="countKayanyaBadge" class="block text-2xl font-mono font-extrabold text-amber-400">0</span>
+            <span class="text-[11px] font-bold text-slate-300">Kayanya sih</span>
+            <span class="block text-[10px] text-slate-500">Kartu Wildcard</span>
+          </div>
+          <div class="p-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-center">
+            <span id="countEnggaBadge" class="block text-2xl font-mono font-extrabold text-slate-300">0</span>
+            <span class="text-[11px] font-bold text-slate-300">Engga</span>
+            <span class="block text-[10px] text-slate-500">Dibuang</span>
+          </div>
+        </div>
+
+        <!-- Top Confessions Preview -->
+        <div class="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+          <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">💣 Senjata Makan Tuan Teratasmu:</p>
+          <ul id="topConfessionsList" class="space-y-1.5 text-xs text-slate-300"></ul>
+        </div>
+      </div>
+
+      <!-- Mode Selection Title -->
+      <div class="text-center">
+        <h3 class="text-base font-extrabold text-white">Pilih Lawan Main Uji Kecocokan</h3>
+        <p class="text-xs text-slate-400">Baterai Cinta dimulai dari <span class="text-amber-400 font-bold">50%</span>. Sanggup tembus 80%?</p>
+      </div>
+
+      <!-- MODE A: SOLO (LAWAN BOT AI) -->
+      <div class="bg-cardbg/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-5 transition">
+        <div class="flex items-start justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-lg">
+              🤖
+            </div>
+            <div>
+              <h4 class="font-extrabold text-white text-base">Mode Solo — Lawan Bot AI</h4>
+              <p class="text-xs text-slate-400">Otomatis lawan jenis (<span id="botAutoGenderLabel" class="text-rose-400 font-semibold">Perempuan</span>) dengan kepribadian sesuai usia.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bot Age Slider & Persona Preview -->
+        <div class="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <label for="botAgeSlider" class="text-xs font-bold text-slate-300">Pilih Usia Bot AI:</label>
+            <span class="font-mono font-extrabold text-sm px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+              <span id="botAgeValue">25</span> Tahun
+            </span>
+          </div>
+          <input type="range" id="botAgeSlider" min="18" max="40" value="25" oninput="updateBotPreview()" class="w-full my-2" />
+          <div class="flex justify-between text-[10px] font-mono text-slate-500 mb-3">
+            <span>18 (Dramatis)</span>
+            <span>28 (Realistis)</span>
+            <span>40 (Pragmatis)</span>
+          </div>
+
+          <!-- Dynamic Bot Persona Box -->
+          <div class="flex items-center gap-3 pt-3 border-t border-slate-800/80">
+            <div id="botAvatarEmoji" class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-lg shrink-0">👩</div>
+            <div class="min-w-0">
+              <div class="flex items-center gap-2">
+                <span id="botNameDisplay" class="font-extrabold text-sm text-white">Nadya (25)</span>
+                <span id="botVibeBadge" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">Quarter-Life Realistis</span>
+              </div>
+              <p id="botBioDisplay" class="text-[11px] text-slate-400 truncate mt-0.5">
+                "Lagi fokus karier tapi takut salah pilih pasangan. Suka ngajak diskusi realistis."
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="startSoloGame()" class="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile">
+          Mulai Main Lawan Bot AI →
+        </button>
+      </div>
+
+      <!-- MODE B: AJAK PASANGAN (KODE UNDANGAN) -->
+      <div class="bg-cardbg/95 border-2 border-slate-800 hover:border-emerald-500/50 rounded-3xl p-5 transition">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-lg">
+            💌
+          </div>
+          <div>
+            <h4 class="font-extrabold text-white text-base">Mode Ajak Pasangan (Kode Undangan)</h4>
+            <p class="text-xs text-slate-400">Kirim kode ke pasangan lawan jenis & main bergantian di perangkat ini.</p>
+          </div>
+        </div>
+
+        <!-- Generated Invite Code Box -->
+        <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 mb-3">
+          <div>
+            <span class="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">Kode Undangan Kamu</span>
+            <span id="generatedInviteCode" class="font-mono font-extrabold text-lg text-emerald-400 tracking-wider">KAWIN-729</span>
+          </div>
+          <button onclick="copyInviteCode()" class="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 btn-tactile">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Salin Kode
+          </button>
+        </div>
+
+        <button onclick="openPartnerSimulatorModal()" class="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile">
+          📲 Simulasikan Pasangan Masuk Pakai Kode Ini
+        </button>
+      </div>
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 3B: SIMULASI PENDAFTARAN PASANGAN (VIA KODE UNDANGAN)          -->
+    <!-- ===================================================================== -->
+    <section id="screen-partner-join" class="hidden animate-card-enter">
+      <div class="bg-cardbg/95 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl">
+        <div class="flex items-center justify-between mb-4">
+          <span class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            Kode: <span id="partnerJoinCodeLabel">KAWIN-729</span>
+          </span>
+          <button onclick="cancelPartnerJoin()" class="text-xs text-slate-400 hover:text-white">← Kembali</button>
+        </div>
+
+        <h2 class="text-xl font-extrabold text-white">Pasangan Bergabung!</h2>
+        <p class="text-xs text-slate-400 mt-1 mb-4">
+          <span id="hostPlayerSummary" class="text-rose-400 font-semibold">Pemain 1</span> mengundangmu uji kecocokan. Masukkan datamu (wajib lawan jenis & 18+).
+        </p>
+
+        <!-- Error Box for Partner Validation -->
+        <div id="partnerErrorBox" class="hidden mb-4 p-3.5 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake">
+          <p id="partnerErrorTitle" class="text-xs font-extrabold text-red-400">Ditolak!</p>
+          <p id="partnerErrorText" class="text-xs text-red-200/90 mt-0.5"></p>
+        </div>
+
+        <form onsubmit="handlePartnerJoinSubmit(event)" class="space-y-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1">Nama Panggilan Pasangan</label>
+            <input type="text" id="partnerNameInput" required placeholder="Nama pasanganmu"
+              class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none" />
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Jenis Kelamin Pasangan</label>
+              <div class="grid grid-cols-2 gap-2">
+                <label class="cursor-pointer">
+                  <input type="radio" name="partnerGender" value="Laki-laki" class="peer sr-only" />
+                  <div class="py-2.5 px-2 rounded-xl border border-slate-700 bg-slate-950 peer-checked:border-emerald-500 peer-checked:bg-emerald-500/15 peer-checked:text-white text-slate-400 text-xs font-bold text-center">
+                    👨 Laki-laki
+                  </div>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="radio" name="partnerGender" value="Perempuan" class="peer sr-only" checked />
+                  <div class="py-2.5 px-2 rounded-xl border border-slate-700 bg-slate-950 peer-checked:border-emerald-500 peer-checked:bg-emerald-500/15 peer-checked:text-white text-slate-400 text-xs font-bold text-center">
+                    👩 Perempuan
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1">Usia Pasangan (18+)</label>
+              <input type="number" id="partnerAgeInput" required min="10" max="80" placeholder="Contoh: 25"
+                class="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white focus:outline-none" />
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <button type="button" onclick="quickFillPartnerDemo()" class="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4">
+              ⚡ Isi Cepat Data Pasangan
+            </button>
+          </div>
+
+          <button type="submit" class="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/25 btn-tactile">
+            Generate Dek Masalah Pasangan & Mulai →
+          </button>
+        </form>
+      </div>
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 4: ARENA GAMEPLAY UTAMA & BATERAI CINTA                        -->
+    <!-- ===================================================================== -->
+    <section id="screen-game" class="hidden space-y-4">
+      
+      <!-- BATERAI CINTA HUD -->
+      <div id="batteryHudCard" class="bg-cardbg/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 shadow-xl relative overflow-visible">
+        <!-- Floating Delta Animation Container -->
+        <div id="batteryDeltaAnchor" class="absolute right-6 -top-3 pointer-events-none z-30"></div>
+
+        <div class="flex items-center justify-between mb-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🔋</span>
+            <div>
+              <span class="text-xs font-extrabold uppercase tracking-wider text-slate-300">Baterai Cinta</span>
+              <span id="batteryZoneLabel" class="ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                Zona Ragu
+              </span>
+            </div>
+          </div>
+          <span id="batteryPercentText" class="font-mono font-extrabold text-xl sm:text-2xl text-amber-400">50%</span>
+        </div>
+
+        <!-- Visual Battery Gauge -->
+        <div class="flex items-center gap-1.5">
+          <div class="flex-1 h-6 bg-slate-950 rounded-xl border-2 border-slate-700 p-1 relative overflow-hidden">
+            <div id="batteryFillBar" class="h-full rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500 ease-out relative battery-shimmer" style="width: 50%"></div>
+            <!-- Threshold Markers (45% & 80%) -->
+            <div class="absolute top-0 bottom-0 left-[45%] w-0.5 bg-slate-600/70" title="Batas Minimal 45%"></div>
+            <div class="absolute top-0 bottom-0 left-[80%] w-0.5 bg-emerald-400/70" title="Target Besok Kawin 80%"></div>
+          </div>
+          <!-- Battery Positive Terminal Cap -->
+          <div class="w-2 h-3.5 bg-slate-700 rounded-r-md"></div>
+        </div>
+
+        <!-- Round & Timer Bar -->
+        <div class="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800/80 text-xs">
+          <div class="flex items-center gap-2">
+            <span class="font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200">
+              Ronde <span id="gameRoundNum" class="text-rose-400">1</span>/8
+            </span>
+            <span id="activeTurnBadge" class="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
+              Giliran Kamu
+            </span>
+          </div>
+
+          <!-- 60s Countdown Timer -->
+          <div class="flex items-center gap-2">
+            <div id="timerPill" class="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 font-mono font-bold text-slate-200">
+              <span>⏱️</span>
+              <span id="timerCountdownText">60s</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- DYNAMIC GAMEPLAY STAGE (Switches between Problem Card, Consequence Card, Negotiation Card) -->
+      <div id="gameStageContainer"></div>
+
+      <!-- Bottom Utility Bar: Simulate Timeout / AFK -->
+      <div class="flex items-center justify-between px-2 pt-1">
+        <span id="afkCounterLabel" class="text-[11px] font-mono text-slate-500">AFK Berturut-turut: 0/3</span>
+        <button onclick="simulateTimeoutAfk()" class="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition">
+          💤 Simulasi Timeout / Pasangan AFK (-15%)
+        </button>
+      </div>
+    </section>
+
+
+    <!-- ===================================================================== -->
+    <!-- SCREEN 5: ENDING & RAPOR KECOCOKAN                                    -->
+    <!-- ===================================================================== -->
+    <section id="screen-ending" class="hidden animate-card-enter space-y-5">
+      <!-- Main Ending Verdict Card -->
+      <div id="endingHeroCard" class="bg-cardbg/95 border-2 border-emerald-500/50 rounded-3xl p-6 sm:p-7 text-center shadow-2xl relative overflow-hidden">
+        <div id="endingEmojiIcon" class="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-4xl mb-4 shadow-lg">
+          💍
+        </div>
+
+        <span id="endingBadgePill" class="inline-block px-3.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 mb-2">
+          BATERAI CINTA: 85%
+        </span>
+
+        <h1 id="endingMainTitle" class="text-3xl sm:text-4xl font-extrabold text-white tracking-tight mt-1">
+          BESOK KAWIN!
+        </h1>
+
+        <p id="endingSubtitle" class="text-xs sm:text-sm text-slate-300 mt-3 leading-relaxed max-w-md mx-auto">
+          Red flag kalian berdua ternyata saling mengunci kayak puzzle. Udah nggak usah banyak mikir, langsung booking KUA!
+        </p>
+
+        <!-- Match Players Pill -->
+        <div class="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
+          <span id="endingPlayer1Label" class="font-bold text-white">Pemain 1</span>
+          <span>⚡</span>
+          <span id="endingPlayer2Label" class="font-bold text-rose-400">Pasangan</span>
+        </div>
+      </div>
+
+      <!-- Mini Stats Summary -->
+      <div class="grid grid-cols-4 gap-2">
+        <div class="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
+          <span id="statTerimaMantap" class="block font-mono font-extrabold text-lg text-emerald-400">0</span>
+          <span class="text-[10px] text-slate-400 leading-tight block">Terima (+10%)</span>
+        </div>
+        <div class="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+          <span id="statMenyesal" class="block font-mono font-extrabold text-lg text-rose-400">0</span>
+          <span class="text-[10px] text-slate-400 leading-tight block">Nyesel (-12%)</span>
+        </div>
+        <div class="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+          <span id="statKompromi" class="block font-mono font-extrabold text-lg text-amber-400">0</span>
+          <span class="text-[10px] text-slate-400 leading-tight block">Sepakat (+5%)</span>
+        </div>
+        <div class="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/25 text-center">
+          <span id="statDeadlock" class="block font-mono font-extrabold text-lg text-red-400">0</span>
+          <span class="text-[10px] text-slate-400 leading-tight block">Gagal/AFK (-15%)</span>
+        </div>
+      </div>
+
+      <!-- Rapor Kecocokan (Round History) -->
+      <div class="bg-cardbg/95 border border-slate-800 rounded-3xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-extrabold text-white">📋 Rapor Kecocokan Tiap Ronde</h3>
+          <button onclick="copyMatchReport()" class="text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-4">
+            Salin Rapor
+          </button>
+        </div>
+
+        <div id="raporListContainer" class="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
+        <button onclick="replaySameProfile()" class="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile">
+          🔄 Ganti Lawan / Mode
+        </button>
+        <button onclick="fullResetGame()" class="py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile">
+          ✨ Main Ulang Dari Awal
+        </button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="w-full py-4 text-center text-[11px] text-slate-600">
+    BESOK KAWIN? • Simulasi Mekanik Game & Red Flag Card Engine
+  </footer>
+
+  <!-- ======================================================================= -->
+  <!-- JAVASCRIPT GAME ENGINE & QUESTION BANK                                  -->
+  <!-- ======================================================================= -->
+  <script>
+    /**
+     * 1. SOUND FX ENGINE (Web Audio API - Tanpa File Eksternal)
+     * Memberikan efek suara taktil untuk klik kartu, baterai naik, penalti, dan ending.
+     */
+    /* GLITTER: ledakan kilau saat menerima pasangan */
+    function glitterBurst(ev) {
+      var r = ev && ev.currentTarget ? ev.currentTarget.getBoundingClientRect() : null;
+      var x = r ? r.left + r.width / 2 : innerWidth / 2, y = r ? r.top + r.height / 2 : innerHeight / 2;
+      var c = document.createElement('canvas');
+      c.width = innerWidth; c.height = innerHeight;
+      c.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:99';
+      document.body.appendChild(c);
+      var g = c.getContext('2d'), cols = ['#f43f5e', '#34d399', '#fbbf24', '#38bdf8', '#ffffff'], f = 0;
+      var ps = Array.from({ length: 80 }, function () {
+        var a = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 7;
+        return { x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 3, r: 2 + Math.random() * 4, c: cols[Math.floor(Math.random() * cols.length)], w: Math.random() * 6 };
+      });
+      (function step() {
+        g.clearRect(0, 0, c.width, c.height); f++;
+        ps.forEach(function (p) {
+          p.x += p.vx; p.y += p.vy; p.vy += 0.18; p.vx *= 0.985;
+          g.globalAlpha = Math.max(0, 1 - f / 100) * (0.55 + 0.45 * Math.sin(f * 0.5 + p.w));
+          g.fillStyle = p.c; g.save(); g.translate(p.x, p.y); g.rotate(f * 0.1 + p.w);
+          var q = p.r; g.beginPath();
+          g.moveTo(0, -q * 2); g.lineTo(q * .5, -q * .5); g.lineTo(q * 2, 0); g.lineTo(q * .5, q * .5);
+          g.lineTo(0, q * 2); g.lineTo(-q * .5, q * .5); g.lineTo(-q * 2, 0); g.lineTo(-q * .5, -q * .5);
+          g.closePath(); g.fill(); g.restore();
+        });
+        if (f < 100) requestAnimationFrame(step); else c.remove();
+      })();
+    }
+
+    const SoundFX = {
+      enabled: true,
+      ctx: null,
+      init() {
+        if (!this.ctx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) this.ctx = new AudioContext();
+        }
+      },
+      playTone(freq, type = 'sine', duration = 0.15, vol = 0.08, delay = 0) {
+        if (!this.enabled) return;
+        try {
+          this.init();
+          if (!this.ctx) return;
+          if (this.ctx.state === 'suspended') this.ctx.resume();
+          const osc = this.ctx.createOscillator();
+          const gain = this.ctx.createGain();
+          osc.type = type;
+          osc.frequency.setValueAtTime(freq, this.ctx.currentTime + delay);
+          gain.gain.setValueAtTime(vol, this.ctx.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + delay + duration);
+          osc.connect(gain);
+          gain.connect(this.ctx.destination);
+          osc.start(this.ctx.currentTime + delay);
+          osc.stop(this.ctx.currentTime + delay + duration);
+        } catch (e) {
+          // Ignore audio autoplay block errors
+        }
+      },
+      tap() { this.playTone(520, 'triangle', 0.08, 0.06); },
+      charge() {
+        this.playTone(523.25, 'sine', 0.14, 0.09, 0);
+        this.playTone(659.25, 'sine', 0.18, 0.09, 0.09);
+      },
+      penalty() {
+        this.playTone(220, 'sawtooth', 0.18, 0.08, 0);
+        this.playTone(165, 'sawtooth', 0.25, 0.08, 0.12);
+      },
+      flip() { this.playTone(380, 'sine', 0.12, 0.07); },
+      win() {
+        [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => this.playTone(f, 'triangle', 0.25, 0.09, i * 0.1));
+      }
+    };
+
+    function toggleSound() {
+      SoundFX.enabled = !SoundFX.enabled;
+      document.getElementById('soundOnIcon').classList.toggle('hidden', !SoundFX.enabled);
+      document.getElementById('soundOffIcon').classList.toggle('hidden', SoundFX.enabled);
+      showToast(SoundFX.enabled ? 'Suara efek diaktifkan' : 'Suara efek dimatikan', 'info');
+    }
+
+    /**
+     * 2. BANK PERTANYAAN KEHIDUPAN BERSEGMEN (GENDER & USIA)
+     * Setiap kombinasi Gender (Laki-laki / Perempuan) dan Kelompok Usia (18-25 vs 26+)
+     * akan mendapatkan tepat 20 pertanyaan:
+     * - 7 Ketakutan Hidup
+     * - 7 Kebiasaan Buruk
+     * - 6 Sifat Jelek & Red Flag Ego
+     */
+    const QUESTION_BANK = [
+      // ==================== KATEGORI 1: KETAKUTAN HIDUP ====================
+      {
+        id: 'KH_U1',
+        category: 'Ketakutan Hidup',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua sering ngerasa hidup gua jalan di tempat, sementara temen-temen seumuran udah pada mapan atau nikah.',
+        partnerPrompt: 'Dia sering kena quarter-life crisis dan ngerasa hidupnya jalan di tempat dibanding teman-temannya.',
+        consequenceQuestion: 'Lu yakin siap jadi tempat sampah curhat overthinking-nya tiap malem, padahal lu sendiri lagi pusing ngurusin hidup?',
+        compromises: [
+          'Bikin jadwal quality time bebas bahas pencapaian orang lain.',
+          'Saling evaluasi target 6 bulan bareng tanpa saling nyalahin.',
+          'Sepakat puasa buka media sosial tiap akhir pekan.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 1 }
+      },
+      {
+        id: 'KH_U2',
+        category: 'Ketakutan Hidup',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Jauh di lubuk hati, gua takut kalau orang yang paling gua sayang tahu sisi tergelap gua, dia bakal pergi.',
+        partnerPrompt: 'Dia nyimpen sisi kelam/trauma masa lalu dan takut banget bakal ditinggalin kalau lu tahu aslinya.',
+        consequenceQuestion: 'Lu sanggup nerima masa lalunya tanpa pernah ngungkit itu pas kalian lagi berantem hebat nanti?',
+        compromises: [
+          'Buka-bukaan bertahap sesuai kesiapan tanpa paksaan.',
+          'Datang ke konselor/psikolog pra-nikah bareng.',
+          'Bikin perjanjian masa lalu nggak boleh dibawa saat konflik.'
+        ],
+        botPref: { young: 0, mid: 2, mature: 1 }
+      },
+      {
+        id: 'KH_U3',
+        category: 'Ketakutan Hidup',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua lebih takut kesepian sendirian daripada terjebak di hubungan yang sebenernya udah nggak sehat.',
+        partnerPrompt: 'Dia punya ketergantungan emosional tinggi dan lebih takut kesepian daripada terjebak hubungan toxic.',
+        consequenceQuestion: 'Kalau suatu hari hubungan kalian hambar, lu yakin dia bertahan karena cinta—bukan cuma karena takut sendirian?',
+        compromises: [
+          'Wajib punya lingkar pertemanan dan me-time masing-masing.',
+          'Check-in kondisi mental hubungan tiap 3 bulan secara jujur.',
+          'Sepakat berani selesai baik-baik kalau udah saling nyakitin.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 2 }
+      },
+      {
+        id: 'KH_U4',
+        category: 'Ketakutan Hidup',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua takut banget pernikahan cuma bakal ngubah cinta jadi rutinitas tagihan listrik, cicilan, dan urusan dapur yang ngebosenin.',
+        partnerPrompt: 'Dia takut banget kehidupan pernikahan bakal ngebunuh sisi romantis dan cuma jadi rutinitas bayar tagihan.',
+        consequenceQuestion: 'Lu sanggup tetep usaha bikin hubungan seru di tengah capeknya kerja dan cicilan menumpuk?',
+        compromises: [
+          'Wajib alokasi budget khusus "date night" bulanan anti-batal.',
+          'Bagi tugas domestik & keuangan pakai sistem otomatis biar nggak ribut.',
+          'Jadwalin liburan singkat minimal 2 kali setahun.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 1 }
+      },
+      // Gender Specific General (Ketakutan Hidup)
+      {
+        id: 'KH_M_ALL',
+        category: 'Ketakutan Hidup',
+        gender: 'Laki-laki',
+        ageGroup: 'ALL',
+        segmentLabel: 'Laki-laki • 18–35',
+        statement: 'Gua takut banget kelihatan lemah atau nangis di depan pasangan karena ngerasa laki-laki harus selalu kelihatan kuat.',
+        partnerPrompt: 'Dia gengsi kelihatan lemah dan milih mendem beban berat sendirian demi menjaga harga diri.',
+        consequenceQuestion: 'Lu siap menghadapi pasangan yang tiba-tiba meledak marah cuma karena dia nahan tangis dan stres sendirian?',
+        compromises: [
+          'Kasih ruang aman buat cerita tanpa langsung diceramahin.',
+          'Boleh diem dulu 2 jam pas capek, tapi habis itu wajib ngomong.',
+          'Gunakan kode khusus kalau lagi butuh dipeluk tanpa ditanya-tanya.'
+        ],
+        botPref: { young: 2, mid: 0, mature: 1 }
+      },
+      {
+        id: 'KH_F_ALL',
+        category: 'Ketakutan Hidup',
+        gender: 'Perempuan',
+        ageGroup: 'ALL',
+        segmentLabel: 'Perempuan • 18–35',
+        statement: 'Gua takut kehilangan jati diri, karier, dan kebebasan gua begitu masuk ke kehidupan rumah tangga.',
+        partnerPrompt: 'Dia takut banget kehilangan karier dan kebebasan pribadinya setelah resmi menikah nanti.',
+        consequenceQuestion: 'Lu yakin nggak bakal nuntut dia buat ngurangin jam kerja atau fokus ngurus rumah tangga sepenuhnya?',
+        compromises: [
+          'Sepakat sama-sama tetap berkarya dan bagi rata urusan rumah.',
+          'Hire asisten rumah tangga / jasa laundry biar sama-sama punya waktu.',
+          'Bikin kesepakatan tertulis soal pembagian peran sebelum nikah.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 2 }
+      },
+      // Gender + Age Specific (Ketakutan Hidup - Young 18-25)
+      {
+        id: 'KH_M_Y1',
+        category: 'Ketakutan Hidup',
+        gender: 'Laki-laki',
+        ageGroup: 'young',
+        segmentLabel: 'Laki-laki • 18–25',
+        statement: 'Gua takut banget gagal secara finansial sebelum umur 30 dan dianggap nggak punya masa depan sama keluarga pasangan.',
+        partnerPrompt: 'Dia terobsesi ngejar mapan sebelum 30 sampai sering ngorbanin waktu pacaran demi kerja sampingan.',
+        consequenceQuestion: 'Lu rela weekend-mu sering batal dan chat dibales lama karena dia sibuk ngejar target finansial?',
+        compromises: [
+          'Jadwalin minimal 1 hari penuh per minggu bebas dari urusan kerjaan.',
+          'Transparan soal target tabungan bareng biar sama-sama tenang.',
+          'Support ambisinya tapi tetap pasang batas jam kerja maksimal.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 1 }
+      },
+      {
+        id: 'KH_M_Y2',
+        category: 'Ketakutan Hidup',
+        gender: 'Laki-laki',
+        ageGroup: 'young',
+        segmentLabel: 'Laki-laki • 18–25',
+        statement: 'Gua takut komitmen jangka panjang karena ngerasa masa muda gua belum puas buat eksplor banyak hal.',
+        partnerPrompt: 'Dia masih ragu komitmen serius karena takut masa mudanya habis terlalu cepat.',
+        consequenceQuestion: 'Lu yakin mau lanjut serius sama orang yang setengah kakinya masih pengen bebas sana-sini?',
+        compromises: [
+          'Pasang timeline hubungan yang jelas (misal evaluasi serius 1 tahun lagi).',
+          'Tetap kasih kebebasan hobi & solo trip asal komunikasi jelas.',
+          'Sepakat fokus bangun fondasi dulu tanpa buru-buru bahas nikah.'
+        ],
+        botPref: { young: 1, mid: 0, mature: 0 }
+      },
+      {
+        id: 'KH_F_Y1',
+        category: 'Ketakutan Hidup',
+        gender: 'Perempuan',
+        ageGroup: 'young',
+        segmentLabel: 'Perempuan • 18–25',
+        statement: 'Gua sering ngerasa nggak cukup menarik atau nggak cukup berprestasi kalau dibandingin sama standar di media sosial.',
+        partnerPrompt: 'Dia gampang insecure sama penampilan dan pencapaian orang lain di media sosial.',
+        consequenceQuestion: 'Lu sanggup ngasih validasi dan pujian berulang kali tiap hari pas dia lagi kumat insecure-nya?',
+        compromises: [
+          'Kasih afirmasi positif rutin tanpa nunggu dia nanya "aku cantik nggak?".',
+          'Kurangi konsumsi konten pamer gaya hidup di medsos.',
+          'Fokus bikin aktivitas offline bareng yang ningkatin kepercayaan diri.'
+        ],
+        botPref: { young: 0, mid: 2, mature: 1 }
+      },
+      {
+        id: 'KH_F_Y2',
+        category: 'Ketakutan Hidup',
+        gender: 'Perempuan',
+        ageGroup: 'young',
+        segmentLabel: 'Perempuan • 18–25',
+        statement: 'Gua takut banget udah nemenin pasangan dari nol, eh pas dia sukses malah ninggalin gua demi orang baru.',
+        partnerPrompt: 'Dia punya trauma takut ditinggalin setelah nemenin pasangan berjuang dari nol.',
+        consequenceQuestion: 'Lu siap menghadapi kecurigaan dia tiap kali karier lu naik atau lu mulai kenal lingkungan baru?',
+        compromises: [
+          'Kenalin dia ke lingkungan kerja dan temen-temen baru secara terbuka.',
+          'Bikin pencapaian finansial tercatat transparan sebagai hasil bareng.',
+          'Jaga batasan tegas sama lawan jenis di lingkungan profesional.'
+        ],
+        botPref: { young: 0, mid: 2, mature: 1 }
+      },
+      // Gender + Age Specific (Ketakutan Hidup - Adult 26+)
+      {
+        id: 'KH_M_A1',
+        category: 'Ketakutan Hidup',
+        gender: 'Laki-laki',
+        ageGroup: 'adult',
+        segmentLabel: 'Laki-laki • 26+',
+        statement: 'Gua takut nggak sanggup jadi tulang punggung keluarga sendiri karena masih harus nanggung beban ekonomi orang tua (sandwich generation).',
+        partnerPrompt: 'Dia adalah sandwich generation yang wajib menyisihkan sebagian besar gajinya buat keluarga besar.',
+        consequenceQuestion: 'Lu ikhlas jatah liburan, skincare, atau tabungan rumah tangga kalian kepotong rutin buat biayain keluarganya?',
+        compromises: [
+          'Tetapkan batas nominal maksimal per bulan buat keluarga besar.',
+          'Pisahkan rekening keluarga inti dan rekening bantuan orang tua.',
+          'Cari sumber penghasilan tambahan bareng khusus pos keluarga.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 1 }
+      },
+      {
+        id: 'KH_M_A2',
+        category: 'Ketakutan Hidup',
+        gender: 'Laki-laki',
+        ageGroup: 'adult',
+        segmentLabel: 'Laki-laki • 26+',
+        statement: 'Gua takut salah pilih istri yang ternyata nggak bisa akur sama ibu dan keluarga besar gua.',
+        partnerPrompt: 'Dia sangat memprioritaskan restu dan keharmonisan antara pasangannya dengan ibunya.',
+        consequenceQuestion: 'Kalau suatu hari terjadi gesekan antara lu dan mertua, lu siap kalau dia lebih milih belain ibunya dulu?',
+        compromises: [
+          'Wajib tinggal terpisah (ngontrak/rumah sendiri) dari orang tua setelah nikah.',
+          'Suami jadi penengah netral tanpa menyudutkan salah satu pihak.',
+          'Batasi frekuensi kumpul keluarga besar biar minim gesekan.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 0 }
+      },
+      {
+        id: 'KH_F_A1',
+        category: 'Ketakutan Hidup',
+        gender: 'Perempuan',
+        ageGroup: 'adult',
+        segmentLabel: 'Perempuan • 26+',
+        statement: 'Gua takut salah pilih pasangan cuma karena dikejar umur dan tekanan pertanyaan keluarga soal kapan nikah.',
+        partnerPrompt: 'Dia jujur takut kalau keputusannya nikah dipengaruhi tekanan umur dan desakan keluarga.',
+        consequenceQuestion: 'Lu sanggup nerima kenyataan bahwa lu mungkin dipilih sebagian karena faktor kejar tayang usia?',
+        compromises: [
+          'Tunda tanggal nikah minimal 6 bulan sampai yakin 100% bukan karena panik.',
+          'Pasang tameng bareng menghadapi pertanyaan keluarga besar.',
+          'Uji kecocokan lewat manajemen proyek/keuangan bareng sebelum lamaran.'
+        ],
+        botPref: { young: 0, mid: 2, mature: 2 }
+      },
+      {
+        id: 'KH_F_A2',
+        category: 'Ketakutan Hidup',
+        gender: 'Perempuan',
+        ageGroup: 'adult',
+        segmentLabel: 'Perempuan • 26+',
+        statement: 'Gua takut banget udah umur segini harus mulai kenalan dan adaptasi dari nol lagi kalau hubungan ini gagal.',
+        partnerPrompt: 'Dia kelelahan secara mental buat mulai PDKT dari awal lagi kalau hubungan ini kandas.',
+        consequenceQuestion: 'Lu yakin dia bertahan di diskusi ini karena beneran cocok sama lu, bukan karena males mulai dari nol lagi?',
+        compromises: [
+          'Sepakat nggak bertahan cuma karena faktor "sayang udah lama".',
+          'Bikin komitmen perbaikan nyata dengan tenggat waktu jelas.',
+          'Berani ambil jeda evaluasi 1 minggu tanpa komunikasi kalau buntu.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 0 }
+      },
+
+      // ==================== KATEGORI 2: KEBIASAAN BURUK ====================
+      {
+        id: 'KB_U1',
+        category: 'Kebiasaan Buruk',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Kalau lagi stres atau capek mental, pelarian gua adalah belanja impulsif atau jajan mahal walau saldo lagi sekarat.',
+        partnerPrompt: 'Dia punya kebiasaan "retail therapy" — belanja impulsif dan jajan mahal tiap lagi stres meski saldo tipis.',
+        consequenceQuestion: 'Lu sanggup ngerem kebiasaan jajan impulsifnya tanpa bikin dia ngerasa dikekang soal duitnya sendiri?',
+        compromises: [
+          'Sediakan pos "Dana Jajan Stres" maksimal 5% dari gaji per bulan.',
+          'Wajib terapkan aturan tunggu 48 jam sebelum checkout barang di atas 200rb.',
+          'Alihkan pelarian stres ke olahraga atau masak bareng di rumah.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 1 }
+      },
+      {
+        id: 'KB_U2',
+        category: 'Kebiasaan Buruk',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua sering doomscrolling sampai subuh, terus besoknya ngeluh capek dan nunda semua kerjaan penting.',
+        partnerPrompt: 'Dia sering begadang doomscrolling sampai subuh, lalu besoknya moody dan ngaret semua jadwal.',
+        consequenceQuestion: 'Lu tahan punya pasangan yang susah diajak ketemu pagi dan sering bad mood karena kurang tidur?',
+        compromises: [
+          'Sepakat taruh HP di luar kamar tidur 30 menit sebelum jam tidur.',
+          'Nggak ada jadwal kencan atau urusan penting sebelum jam 11 siang di weekend.',
+          'Saling ingetin jam tidur tanpa nada menggurui.'
+        ],
+        botPref: { young: 1, mid: 0, mature: 0 }
+      },
+      {
+        id: 'KB_U3',
+        category: 'Kebiasaan Buruk',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua gampang tergiur cicilan atau paylater demi gaya hidup yang sebenernya di luar kemampuan gaji gua.',
+        partnerPrompt: 'Dia gampang tergoda pakai paylater dan cicilan demi menjaga gengsi gaya hidup.',
+        consequenceQuestion: 'Lu siap kalau suatu saat tabunganku harus kepake buat nutupin tunggakan paylater atau cicilannya?',
+        compromises: [
+          'Wajib tutup semua akun paylater sebelum masuk tahap lamaran.',
+          'Cek SLIK OJK / riwayat kredit masing-masing secara transparan.',
+          'Bikin aturan dilarang nyicil barang konsumtif (hanya aset produktif).'
+        ],
+        botPref: { young: 2, mid: 1, mature: 1 }
+      },
+      {
+        id: 'KB_U4',
+        category: 'Kebiasaan Buruk',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua orangnya berantakan banget soal barang dan kamar, dan baru gerak beres-beres kalau udah bener-bener sumpek.',
+        partnerPrompt: 'Dia cukup berantakan soal kerapian ruangan dan baru bersih-bersih kalau kondisinya udah parah.',
+        consequenceQuestion: 'Lu siap jadi pihak yang lebih sering beres-beres, atau tahan tinggal di rumah yang berantakan?',
+        compromises: [
+          'Terapkan aturan "15 menit beres-beres bareng" tiap malam sebelum tidur.',
+          'Patungan bayar layanan home cleaning seminggu sekali.',
+          'Punya zona pribadi masing-masing yang bebas diatur sesuka hati.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 1 }
+      },
+      // Gender Specific General (Kebiasaan Buruk)
+      {
+        id: 'KB_M_ALL',
+        category: 'Kebiasaan Buruk',
+        gender: 'Laki-laki',
+        ageGroup: 'ALL',
+        segmentLabel: 'Laki-laki • 18–35',
+        statement: 'Gua sering lupa tanggal-tanggal penting, detail cerita pasangan, atau janji-janji kecil yang menurut gua sepele.',
+        partnerPrompt: 'Dia pelupa banget soal tanggal penting, detail obrolan, dan janji-janji kecil.',
+        consequenceQuestion: 'Lu yakin nggak bakal sakit hati pas dia lupa tanggal anniversary atau hal kecil yang udah lu ceritain?',
+        compromises: [
+          'Wajib pasang pengingat kalender bareng dengan alarm H-3.',
+          'Pasangan boleh ngingetin langsung tanpa kode-kodean ngambek.',
+          'Fokus ke konsistensi perhatian harian daripada seremoni tanggal.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 2 }
+      },
+      {
+        id: 'KB_F_ALL',
+        category: 'Kebiasaan Buruk',
+        gender: 'Perempuan',
+        ageGroup: 'ALL',
+        segmentLabel: 'Perempuan • 18–35',
+        statement: 'Kalau mood gua lagi hancur atau PMS, nada bicara gua bisa ketus banget padahal pasangan gua nggak salah apa-apa.',
+        partnerPrompt: 'Dia sering melampiaskan bad mood atau PMS lewat nada bicara yang ketus meski lu nggak salah.',
+        consequenceQuestion: 'Lu sanggup tetep kalem dan nggak ikut terpancing emosi pas kena semprot tanpa sebab?',
+        compromises: [
+          'Kasih peringatan awal "mood lagi sensitif" sebelum ngobrol serius.',
+          'Wajib minta maaf setelah emosi reda kalau sempat bicara kasar.',
+          'Kasih waktu menyendiri 1-2 jam + makanan favorit sampai tenang.'
+        ],
+        botPref: { young: 2, mid: 1, mature: 1 }
+      },
+      // Gender + Age Specific (Kebiasaan Buruk - Young 18-25)
+      {
+        id: 'KB_M_Y1',
+        category: 'Kebiasaan Buruk',
+        gender: 'Laki-laki',
+        ageGroup: 'young',
+        segmentLabel: 'Laki-laki • 18–25',
+        statement: 'Kalau udah keasyikan main game, nongkrong, atau hobi, gua bisa ngilang berjam-jam tanpa ngabarin pasangan.',
+        partnerPrompt: 'Dia bisa hilang kabar berjam-jam tanpa notif kalau udah asyik mabar game atau nongkrong sama temennya.',
+        consequenceQuestion: 'Lu sanggup nahan overthinking pas chat lu cuma centang satu berjam-jam demi hobinya?',
+        compromises: [
+          'Wajib kirim kabar singkat sebelum mulai mabar/nongkrong + estimasi selesai.',
+          'Bebas hobi tanpa diganggu asal komitmen 1 jam ngobrol sebelum tidur.',
+          'Ikut nimbrung sesekali biar kenal circle pertemanannya.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 1 }
+      },
+      {
+        id: 'KB_M_Y2',
+        category: 'Kebiasaan Buruk',
+        gender: 'Laki-laki',
+        ageGroup: 'young',
+        segmentLabel: 'Laki-laki • 18–25',
+        statement: 'Gua susah nolak ajakan temen buat nongkrong dadakan, meskipun sebenernya gaji/uang bulanan gua udah menipis.',
+        partnerPrompt: 'Dia nggak enakan sama temen tongkrongan sampai sering maksain nongkrong meski dompet lagi tipis.',
+        consequenceQuestion: 'Lu siap ngadepin dia yang lebih takut dibilang pelit sama temennya daripada mikirin tabungan kalian?',
+        compromises: [
+          'Bikin jatah budget nongkrong bulanan yang kalau habis ya wajib di rumah.',
+          'Ganti lokasi nongkrong ke rumah/kost biar tetep kumpul tapi hemat.',
+          'Belajar bilang "lagi nabung buat masa depan" tanpa gengsi.'
+        ],
+        botPref: { young: 1, mid: 0, mature: 2 }
+      },
+      {
+        id: 'KB_F_Y1',
+        category: 'Kebiasaan Buruk',
+        gender: 'Perempuan',
+        ageGroup: 'young',
+        segmentLabel: 'Perempuan • 18–25',
+        statement: 'Gua sering bilang "terserah" atau "aku gapapa", padahal dalam hati ngarep pasangan peka dan nebak sendiri maunya gua apa.',
+        partnerPrompt: 'Dia hobi bilang "terserah" atau "gapapa", tapi ngambek kalau lu gagal nebak isi pikirannya.',
+        consequenceQuestion: 'Lu sanggup main tebak-tebakan perasaan tiap minggu tanpa kehilangan kesabaran?',
+        compromises: [
+          'Hapus kata "terserah" — wajib kasih minimal 2 opsi pilihan konkret.',
+          'Kalau bilang "gapapa", pasangan berhak menganggap beneran aman.',
+          'Latihan ngomong langsung apa yang dibutuhin dalam 1 kalimat jelas.'
+        ],
+        botPref: { young: 0, mid: 2, mature: 2 }
+      },
+      {
+        id: 'KB_F_Y2',
+        category: 'Kebiasaan Buruk',
+        gender: 'Perempuan',
+        ageGroup: 'young',
+        segmentLabel: 'Perempuan • 18–25',
+        statement: 'Gua sering curhat detail masalah hubungan kita ke sahabat-sahabat gua tiap kali kita lagi ribut.',
+        partnerPrompt: 'Dia sering curhatin masalah internal hubungan kalian ke sahabat-sahabatnya setiap kali ribut.',
+        consequenceQuestion: 'Lu siap kalau setiap kesalahan lu bakal diketahui dan dihakimi sama geng sahabatnya?',
+        compromises: [
+          'Sepakat masalah internal dilarang diceritain ke temen sebelum dibahas berdua.',
+          'Boleh curhat maksimal ke 1 orang netral yang dewasa, bukan ke grup.',
+          'Selesaikan konflik di hari yang sama biar nggak bocor keluar.'
+        ],
+        botPref: { young: 1, mid: 0, mature: 0 }
+      },
+      // Gender + Age Specific (Kebiasaan Buruk - Adult 26+)
+      {
+        id: 'KB_M_A1',
+        category: 'Kebiasaan Buruk',
+        gender: 'Laki-laki',
+        ageGroup: 'adult',
+        segmentLabel: 'Laki-laki • 26+',
+        statement: 'Kalau lagi ada masalah berat di kerjaan, gua milih nutup diri dan diem seharian daripada cerita ke pasangan.',
+        partnerPrompt: 'Dia tipe yang masuk ke "gua" dan membisu seharian kalau lagi stres berat sama kerjaan.',
+        consequenceQuestion: 'Lu tahan nggak ngerasa dicuekin atau diabaikan pas dia butuh waktu diem seharian?',
+        compromises: [
+          'Kirim pesan singkat "Lagi butuh waktu mikir sampai malem ya" biar nggak bikin cemas.',
+          'Maksimal waktu tutup diri adalah 24 jam, setelah itu wajib cerita.',
+          'Pasangan cukup nemenin di ruangan yang sama tanpa maksa ngobrol.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 0 }
+      },
+      {
+        id: 'KB_M_A2',
+        category: 'Kebiasaan Buruk',
+        gender: 'Laki-laki',
+        ageGroup: 'adult',
+        segmentLabel: 'Laki-laki • 26+',
+        statement: 'Gua terlalu workaholic sampai sering buka laptop atau bales chat kerjaan pas lagi jalan berdua sama pasangan.',
+        partnerPrompt: 'Dia workaholic akut yang masih sering balesin chat kerjaan pas lagi kencan berdua.',
+        consequenceQuestion: 'Lu ikhlas posisi lu sering jadi nomor dua setelah urusan klien dan deadline kantornya?',
+        compromises: [
+          'Terapkan aturan "No Laptop & Silent Work Chat" selama 2 jam pas kencan.',
+          'Pisahkan HP kerja dan HP pribadi setelah jam 8 malam.',
+          'Kompensasi waktu kerja lembur dengan liburan berkualitas di akhir pekan.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 1 }
+      },
+      {
+        id: 'KB_F_A1',
+        category: 'Kebiasaan Buruk',
+        gender: 'Perempuan',
+        ageGroup: 'adult',
+        segmentLabel: 'Perempuan • 26+',
+        statement: 'Gua punya kebiasaan nge-stalk masa lalu pasangan atau mantan-mantannya sampai bikin mood gua sendiri rusak.',
+        partnerPrompt: 'Dia hobi kepo dan nge-stalk jejak digital mantan-mantanmu sampai akhirnya bad mood sendiri.',
+        consequenceQuestion: 'Lu siap ngadepin kecemburuan masa lalu yang sebenernya udah selesai bertahun-tahun lalu?',
+        compromises: [
+          'Bersihkan foto/jejak mantan di media sosial demi ketenangan bersama.',
+          'Sepakat stop kepo akun masa lalu dan fokus ke masa depan.',
+          'Kasih kepastian sikap nyata kalau masa lalu udah beneran tutup buku.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 1 }
+      },
+      {
+        id: 'KB_F_A2',
+        category: 'Kebiasaan Buruk',
+        gender: 'Perempuan',
+        ageGroup: 'adult',
+        segmentLabel: 'Perempuan • 26+',
+        statement: 'Gua gampang panik dan over-planning soal masa depan sampai bikin pasangan ngerasa lagi di-interview kerja.',
+        partnerPrompt: 'Dia suka bikin checklist masa depan yang kaku sampai diskusi hubungan berasa kayak interview HRD.',
+        consequenceQuestion: 'Lu sanggup ngikutin standar timeline hidupnya yang detail tanpa ngerasa tertekan?',
+        compromises: [
+          'Bahas rencana jangka panjang cukup 1 bulan sekali dalam suasana santai.',
+          'Ubah checklist kaku jadi rencana fleksibel yang disusun berdua.',
+          'Sisihkan waktu kencan tanpa boleh bahas target masa depan sama sekali.'
+        ],
+        botPref: { young: 2, mid: 0, mature: 1 }
+      },
+
+      // ==================== KATEGORI 3: SIFAT JELEK & RED FLAG EGO ====================
+      {
+        id: 'SJ_U1',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Kalau lagi berantem, gua lebih milih menang debat dan nyari siapa yang salah daripada nyari solusi bareng.',
+        partnerPrompt: 'Dia kompetitif banget pas berantem — lebih fokus menang debat daripada nyari jalan keluar.',
+        consequenceQuestion: 'Lu siap nelen ego buat ngalah duluan cuma supaya debat kusir kalian berhenti?',
+        compromises: [
+          'Gunakan prinsip "Kita lawan masalah, bukan aku lawan kamu".',
+          'Stop debat kalau nada suara udah naik; lanjut setelah dingin 30 menit.',
+          'Fokus bahas "ke depannya gimana" daripada nyalahin "tadi siapa yang mulai".'
+        ],
+        botPref: { young: 1, mid: 0, mature: 0 }
+      },
+      {
+        id: 'SJ_U2',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua sering ngasih silent treatment (mendiamkan pasangan) berhari-hari daripada ngomongin masalahnya secara dewasa.',
+        partnerPrompt: 'Dia sering ngasih silent treatment dingin berhari-hari setiap kali kecewa atau marah.',
+        consequenceQuestion: 'Lu kuat mental didiemin berhari-hari tanpa kepastian di tengah konflik yang menggantung?',
+        compromises: [
+          'Ganti silent treatment dengan "time-out" resmi maksimal 3 jam.',
+          'Wajib selesaikan masalah sebelum tidur, minimal sepakat damai sementara.',
+          'Tulis lewat chat kalau emang lagi susah ngomong langsung.'
+        ],
+        botPref: { young: 0, mid: 1, mature: 0 }
+      },
+      {
+        id: 'SJ_U3',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua sering terlalu ngatur dan nuntut pasangan berubah sesuai standar gua, tapi gua sendiri ogah dikritik.',
+        partnerPrompt: 'Dia cenderung perfeksionis ngatur standar pasangannya, tapi defensif kalau dirinya dikritik.',
+        consequenceQuestion: 'Lu rela kehilangan sebagian kebebasan pribadimu demi ngikutin standar aturannya?',
+        compromises: [
+          'Pisahkan mana "prinsip wajib" dan mana "preferensi pribadi" yang nggak boleh dipaksa.',
+          'Terapkan aturan kritik 1-banding-1 (setiap koreksi wajib dibarengi apresiasi).',
+          'Hormati cara masing-masing dalam menyelesaikan hal teknis.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 0 }
+      },
+      {
+        id: 'SJ_U4',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'ALL',
+        ageGroup: 'ALL',
+        segmentLabel: 'Universal • 18–35',
+        statement: 'Gua gampang ilfeel dan pengen kabur menjauh begitu hubungan mulai masuk fase serius atau ngebosenin.',
+        partnerPrompt: 'Dia punya kecenderungan avoidant — gampang ilfeel dan pengen kabur pas hubungan mulai datar atau serius.',
+        consequenceQuestion: 'Lu siap berjuang sendirian menjaga api hubungan pas dia tiba-tiba ngerasa hambar dan pengen menjauh?',
+        compromises: [
+          'Pahami bahwa fase tenang bukan berarti hilang rasa, tapi tanda hubungan stabil.',
+          'Cari tantangan atau hobi baru bareng tiap 3 bulan buat ngusir jenuh.',
+          'Komitmen nggak ambil keputusan putus pas lagi ngerasa bosan sesaat.'
+        ],
+        botPref: { young: 1, mid: 0, mature: 0 }
+      },
+      // Gender Specific General (Sifat Jelek)
+      {
+        id: 'SJ_M_ALL',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'Laki-laki',
+        ageGroup: 'ALL',
+        segmentLabel: 'Laki-laki • 18–35',
+        statement: 'Gua susah banget minta maaf duluan, bahkan di saat gua sadar kalau gua yang salah.',
+        partnerPrompt: 'Dia punya ego tinggi yang bikin dia susah banget ngucapin kata "maaf" duluan meski sadar salah.',
+        consequenceQuestion: 'Lu sanggup hidup bareng orang yang gengsi minta maaf dan cuma nunjukkin penyesalan lewat tindakan?',
+        compromises: [
+          'Latih ucapkan kata "maaf" secara verbal minimal untuk kesalahan besar.',
+          'Pasangan belajar baca bahasa permintaan maaf lewat tindakannya.',
+          'Buat kode lucu buat mencairkan gengsi pas sama-sama sadar salah.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 1 }
+      },
+      {
+        id: 'SJ_F_ALL',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'Perempuan',
+        ageGroup: 'ALL',
+        segmentLabel: 'Perempuan • 18–35',
+        statement: 'Gua gampang ngungkit-ngungkit kesalahan lama pasangan tiap kali kita lagi ribut soal masalah baru.',
+        partnerPrompt: 'Dia punya "arsip ingatan tajam" dan suka ngungkit kesalahan lama tiap kali kalian ribut masalah baru.',
+        consequenceQuestion: 'Lu siap mental kalau kesalahan lu hari ini bakal terus diputar ulang di pertengkaran tahun depan?',
+        compromises: [
+          'Terapkan aturan "1 Konflik = 1 Topik", dilarang bawa arsip masa lalu.',
+          'Masalah yang udah dimaafin dianggap hangus dan nggak valid lagi.',
+          'Boleh bahas pola berulang hanya kalau terjadi lagi dalam 30 hari terakhir.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 0 }
+      },
+      // Gender + Age Specific (Sifat Jelek - Young 18-25)
+      {
+        id: 'SJ_M_Y1',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'Laki-laki',
+        ageGroup: 'young',
+        segmentLabel: 'Laki-laki • 18–25',
+        statement: 'Gua gampang cemburu dan posesif kalau pasangan deket sama temen lawan jenis, meski gua sendiri pengen bebas berteman.',
+        partnerPrompt: 'Dia punya standar ganda: gampang cemburu sama temen lawan jenismu, tapi nuntut bebas buat dirinya sendiri.',
+        consequenceQuestion: 'Lu sanggup ngejalanin aturan pertemanan yang ketat sementara dia dapet kelonggaran lebih?',
+        compromises: [
+          'Terapkan standar batasan pertemanan lawan jenis yang 100% adil & sama.',
+          'Saling kenalin temen-temen deket biar nggak ada rasa curiga.',
+          'Transparan soal aktivitas tanpa harus saling cek HP tiap jam.'
+        ],
+        botPref: { young: 1, mid: 0, mature: 0 }
+      },
+      {
+        id: 'SJ_F_Y1',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'Perempuan',
+        ageGroup: 'young',
+        segmentLabel: 'Perempuan • 18–25',
+        statement: 'Gua sering ngetes kesetiaan atau kesabaran pasangan pakai drama kecil cuma buat mastiin dia masih peduli.',
+        partnerPrompt: 'Dia suka bikin drama kecil buat "ngetes" seberapa sabar dan peduli lu sama dia.',
+        consequenceQuestion: 'Lu tahan ngadepin ujian drama dadakan yang sebenernya cuma cara dia nyari perhatian?',
+        compromises: [
+          'Stop bikin tes drama — ganti dengan minta perhatian secara langsung.',
+          'Pasangan kasih waktu perhatian penuh 30 menit tiap hari tanpa HP.',
+          'Kalau ketahuan ngetes, diskusi langsung kenapa dia lagi butuh kepastian.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 0 }
+      },
+      // Gender + Age Specific (Sifat Jelek - Adult 26+)
+      {
+        id: 'SJ_M_A1',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'Laki-laki',
+        ageGroup: 'adult',
+        segmentLabel: 'Laki-laki • 26+',
+        statement: 'Gua cenderung ngerasa paling logis dan nganggep perasaan pasangan terlalu emosional atau lebay pas lagi diskusi.',
+        partnerPrompt: 'Dia sering ngeremehin perasaanmu sebagai "terlalu emosional" karena ngerasa dirinya paling logis.',
+        consequenceQuestion: 'Lu siap kalau keluhan emosionalmu sering dibales pakai argumen dingin dan data logika?',
+        compromises: [
+          'Validasi emosi pasangan dulu ("Aku ngerti kamu capek") sebelum kasih solusi.',
+          'Tanya dulu: "Kamu lagi pengen didengerin aja atau dicariin solusi?".',
+          'Hormati bahwa empati dan logika punya bobot yang sama pentingnya.'
+        ],
+        botPref: { young: 1, mid: 1, mature: 0 }
+      },
+      {
+        id: 'SJ_F_A1',
+        category: 'Sifat Jelek & Red Flag Ego',
+        gender: 'Perempuan',
+        ageGroup: 'adult',
+        segmentLabel: 'Perempuan • 26+',
+        statement: 'Gua gampang nyimpen dendam halus dan bersikap pasif-agresif (nyindir halus) kalau keinginan gua nggak diturutin.',
+        partnerPrompt: 'Dia cenderung pasif-agresif dan nyindir halus kalau kemauannya nggak keturutan.',
+        consequenceQuestion: 'Lu sanggup nangkap sindiran halusnya atau tahan sama suasana dingin penuh kode sindiran?',
+        compromises: [
+          'Dilarang nyindir — biasakan bilang "Aku kecewa karena..." secara lugas.',
+          'Pasangan wajib dengerin keberatan tanpa langsung defensif.',
+          'Evaluasi ekspektasi masing-masing biar nggak ada harapan sepihak.'
+        ],
+        botPref: { young: 0, mid: 0, mature: 0 }
+      }
+    ];
+
+    /**
+     * 3. GLOBAL GAME STATE
+     */
+    const state = {
+      landingTab: 'new', // 'new' | 'invite'
+      inviteCode: '',
+      player1: null, // { name, email, gender, age, questions: [], answers: { [qId]: 'iya'|'kayanya'|'engga' } }
+      player2: null, // Bot AI or Human Partner
+      mode: 'solo', // 'solo' | 'couple'
+      quizTarget: 'player1', // 'player1' | 'player2'
+      quizIndex: 0,
+      
+      // Gameplay State
+      battery: 50,
+      round: 1,
+      maxRounds: 8,
+      deck: [], // 8 cards drawn for the match
+      currentCard: null,
+      turnOwner: 'player1', // In couple mode, alternates player1 & player2
+      timerSeconds: 60,
+      timerInterval: null,
+      consecutiveTimeouts: 0,
+      
+      // Negotiation state for couple pass-and-play
+      coupleNegotiationP1Choice: null,
+      
+      // Match History & Stats
+      history: [],
+      stats: {
+        terimaMantap: 0,
+        menyesal: 0,
+        kompromiSepakat: 0,
+        deadlockOrAfk: 0
+      }
+    };
+
+    /**
+     * 4. HELPER UTILITIES (TOAST, CLIPBOARD, NAVIGATION)
+     */
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      const styles = {
+        success: 'bg-emerald-950/95 border-emerald-500/60 text-emerald-200',
+        error: 'bg-red-950/95 border-red-500/60 text-red-200',
+        warning: 'bg-amber-950/95 border-amber-500/60 text-amber-200',
+        info: 'bg-slate-900/95 border-slate-700 text-slate-200'
+      };
+      const icons = { success: '✅', error: '🚨', warning: '⚠️', info: '💬' };
+
+      toast.className = `pointer-events-auto px-4 py-3 rounded-2xl border backdrop-blur-md shadow-2xl text-xs font-bold flex items-center gap-2.5 animate-card-enter ${styles[type] || styles.info}`;
+      toast.innerHTML = `<span class="text-sm">${icons[type] || '💬'}</span><span>${message}</span>`;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(-8px)';
+        toast.style.transition = 'all 0.25s ease';
+        setTimeout(() => toast.remove(), 260);
+      }, 2800);
+    }
+
+    function copyTextSafe(text, successMsg) {
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      textArea.style.position = 'fixed';
+      textArea.style.left = '-9999px';
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand('copy');
+        showToast(successMsg || 'Berhasil disalin!', 'success');
+      } catch (err) {
+        showToast('Gagal menyalin otomatis, silakan salin manual.', 'warning');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function showScreen(screenId) {
+      const screens = ['screen-register', 'screen-quiz', 'screen-mode', 'screen-partner-join', 'screen-game', 'screen-ending'];
+      screens.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+      const target = document.getElementById(screenId);
+      if (target) {
+        target.classList.remove('hidden');
+        target.classList.remove('animate-card-enter');
+        void target.offsetWidth; // trigger reflow
+        target.classList.add('animate-card-enter');
+      }
+
+      // Show/Hide header reset button
+      const resetBtn = document.getElementById('headerResetBtn');
+      if (screenId === 'screen-register') {
+        resetBtn.classList.add('hidden');
+      } else {
+        resetBtn.classList.remove('hidden');
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function confirmResetApp() {
+      stopTurnTimer();
+      fullResetGame();
+      showToast('Sesi direset. Silakan mulai dari awal.', 'info');
+    }
+
+    /**
+     * 5. SCREEN 1 LOGIC: REGISTRASI & VALIDASI 18+
+     */
+    function switchLandingTab(tab) {
+      SoundFX.tap();
+      state.landingTab = tab;
+      const tabNew = document.getElementById('tabNewPlayer');
+      const tabInv = document.getElementById('tabJoinInvite');
+      const banner = document.getElementById('inviteCodeBanner');
+      const btnText = document.getElementById('submitBtnText');
+      document.getElementById('registerErrorBox').classList.add('hidden');
+
+      if (tab === 'new') {
+        tabNew.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold bg-rose-500 text-white shadow-md shadow-rose-500/20 transition';
+        tabInv.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition';
+        banner.classList.add('hidden');
+        btnText.textContent = 'Lanjut ke 20 Pengakuan Hidup';
+      } else {
+        tabInv.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20 transition';
+        tabNew.className = 'py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold text-slate-400 hover:text-white transition';
+        banner.classList.remove('hidden');
+        btnText.textContent = 'Gabung Kode & Isi 20 Pengakuan';
+      }
+    }
+
+    function fillDemoInviteCode() {
+      SoundFX.tap();
+      document.getElementById('inputJoinCode').value = 'KAWIN-888';
+      showToast('Kode demo KAWIN-888 terpasang (Pengundang: Laki-laki, 26 thn).', 'info');
+    }
+
+    function quickFillDemoUser() {
+      SoundFX.tap();
+      const samples = [
+        { name: 'Raka', email: 'raka.drama@mail.com', gender: 'Laki-laki', age: 24 },
+        { name: 'Nadya', email: 'nadya.jujur@mail.com', gender: 'Perempuan', age: 27 },
+        { name: 'Dimas', email: 'dimas.realistis@mail.com', gender: 'Laki-laki', age: 29 },
+        { name: 'Keisya', email: 'keisya.overthink@mail.com', gender: 'Perempuan', age: 22 }
+      ];
+      // Pick opposite gender if joining demo invite code KAWIN-888 (host is Laki-laki)
+      let pick = samples[Math.floor(Math.random() * samples.length)];
+      if (state.landingTab === 'invite') {
+        pick = samples[1]; // Perempuan
+      }
+      document.getElementById('regName').value = pick.name;
+      document.getElementById('regEmail').value = pick.email;
+      document.getElementById('regAge').value = pick.age;
+      const radios = document.getElementsByName('regGender');
+      radios.forEach(r => { r.checked = (r.value === pick.gender); });
+      document.getElementById('registerErrorBox').classList.add('hidden');
+      showToast(`Data demo (${pick.name}, ${pick.gender}, ${pick.age} thn) diisi!`, 'success');
+    }
+
+    function showRegisterError(title, text) {
+      SoundFX.penalty();
+      const box = document.getElementById('registerErrorBox');
+      document.getElementById('registerErrorTitle').textContent = title;
+      document.getElementById('registerErrorText').textContent = text;
+      box.classList.remove('hidden');
+      box.classList.remove('animate-shake');
+      void box.offsetWidth;
+      box.classList.add('animate-shake');
+    }
+
+    function handleRegistration(e) {
+      e.preventDefault();
+      const name = document.getElementById('regName').value.trim();
+      const email = document.getElementById('regEmail').value.trim();
+      const age = parseInt(document.getElementById('regAge').value, 10);
+      const genderEl = document.querySelector('input[name="regGender"]:checked');
+      const gender = genderEl ? genderEl.value : 'Laki-laki';
+
+      // STRICT 18+ VALIDATION
+      if (isNaN(age) || age < 18) {
+        showRegisterError(
+          'Akses Ditolak! Minimal usia 18 tahun untuk mengurus drama hubungan.',
+          `Usiamu baru ${isNaN(age) ? 'belum jelas' : age + ' tahun'}. Kelarin dulu urusan sekolah/kuliah sebelum uji nyali soal KUA!`
+        );
+        return;
+      }
+
+      // If joining via Invite Code tab on Landing
+      if (state.landingTab === 'invite') {
+        const code = document.getElementById('inputJoinCode').value.trim().toUpperCase();
+        if (!code || code.length < 4) {
+          showRegisterError('Kode Undangan Kosong!', 'Masukkan kode undangan pasanganmu (atau klik tombol Kode Demo).');
+          return;
+        }
+        // Simulated Host Profile for Invite Code on Landing (Host = Laki-laki, 26 thn)
+        const simulatedHost = {
+          name: 'Arkan (Pengundang)',
+          email: 'arkan@host.id',
+          gender: 'Laki-laki',
+          age: 26,
+          questions: build20QuestionsForProfile('Laki-laki', 26),
+          answers: {}
+        };
+        // Pre-populate realistic host answers
+        simulatedHost.questions.forEach((q, idx) => {
+          simulatedHost.answers[q.id] = idx % 3 === 0 ? 'iya' : (idx % 3 === 1 ? 'kayanya' : 'engga');
+        });
+
+        // Strict Opposite Gender Check
+        if (gender === simulatedHost.gender) {
+          showRegisterError(
+            'Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.',
+            `Kode ${code} dibuat oleh ${simulatedHost.name} (${simulatedHost.gender}). Kamu tidak bisa bergabung dengan jenis kelamin yang sama.`
+          );
+          return;
+        }
+
+        state.inviteCode = code;
+        state.mode = 'couple';
+        state.player1 = simulatedHost;
+        state.player2 = {
+          name,
+          email,
+          gender,
+          age,
+          questions: build20QuestionsForProfile(gender, age),
+          answers: {}
+        };
+        startQuizFor('player2');
+        return;
+      }
+
+      // Normal New Player Registration
+      SoundFX.tap();
+      document.getElementById('registerErrorBox').classList.add('hidden');
+      state.mode = 'solo';
+      state.inviteCode = 'KAWIN-' + Math.floor(100 + Math.random() * 899);
+      state.player1 = {
+        name,
+        email,
+        gender,
+        age,
+        questions: build20QuestionsForProfile(gender, age),
+        answers: {}
+      };
+      state.player2 = null;
+      startQuizFor('player1');
+    }
+
+    /**
+     * 6. DYNAMIC 20-QUESTION BUILDER (FILTERED BY GENDER & AGE GROUP)
+     */
+    function build20QuestionsForProfile(gender, age) {
+      const ageGroup = age <= 25 ? 'young' : 'adult';
+      const categories = ['Ketakutan Hidup', 'Kebiasaan Buruk', 'Sifat Jelek & Red Flag Ego'];
+      let finalDeck = [];
+
+      categories.forEach(cat => {
+        const pool = QUESTION_BANK.filter(q =>
+          q.category === cat &&
+          (q.gender === 'ALL' || q.gender === gender) &&
+          (q.ageGroup === 'ALL' || q.ageGroup === ageGroup)
+        );
+        finalDeck = finalDeck.concat(pool);
+      });
+
+      // Ensure exact 20 questions
+      return finalDeck.slice(0, 20);
+    }
+
+    /**
+     * 7. SCREEN 2 LOGIC: FASE 20 PERTANYAAN KEHIDUPAN
+     */
+    function startQuizFor(targetKey) {
+      state.quizTarget = targetKey;
+      state.quizIndex = 0;
+      const profile = state[targetKey];
+      document.getElementById('quizPlayerBadge').textContent = `${profile.name} (${profile.gender === 'Laki-laki' ? '👨' : '👩'} ${profile.age} thn)`;
+      showScreen('screen-quiz');
+      renderCurrentQuizQuestion();
+    }
+
+    function renderCurrentQuizQuestion() {
+      const profile = state[state.quizTarget];
+      const q = profile.questions[state.quizIndex];
+      const total = profile.questions.length;
+
+      document.getElementById('quizCurrentNum').textContent = state.quizIndex + 1;
+      document.getElementById('quizSegmentBadge').textContent = q.segmentLabel;
+      document.getElementById('quizQuestionTag').textContent = `#${String(state.quizIndex + 1).padStart(2, '0')}`;
+      document.getElementById('quizStatementText').textContent = `"${q.statement}"`;
+
+      const pct = ((state.quizIndex + 1) / total) * 100;
+      document.getElementById('quizProgressBar').style.width = `${pct}%`;
+
+      // Category Badge Styling
+      const catBadge = document.getElementById('quizCategoryBadge');
+      catBadge.textContent = q.category;
+      if (q.category === 'Ketakutan Hidup') {
+        catBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide bg-indigo-500/15 text-indigo-300 border border-indigo-500/30';
+      } else if (q.category === 'Kebiasaan Buruk') {
+        catBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide bg-amber-500/15 text-amber-300 border border-amber-500/30';
+      } else {
+        catBadge.className = 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide bg-rose-500/15 text-rose-400 border border-rose-500/30';
+      }
+
+      // Trigger Card Enter Animation
+      const card = document.getElementById('quizCardContainer');
+      card.classList.remove('animate-card-enter');
+      void card.offsetWidth;
+      card.classList.add('animate-card-enter');
+    }
+
+    function answerQuiz(choice) {
+      SoundFX.tap();
+      const profile = state[state.quizTarget];
+      const q = profile.questions[state.quizIndex];
+      profile.answers[q.id] = choice;
+
+      if (state.quizIndex + 1 < profile.questions.length) {
+        state.quizIndex++;
+        renderCurrentQuizQuestion();
+      } else {
+        finishQuizPhase();
+      }
+    }
+
+    function autoCompleteQuizDemo() {
+      SoundFX.tap();
+      const profile = state[state.quizTarget];
+      const choices = ['iya', 'iya', 'kayanya', 'engga'];
+      for (let i = state.quizIndex; i < profile.questions.length; i++) {
+        const q = profile.questions[i];
+        profile.answers[q.id] = choices[(i + Math.floor(Math.random() * 3)) % choices.length];
+      }
+      showToast('Sisa pertanyaan otomatis terisi untuk simulasi!', 'success');
+      finishQuizPhase();
+    }
+
+    function finishQuizPhase() {
+      if (state.quizTarget === 'player2') {
+        // Partner finished answering via Invite Code -> jump straight to Couple Match!
+        showToast(`Dek masalah ${state.player2.name} siap! Memulai permainan pasangan...`, 'success');
+        startCoupleGameMatch();
+        return;
+      }
+
+      // Player 1 finished -> show Profile Summary & Mode Selection
+      renderProfileAndModeScreen();
+      showScreen('screen-mode');
+    }
+
+    /**
+     * 8. SCREEN 3 LOGIC: PROFIL BOROK & PEMILIHAN MODE (SOLO AI VS PASANGAN)
+     */
+    function renderProfileAndModeScreen() {
+      const p1 = state.player1;
+      document.getElementById('profilePlayerName').textContent = p1.name;
+      document.getElementById('profilePlayerMeta').textContent = `${p1.gender} • ${p1.age} thn`;
+      document.getElementById('generatedInviteCode').textContent = state.inviteCode;
+
+      let countIya = 0, countKayanya = 0, countEngga = 0;
+      const confessions = [];
+
+      p1.questions.forEach(q => {
+        const ans = p1.answers[q.id];
+        if (ans === 'iya') {
+          countIya++;
+          confessions.push({ tag: '🔥 Masalah', text: q.statement });
+        } else if (ans === 'kayanya') {
+          countKayanya++;
+          confessions.push({ tag: '🤔 Wildcard', text: q.statement });
+        } else {
+          countEngga++;
+        }
+      });
+
+      document.getElementById('countIyaBadge').textContent = countIya;
+      document.getElementById('countKayanyaBadge').textContent = countKayanya;
+      document.getElementById('countEnggaBadge').textContent = countEngga;
+
+      const listEl = document.getElementById('topConfessionsList');
+      listEl.innerHTML = '';
+      const previewItems = confessions.slice(0, 3);
+      if (previewItems.length === 0) {
+        listEl.innerHTML = `<li class="text-slate-400 italic">Kamu menjawab "Engga" semua! Pencitraan tingkat dewa — hati-hati kena kartu jebakan sistem.</li>`;
+      } else {
+        previewItems.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'flex items-start gap-2';
+          li.innerHTML = `<span class="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 border border-slate-700">${item.tag}</span><span class="line-clamp-2">"${item.text}"</span>`;
+          listEl.appendChild(li);
+        });
+      }
+
+      // Configure Bot AI Opposite Gender
+      const botGender = p1.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki';
+      document.getElementById('botAutoGenderLabel').textContent = botGender;
+      updateBotPreview();
+    }
+
+    function getBotPersonaConfig(botGender, botAge) {
+      const isFemale = botGender === 'Perempuan';
+      if (botAge <= 24) {
+        return {
+          name: isFemale ? 'Keisya' : 'Arkan',
+          age: botAge,
+          gender: botGender,
+          tier: 'young',
+          emoji: isFemale ? '👧' : '🧑',
+          vibe: 'Gen-Z Dramatis & Baperan',
+          bio: 'Ekspresif, butuh validasi tinggi, gampang overthinking kalau chat dibales singkat.',
+          reactAccept: 'Wah seriusan kamu nerima sifatku yang itu? Jangan cuma manis di awal doang ya!',
+          reactReject: 'Tuh kan! Pasti ujung-ujungnya kamu nggak ngertiin aku. Yaudah coba cari jalan tengahnya gimana!'
+        };
+      } else if (botAge <= 32) {
+        return {
+          name: isFemale ? 'Nadya' : 'Bagas',
+          age: botAge,
+          gender: botGender,
+          tier: 'mid',
+          emoji: isFemale ? '👩' : '👨',
+          vibe: 'Quarter-Life Realistis',
+          bio: 'Mikirin karier, stabilitas finansial, dan trauma masa lalu. Suka diskusi objektif.',
+          reactAccept: 'Oke, aku hargai kejujuranmu nerima itu. Tapi pastiin kamu sanggup nanggung efek sampingnya ya.',
+          reactReject: 'Fair enough, emang nggak semua hal harus diiyain. Ayo kita negosiasi kompromi yang masuk akal buat berdua.'
+        };
+      } else {
+        return {
+          name: isFemale ? 'Laras' : 'Dimas',
+          age: botAge,
+          gender: botGender,
+          tier: 'mature',
+          emoji: isFemale ? '👩‍💼' : '👨‍💼',
+          vibe: 'Pragmatis Siap Nikah',
+          bio: 'To-the-point, anti-drama, fokus efisiensi keuangan, keluarga, dan komitmen konkret.',
+          reactAccept: 'Bagus. Dalam pernikahan memang butuh kesiapan mental nerima kekurangan pasangan tanpa banyak drama.',
+          reactReject: 'Saya menghargai ketegasan kamu menolak. Sekarang pilih solusi paling praktis supaya ini nggak jadi masalah di rumah tangga.'
+        };
+      }
+    }
+
+    function updateBotPreview() {
+      const botAge = parseInt(document.getElementById('botAgeSlider').value, 10);
+      document.getElementById('botAgeValue').textContent = botAge;
+      const botGender = state.player1.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki';
+      const persona = getBotPersonaConfig(botGender, botAge);
+
+      document.getElementById('botAvatarEmoji').textContent = persona.emoji;
+      document.getElementById('botNameDisplay').textContent = `${persona.name} (${botAge} thn)`;
+      document.getElementById('botVibeBadge').textContent = persona.vibe;
+      document.getElementById('botBioDisplay').textContent = `"${persona.bio}"`;
+    }
+
+    function copyInviteCode() {
+      copyTextSafe(state.inviteCode, `Kode undangan ${state.inviteCode} disalin! Kirim ke pasangan lawan jenismu.`);
+    }
+
+    function openPartnerSimulatorModal() {
+      SoundFX.tap();
+      document.getElementById('partnerJoinCodeLabel').textContent = state.inviteCode;
+      document.getElementById('hostPlayerSummary').textContent = `${state.player1.name} (${state.player1.gender}, ${state.player1.age} thn)`;
+      document.getElementById('partnerErrorBox').classList.add('hidden');
+      // Default select opposite gender radio
+      const oppGender = state.player1.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki';
+      document.getElementsByName('partnerGender').forEach(r => { r.checked = (r.value === oppGender); });
+      showScreen('screen-partner-join');
+    }
+
+    function cancelPartnerJoin() {
+      SoundFX.tap();
+      showScreen('screen-mode');
+    }
+
+    function quickFillPartnerDemo() {
+      SoundFX.tap();
+      const oppGender = state.player1.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki';
+      document.getElementById('partnerNameInput').value = oppGender === 'Perempuan' ? 'Salsa' : 'Reza';
+      document.getElementById('partnerAgeInput').value = 25;
+      document.getElementsByName('partnerGender').forEach(r => { r.checked = (r.value === oppGender); });
+      document.getElementById('partnerErrorBox').classList.add('hidden');
+    }
+
+    function handlePartnerJoinSubmit(e) {
+      e.preventDefault();
+      const pName = document.getElementById('partnerNameInput').value.trim();
+      const pAge = parseInt(document.getElementById('partnerAgeInput').value, 10);
+      const pGenderEl = document.querySelector('input[name="partnerGender"]:checked');
+      const pGender = pGenderEl ? pGenderEl.value : 'Perempuan';
+      const errBox = document.getElementById('partnerErrorBox');
+
+      if (isNaN(pAge) || pAge < 18) {
+        SoundFX.penalty();
+        document.getElementById('partnerErrorTitle').textContent = 'Akses Ditolak! Minimal Usia 18+';
+        document.getElementById('partnerErrorText').textContent = 'Pasangan harus berusia minimal 18 tahun untuk bermain.';
+        errBox.classList.remove('hidden');
+        return;
+      }
+
+      // STRICT OPPOSITE GENDER VALIDATION
+      if (pGender === state.player1.gender) {
+        SoundFX.penalty();
+        document.getElementById('partnerErrorTitle').textContent = 'Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.';
+        document.getElementById('partnerErrorText').textContent = `${state.player1.name} terdaftar sebagai ${state.player1.gender}. Pasangan harus berjenis kelamin ${state.player1.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki'}.`;
+        errBox.classList.remove('hidden');
+        errBox.classList.remove('animate-shake');
+        void errBox.offsetWidth;
+        errBox.classList.add('animate-shake');
+        return;
+      }
+
+      errBox.classList.add('hidden');
+      state.mode = 'couple';
+      state.player2 = {
+        name: pName,
+        email: 'pasangan@invite.id',
+        gender: pGender,
+        age: pAge,
+        questions: build20QuestionsForProfile(pGender, pAge),
+        answers: {}
+      };
+      // Start 20-question quiz for Partner 2
+      startQuizFor('player2');
+    }
+
+    /**
+     * 9. GAMEPLAY INITIALIZATION (SOLO AI & COUPLE MODE)
+     */
+    function startSoloGame() {
+      SoundFX.tap();
+      state.mode = 'solo';
+      const botAge = parseInt(document.getElementById('botAgeSlider').value, 10);
+      const botGender = state.player1.gender === 'Laki-laki' ? 'Perempuan' : 'Laki-laki';
+      const persona = getBotPersonaConfig(botGender, botAge);
+      const botQuestions = build20QuestionsForProfile(botGender, botAge);
+
+      // Generate dynamic AI confessions influenced by Player 1's profile
+      const botAnswers = {};
+      botQuestions.forEach((q, i) => {
+        // Make sure bot has rich main issues ('iya') & wildcards ('kayanya')
+        if (i % 3 === 0 || i % 5 === 0) botAnswers[q.id] = 'iya';
+        else if (i % 2 === 0) botAnswers[q.id] = 'kayanya';
+        else botAnswers[q.id] = 'engga';
+      });
+
+      state.player2 = {
+        ...persona,
+        questions: botQuestions,
+        answers: botAnswers
+      };
+
+      initMatchArena();
+    }
+
+    function startCoupleGameMatch() {
+      state.mode = 'couple';
+      initMatchArena();
+    }
+
+    function buildMatchDeck() {
+      // Build 8 rounds. In Solo mode, all 8 cards come from Bot AI's confessions.
+      // In Couple mode, odd rounds come from P2 (for P1 to answer), even rounds come from P1 (for P2 to answer).
+      const extractDeckCards = (profile) => {
+        const mainCards = [];
+        const wildCards = [];
+        const fallbackCards = [];
+
+        profile.questions.forEach(q => {
+          const ans = profile.answers[q.id];
+          if (ans === 'iya') mainCards.push({ ...q, isWildcard: false, sourceOwner: profile.name });
+          else if (ans === 'kayanya') wildCards.push({ ...q, isWildcard: true, sourceOwner: profile.name });
+          else fallbackCards.push({ ...q, isWildcard: true, sourceOwner: profile.name });
+        });
+
+        // Shuffle helper
+        const shuffle = arr => arr.sort(() => Math.random() - 0.5);
+        shuffle(mainCards);
+        shuffle(wildCards);
+        shuffle(fallbackCards);
+
+        // Place main cards first, then wildcards in later rounds
+        return [...mainCards, ...wildCards, ...fallbackCards];
+      };
+
+      const p2Pool = extractDeckCards(state.player2);
+      const p1Pool = extractDeckCards(state.player1);
+      const matchDeck = [];
+
+      for (let r = 1; r <= state.maxRounds; r++) {
+        if (state.mode === 'solo') {
+          const card = p2Pool[(r - 1) % p2Pool.length];
+          matchDeck.push({ ...card, roundNum: r, responderKey: 'player1' });
+        } else {
+          // Alternate turns in Couple mode
+          if (r % 2 === 1) {
+            const card = p2Pool[Math.floor(r / 2) % p2Pool.length];
+            matchDeck.push({ ...card, roundNum: r, responderKey: 'player1' });
+          } else {
+            const card = p1Pool[Math.floor((r - 1) / 2) % p1Pool.length];
+            matchDeck.push({ ...card, roundNum: r, responderKey: 'player2' });
+          }
+        }
+      }
+      return matchDeck;
+    }
+
+    function initMatchArena() {
+      state.battery = 50;
+      state.round = 1;
+      state.consecutiveTimeouts = 0;
+      state.history = [];
+      state.stats = { terimaMantap: 0, menyesal: 0, kompromiSepakat: 0, deadlockOrAfk: 0 };
+      state.deck = buildMatchDeck();
+
+      updateBatteryUI(0, false);
+      showScreen('screen-game');
+      renderRoundCard();
+    }
+
+    /**
+     * 10. BATERAI CINTA & TIMER MANAGEMENT
+     */
+    function updateBatteryUI(delta = 0, animate = true) {
+      state.battery = Math.max(0, Math.min(100, state.battery));
+      const pct = state.battery;
+
+      const fillBar = document.getElementById('batteryFillBar');
+      const pctText = document.getElementById('batteryPercentText');
+      const zoneLabel = document.getElementById('batteryZoneLabel');
+      const hudCard = document.getElementById('batteryHudCard');
+
+      fillBar.style.width = `${pct}%`;
+      pctText.textContent = `${pct}%`;
+
+      if (pct >= 80) {
+        fillBar.className = 'h-full rounded-lg bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-500 ease-out relative battery-shimmer';
+        pctText.className = 'font-mono font-extrabold text-xl sm:text-2xl text-emerald-400';
+        zoneLabel.textContent = 'Siap Besok Kawin!';
+        zoneLabel.className = 'ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+      } else if (pct >= 45) {
+        fillBar.className = 'h-full rounded-lg bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500 ease-out relative battery-shimmer';
+        pctText.className = 'font-mono font-extrabold text-xl sm:text-2xl text-amber-400';
+        zoneLabel.textContent = 'Zona Pacaran Dulu';
+        zoneLabel.className = 'ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30';
+      } else {
+        fillBar.className = 'h-full rounded-lg bg-gradient-to-r from-red-600 to-rose-500 transition-all duration-500 ease-out relative battery-shimmer';
+        pctText.className = 'font-mono font-extrabold text-xl sm:text-2xl text-red-400';
+        zoneLabel.textContent = 'Zona Bahaya!';
+        zoneLabel.className = 'ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30';
+      }
+
+      if (animate && delta !== 0) {
+        const anchor = document.getElementById('batteryDeltaAnchor');
+        const badge = document.createElement('span');
+        const isPos = delta > 0;
+        badge.className = `inline-block font-mono font-extrabold text-base px-2.5 py-1 rounded-xl shadow-lg animate-delta ${isPos ? 'bg-emerald-500 text-slate-950' : 'bg-red-500 text-white'}`;
+        badge.textContent = `${isPos ? '+' : ''}${delta}%`;
+        anchor.appendChild(badge);
+        setTimeout(() => badge.remove(), 1300);
+
+        if (!isPos) {
+          hudCard.classList.remove('animate-shake');
+          void hudCard.offsetWidth;
+          hudCard.classList.add('animate-shake');
+        }
+      }
+    }
+
+    function startTurnTimer() {
+      stopTurnTimer();
+      state.timerSeconds = 60;
+      updateTimerDisplay();
+
+      state.timerInterval = setInterval(() => {
+        state.timerSeconds--;
+        updateTimerDisplay();
+        if (state.timerSeconds <= 0) {
+          stopTurnTimer();
+          handleTimeoutPenalty();
+        }
+      }, 1000);
+    }
+
+    function stopTurnTimer() {
+      if (state.timerInterval) {
+        clearInterval(state.timerInterval);
+        state.timerInterval = null;
+      }
+    }
+
+    function updateTimerDisplay() {
+      const textEl = document.getElementById('timerCountdownText');
+      const pillEl = document.getElementById('timerPill');
+      textEl.textContent = `${state.timerSeconds}s`;
+
+      if (state.timerSeconds <= 10) {
+        pillEl.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-500/20 border border-red-500/60 font-mono font-bold text-red-400 animate-pulse';
+      } else {
+        pillEl.className = 'flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950 border border-slate-700 font-mono font-bold text-slate-200';
+      }
+    }
+
+    function simulateTimeoutAfk() {
+      stopTurnTimer();
+      handleTimeoutPenalty();
+    }
+
+    function handleTimeoutPenalty() {
+      SoundFX.penalty();
+      state.consecutiveTimeouts++;
+      document.getElementById('afkCounterLabel').textContent = `AFK Berturut-turut: ${state.consecutiveTimeouts}/3`;
+
+      const card = state.currentCard;
+      const responder = state[card.responderKey];
+      state.battery -= 15;
+      state.stats.deadlockOrAfk++;
+      updateBatteryUI(-15, true);
+
+      state.history.push({
+        round: state.round,
+        category: card.category,
+        isWildcard: card.isWildcard,
+        problem: card.partnerPrompt,
+        outcomeLabel: `Timeout / AFK (${responder.name})`,
+        delta: -15,
+        type: 'bad'
+      });
+
+      showToast(`⏱️ Waktu habis / AFK! Dihitung Tolak tanpa kompromi (-15%).`, 'error');
+
+      if (state.consecutiveTimeouts >= 3) {
+        setTimeout(() => {
+          triggerEndingScreen('3x Timeout / Pasangan Ghosting Berturut-turut!');
+        }, 900);
+        return;
+      }
+
+      setTimeout(() => advanceToNextRound(), 950);
+    }
+
+    /**
+     * 11. GAMEPLAY STAGE RENDERING (DILEMMA -> KONSEKUENSI / NEGOSIASI)
+     */
+    function renderRoundCard() {
+      const card = state.deck[state.round - 1];
+      state.currentCard = card;
+      const responder = state[card.responderKey];
+      const partner = card.responderKey === 'player1' ? state.player2 : state.player1;
+
+      document.getElementById('gameRoundNum').textContent = state.round;
+      document.getElementById('activeTurnBadge').textContent = `Giliran: ${responder.name}`;
+      document.getElementById('afkCounterLabel').textContent = `AFK Berturut-turut: ${state.consecutiveTimeouts}/3`;
+
+      startTurnTimer();
+
+      const stage = document.getElementById('gameStageContainer');
+      stage.innerHTML = `
+        <div class="bg-cardbg/95 backdrop-blur-xl border-2 ${card.isWildcard ? 'border-amber-500/50' : 'border-slate-800'} rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-enter">
+          <!-- Card Top Meta -->
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <span class="px-3 py-1 rounded-full text-xs font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+              ${card.category}
+            </span>
+            ${card.isWildcard
+              ? `<span class="px-2.5 py-1 rounded-full text-[11px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">⚡ KARTU JEBAKAN (WILDCARD)</span>`
+              : `<span class="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-slate-800 text-slate-400">🔥 MASALAH UTAMA</span>`
+            }
+          </div>
+
+          <!-- Source Profile Header -->
+          <div class="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90 mb-4">
+            <div class="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-base shrink-0">
+              ${partner.emoji || (partner.gender === 'Perempuan' ? '👩' : '👨')}
+            </div>
+            <div class="min-w-0">
+              <p class="text-xs font-extrabold text-white truncate">
+                Pengakuan ${partner.name} (${partner.age} thn)
+              </p>
+              <p class="text-[11px] text-slate-400 truncate">
+                ${card.isWildcard ? 'Dia sempat ragu menjawab "Kayanya sih" soal ini...' : 'Dia ngaku jujur "Iya lagi" soal borok ini:'}
+              </p>
+            </div>
+          </div>
+
+          <!-- Main Dilemma Text -->
+          <div class="my-4">
+            <p class="text-base sm:text-lg font-bold text-white leading-relaxed">
+              "${card.partnerPrompt}"
+            </p>
+            <p class="text-xs text-slate-400 italic mt-2.5 pl-3 border-l-2 border-slate-700">
+              Pengakuan asli: "${card.statement}"
+            </p>
+          </div>
+
+          <!-- Question Prompt for Responder -->
+          <div class="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5">
+            <p class="text-xs font-bold text-slate-300">
+              👉 <span class="text-rose-400">${responder.name}</span>, kamu siap hidup bareng pasangan yang punya sifat/ketakutan ini?
+            </p>
+          </div>
+
+          <!-- Primary Decision Buttons: TERIMA vs TOLAK -->
+          <div class="grid grid-cols-2 gap-3">
+            <button onclick="chooseAcceptCard(event)" class="py-4 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/70 hover:border-emerald-400 text-center group btn-tactile">
+              <span class="block text-base sm:text-lg font-extrabold text-emerald-400">💚 TERIMA</span>
+              <span class="block text-[10px] text-slate-400 mt-0.5">Uji Konsekuensi (+10% / -12%)</span>
+            </button>
+
+            <button onclick="chooseRejectCard()" class="py-4 px-4 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/70 hover:border-rose-400 text-center group btn-tactile">
+              <span class="block text-base sm:text-lg font-extrabold text-rose-400">🛑 TOLAK</span>
+              <span class="block text-[10px] text-slate-400 mt-0.5">Cari Jalan Tengah (+5% / -15%)</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    /**
+     * BRANCH A: PEMAIN KLIK "TERIMA" -> MUNCUL KARTU KONSEKUENSI PERSONAL
+     */
+    function chooseAcceptCard(ev) {
+      glitterBurst(ev);
+      SoundFX.flip();
+      state.consecutiveTimeouts = 0;
+      document.getElementById('afkCounterLabel').textContent = `AFK Berturut-turut: 0/3`;
+
+      const card = state.currentCard;
+      const responder = state[card.responderKey];
+      const partner = card.responderKey === 'player1' ? state.player2 : state.player1;
+
+      // Find a real confession from the responder's own 20 answers to make the consequence personal!
+      const responderConfessions = responder.questions.filter(q =>
+        responder.answers[q.id] === 'iya' || responder.answers[q.id] === 'kayanya'
+      );
+      const personalTrap = responderConfessions.length > 0
+        ? responderConfessions[state.round % responderConfessions.length]
+        : responder.questions[0];
+
+      const botReactionHtml = state.mode === 'solo'
+        ? `<div class="mb-4 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-200">
+             <span class="font-bold text-indigo-300">${partner.name} (${partner.age} thn):</span> "${partner.reactAccept}"
+           </div>`
+        : '';
+
+      const stage = document.getElementById('gameStageContainer');
+      stage.innerHTML = `
+        <div class="bg-cardbg/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              ⚠️ KARTU KONSEKUENSI TERBUKA
+            </span>
+            <span class="text-xs font-bold text-slate-400">${responder.name}</span>
+          </div>
+
+          ${botReactionHtml}
+
+          <!-- Sharp Consequence Question -->
+          <div class="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 mb-4">
+            <p class="text-sm sm:text-base font-extrabold text-white leading-relaxed">
+              "${card.consequenceQuestion}"
+            </p>
+            <div class="mt-3 pt-3 border-t border-slate-800/90">
+              <span class="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
+                🪞 Cermin Pengakuanmu Sendiri di Awal:
+              </span>
+              <p class="text-xs text-slate-300 italic">
+                Padahal di awal ${responder.name} sendiri ngaku: "${personalTrap.statement}"
+              </p>
+            </div>
+          </div>
+
+          <p class="text-xs text-slate-400 mb-4 text-center">
+            Setelah sadar tabrakan sifat ini, kamu beneran sanggup atau mulai nyesel?
+          </p>
+
+          <!-- 2 Honesty Buttons -->
+          <div class="space-y-2.5">
+            <button onclick="glitterBurst(event);resolveConsequence(true)" class="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-between btn-tactile">
+              <span>💪 Tetap Terima Konsekuensinya</span>
+              <span class="font-mono bg-black/25 px-2.5 py-1 rounded-lg text-emerald-200">+10%</span>
+            </button>
+
+            <button onclick="resolveConsequence(false)" class="w-full py-3.5 px-4 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border-2 border-red-500/60 text-red-300 font-extrabold text-xs sm:text-sm flex items-center justify-between btn-tactile">
+              <span>😰 Ragu / Menyesal Pilih Terima</span>
+              <span class="font-mono bg-red-500/20 px-2.5 py-1 rounded-lg text-red-300">-12%</span>
+            </button>
+          </div>
+        </div>
+      `;
+    }
+
+    function resolveConsequence(isFirm) {
+      stopTurnTimer();
+      const card = state.currentCard;
+      const responder = state[card.responderKey];
+
+      if (isFirm) {
+        SoundFX.charge();
+        state.battery += 10;
+        state.stats.terimaMantap++;
+        updateBatteryUI(10, true);
+        state.history.push({
+          round: state.round,
+          category: card.category,
+          isWildcard: card.isWildcard,
+          problem: card.partnerPrompt,
+          outcomeLabel: `${responder.name}: Terima Konsekuensi Mantap`,
+          delta: 10,
+          type: 'good'
+        });
+        showToast('Komitmen penuh! Baterai Cinta +10%', 'success');
+      } else {
+        SoundFX.penalty();
+        state.battery -= 12;
+        state.stats.menyesal++;
+        updateBatteryUI(-12, true);
+        state.history.push({
+          round: state.round,
+          category: card.category,
+          isWildcard: card.isWildcard,
+          problem: card.partnerPrompt,
+          outcomeLabel: `${responder.name}: Menyesal Pilih Terima`,
+          delta: -12,
+          type: 'bad'
+        });
+        showToast('Asal mengiyakan lalu menyesal! Penalti berat -12%', 'error');
+      }
+
+      setTimeout(() => advanceToNextRound(), 800);
+    }
+
+    /**
+     * BRANCH B: PEMAIN KLIK "TOLAK" -> DISKUSI & CARI JALAN TENGAH
+     */
+    function chooseRejectCard() {
+      SoundFX.flip();
+      state.consecutiveTimeouts = 0;
+      state.coupleNegotiationP1Choice = null;
+      document.getElementById('afkCounterLabel').textContent = `AFK Berturut-turut: 0/3`;
+
+      const card = state.currentCard;
+      const responder = state[card.responderKey];
+      const partner = card.responderKey === 'player1' ? state.player2 : state.player1;
+
+      if (state.mode === 'solo') {
+        renderSoloNegotiationStage(card, responder, partner);
+      } else {
+        renderCoupleNegotiationStep1(card, responder, partner);
+      }
+    }
+
+    function renderSoloNegotiationStage(card, responder, bot) {
+      const botPrefIdx = card.botPref[bot.tier] ?? 0;
+      // Give a subtle clue matching the bot's age personality
+      const cluePhrases = {
+        young: 'Aku maunya yang tetep ngejaga perasaan & perhatian kita sih...',
+        mid: 'Menurutku kita butuh aturan yang realistis dan adil buat masing-masing.',
+        mature: 'Pilih opsi yang paling praktis, terukur, dan minim drama ke depannya.'
+      };
+
+      const stage = document.getElementById('gameStageContainer');
+      stage.innerHTML = `
+        <div class="bg-cardbg/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              🤝 DISKUSI JALAN TENGAH
+            </span>
+            <span class="text-xs text-slate-400">Sepakat: <strong class="text-emerald-400">+5%</strong> | Beda: <strong class="text-red-400">-15%</strong></span>
+          </div>
+
+          <!-- Bot Reaction Bubble -->
+          <div class="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-base">${bot.emoji}</span>
+              <span class="text-xs font-extrabold text-white">${bot.name} (${bot.age} thn)</span>
+              <span class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">${bot.vibe}</span>
+            </div>
+            <p class="text-xs text-slate-300 leading-relaxed">"${bot.reactReject}"</p>
+            <p class="text-[11px] text-amber-400/90 mt-1.5 font-medium">💡 Petunjuk gaya kompromi: ${cluePhrases[bot.tier]}</p>
+          </div>
+
+          <p class="text-xs font-bold text-slate-300 mb-2.5">
+            Pilih 1 opsi kompromi yang menurutmu bakal disetujui ${bot.name}:
+          </p>
+
+          <div class="space-y-2.5">
+            ${card.compromises.map((opt, idx) => `
+              <button onclick="resolveSoloNegotiation(${idx}, ${botPrefIdx})" class="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-left flex items-start gap-3 transition btn-tactile">
+                <span class="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-amber-400 shrink-0 mt-0.5">
+                  ${String.fromCharCode(65 + idx)}
+                </span>
+                <span class="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">${opt}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function resolveSoloNegotiation(playerIdx, botIdx) {
+      stopTurnTimer();
+      const card = state.currentCard;
+      const bot = state.player2;
+      const isAgreed = (playerIdx === botIdx);
+
+      if (isAgreed) {
+        SoundFX.charge();
+        state.battery += 5;
+        state.stats.kompromiSepakat++;
+        updateBatteryUI(5, true);
+        state.history.push({
+          round: state.round,
+          category: card.category,
+          isWildcard: card.isWildcard,
+          problem: card.partnerPrompt,
+          outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(65 + playerIdx)})`,
+          delta: 5,
+          type: 'neutral'
+        });
+        showToast(`Sepakat sama ${bot.name} di Opsi ${String.fromCharCode(65 + playerIdx)}! Baterai +5%`, 'success');
+      } else {
+        SoundFX.penalty();
+        state.battery -= 15;
+        state.stats.deadlockOrAfk++;
+        updateBatteryUI(-15, true);
+        state.history.push({
+          round: state.round,
+          category: card.category,
+          isWildcard: card.isWildcard,
+          problem: card.partnerPrompt,
+          outcomeLabel: `Tolak → Deadlock (Kamu: ${String.fromCharCode(65 + playerIdx)}, ${bot.name}: ${String.fromCharCode(65 + botIdx)})`,
+          delta: -15,
+          type: 'bad'
+        });
+        showToast(`Deadlock! Kamu pilih ${String.fromCharCode(65 + playerIdx)}, ${bot.name} maunya ${String.fromCharCode(65 + botIdx)} (-15%)`, 'error');
+      }
+
+      setTimeout(() => advanceToNextRound(), 950);
+    }
+
+    // Couple Mode Pass-and-Play Negotiation
+    function renderCoupleNegotiationStep1(card, responder, partner) {
+      const stage = document.getElementById('gameStageContainer');
+      stage.innerHTML = `
+        <div class="bg-cardbg/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+              🤝 NEGOSIASI PASANGAN (TAHAP 1/2)
+            </span>
+          </div>
+
+          <p class="text-xs text-slate-300 mb-3">
+            <strong class="text-rose-400">${responder.name}</strong> menolak masalah ini! Pilih kompromi diam-diam sebelum gantian ke <strong class="text-emerald-400">${partner.name}</strong>:
+          </p>
+
+          <div class="space-y-2.5">
+            ${card.compromises.map((opt, idx) => `
+              <button onclick="submitCoupleNegotiationStep1(${idx})" class="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-rose-400 text-left flex items-start gap-3 transition btn-tactile">
+                <span class="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-rose-400 shrink-0 mt-0.5">
+                  ${String.fromCharCode(65 + idx)}
+                </span>
+                <span class="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">${opt}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function submitCoupleNegotiationStep1(choiceIdx) {
+      SoundFX.tap();
+      state.coupleNegotiationP1Choice = choiceIdx;
+      const card = state.currentCard;
+      const responder = state[card.responderKey];
+      const partner = card.responderKey === 'player1' ? state.player2 : state.player1;
+
+      const stage = document.getElementById('gameStageContainer');
+      stage.innerHTML = `
+        <div class="bg-cardbg/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip">
+          <div class="flex items-center justify-between mb-3">
+            <span class="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              📲 GILIRAN ${partner.name.toUpperCase()} (TAHAP 2/2)
+            </span>
+          </div>
+
+          <p class="text-xs text-slate-300 mb-3">
+            <strong class="text-rose-400">${responder.name}</strong> sudah mengunci pilihannya. Sekarang <strong class="text-emerald-400">${partner.name}</strong> pilih jalan tengah yang sama agar sepakat (+5%):
+          </p>
+
+          <div class="space-y-2.5">
+            ${card.compromises.map((opt, idx) => `
+              <button onclick="resolveCoupleNegotiation(${idx})" class="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-emerald-400 text-left flex items-start gap-3 transition btn-tactile">
+                <span class="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-emerald-400 shrink-0 mt-0.5">
+                  ${String.fromCharCode(65 + idx)}
+                </span>
+                <span class="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">${opt}</span>
+              </button>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    function resolveCoupleNegotiation(partnerChoiceIdx) {
+      stopTurnTimer();
+      const card = state.currentCard;
+      const firstIdx = state.coupleNegotiationP1Choice;
+      const isAgreed = (firstIdx === partnerChoiceIdx);
+
+      if (isAgreed) {
+        SoundFX.charge();
+        state.battery += 5;
+        state.stats.kompromiSepakat++;
+        updateBatteryUI(5, true);
+        state.history.push({
+          round: state.round,
+          category: card.category,
+          isWildcard: card.isWildcard,
+          problem: card.partnerPrompt,
+          outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(65 + firstIdx)})`,
+          delta: 5,
+          type: 'neutral'
+        });
+        showToast(`Kalian berdua sepakat di Opsi ${String.fromCharCode(65 + firstIdx)}! Baterai +5%`, 'success');
+      } else {
+        SoundFX.penalty();
+        state.battery -= 15;
+        state.stats.deadlockOrAfk++;
+        updateBatteryUI(-15, true);
+        state.history.push({
+          round: state.round,
+          category: card.category,
+          isWildcard: card.isWildcard,
+          problem: card.partnerPrompt,
+          outcomeLabel: `Tolak → Deadlock (${String.fromCharCode(65 + firstIdx)} vs ${String.fromCharCode(65 + partnerChoiceIdx)})`,
+          delta: -15,
+          type: 'bad'
+        });
+        showToast(`Beda pilihan kompromi (${String.fromCharCode(65 + firstIdx)} vs ${String.fromCharCode(65 + partnerChoiceIdx)})! Deadlock -15%`, 'error');
+      }
+
+      setTimeout(() => advanceToNextRound(), 950);
+    }
+
+    /**
+     * 12. ROUND PROGRESSION & ENDING EVALUATION
+     */
+    function advanceToNextRound() {
+      if (state.battery <= 0) {
+        triggerEndingScreen('Baterai Cinta habis menyentuh 0% sebelum ronde selesai!');
+        return;
+      }
+
+      if (state.round >= state.maxRounds) {
+        triggerEndingScreen();
+        return;
+      }
+
+      state.round++;
+      renderRoundCard();
+    }
+
+    function triggerEndingScreen(customReason = '') {
+      stopTurnTimer();
+      const pct = state.battery;
+      const heroCard = document.getElementById('endingHeroCard');
+      const iconEl = document.getElementById('endingEmojiIcon');
+      const badgeEl = document.getElementById('endingBadgePill');
+      const titleEl = document.getElementById('endingMainTitle');
+      const subEl = document.getElementById('endingSubtitle');
+
+      badgeEl.textContent = `BATERAI CINTA AKHIR: ${pct}%`;
+      document.getElementById('endingPlayer1Label').textContent = `${state.player1.name} (${state.player1.age})`;
+      document.getElementById('endingPlayer2Label').textContent = `${state.player2.name} (${state.player2.age})`;
+
+      if (pct >= 80) {
+        SoundFX.win();
+        heroCard.className = 'bg-cardbg/95 border-2 border-emerald-500/60 rounded-3xl p-6 sm:p-7 text-center shadow-2xl shadow-emerald-500/15 relative overflow-hidden';
+        iconEl.className = 'w-16 h-16 mx-auto rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-4xl mb-4 shadow-lg';
+        iconEl.textContent = '💍';
+        badgeEl.className = 'inline-block px-3.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 mb-2';
+        titleEl.textContent = 'BESOK KAWIN!';
+        titleEl.className = 'text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-300 to-amber-300 tracking-tight mt-1';
+        subEl.textContent = 'Red flag kalian berdua ternyata saling mengunci kayak puzzle! Kesiapan mental dan kompromi kalian udah matang. Langsung booking KUA dan sebar undangan!';
+      } else if (pct >= 45) {
+        SoundFX.charge();
+        heroCard.className = 'bg-cardbg/95 border-2 border-amber-500/60 rounded-3xl p-6 sm:p-7 text-center shadow-2xl shadow-amber-500/10 relative overflow-hidden';
+        iconEl.className = 'w-16 h-16 mx-auto rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-4xl mb-4 shadow-lg';
+        iconEl.textContent = '⏳';
+        badgeEl.className = 'inline-block px-3.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest bg-amber-500/20 text-amber-300 border border-amber-500/40 mb-2';
+        titleEl.textContent = 'PACARAN DULU AJA';
+        titleEl.className = 'text-3xl sm:text-4xl font-extrabold text-amber-400 tracking-tight mt-1';
+        subEl.textContent = 'Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Jangan buru-buru DP gedung — pacaran dulu aja sambil benerin komunikasi!';
+      } else {
+        SoundFX.penalty();
+        heroCard.className = 'bg-cardbg/95 border-2 border-red-500/60 rounded-3xl p-6 sm:p-7 text-center shadow-2xl shadow-red-500/15 relative overflow-hidden';
+        iconEl.className = 'w-16 h-16 mx-auto rounded-2xl bg-red-500/20 border border-red-500/40 flex items-center justify-center text-4xl mb-4 shadow-lg';
+        iconEl.textContent = '🚨';
+        badgeEl.className = 'inline-block px-3.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest bg-red-500/20 text-red-300 border border-red-500/40 mb-2';
+        titleEl.textContent = 'STOP THE WEDDING';
+        titleEl.className = 'text-3xl sm:text-4xl font-extrabold text-red-500 tracking-tight mt-1';
+        subEl.textContent = customReason
+          ? `${customReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama di pengadilan agama!`
+          : 'Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!';
+      }
+
+      // Populate Stats
+      document.getElementById('statTerimaMantap').textContent = state.stats.terimaMantap;
+      document.getElementById('statMenyesal').textContent = state.stats.menyesal;
+      document.getElementById('statKompromi').textContent = state.stats.kompromiSepakat;
+      document.getElementById('statDeadlock').textContent = state.stats.deadlockOrAfk;
+
+      // Populate Rapor List
+      const raporEl = document.getElementById('raporListContainer');
+      raporEl.innerHTML = state.history.map(item => {
+        const deltaColor = item.delta > 0 ? 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30' : 'text-red-400 bg-red-500/15 border-red-500/30';
+        return `
+          <div class="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/90 flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <div class="flex items-center gap-1.5 mb-1">
+                <span class="font-mono text-[10px] font-bold text-slate-500">R${item.round}</span>
+                <span class="text-[10px] font-bold text-slate-400">${item.category}</span>
+                ${item.isWildcard ? '<span class="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300">WILDCARD</span>' : ''}
+              </div>
+              <p class="text-xs text-slate-200 font-medium line-clamp-2">${item.problem}</p>
+              <p class="text-[11px] font-bold text-slate-400 mt-1">→ ${item.outcomeLabel}</p>
+            </div>
+            <span class="font-mono font-extrabold text-xs px-2 py-1 rounded-lg border shrink-0 ${deltaColor}">
+              ${item.delta > 0 ? '+' : ''}${item.delta}%
+            </span>
+          </div>
+        `;
+      }).join('');
+
+      showScreen('screen-ending');
+    }
+
+    function copyMatchReport() {
+      const title = document.getElementById('endingMainTitle').textContent;
+      const summary = [
+        `=== HASIL BESOK KAWIN? ===`,
+        `Pasangan: ${state.player1.name} & ${state.player2.name}`,
+        `Baterai Cinta Akhir: ${state.battery}% -> ${title}`,
+        `Statistik: Terima Mantap (${state.stats.terimaMantap}), Menyesal (${state.stats.menyesal}), Sepakat Kompromi (${state.stats.kompromiSepakat}), Deadlock/AFK (${state.stats.deadlockOrAfk})`,
+        `Mainkan sekarang untuk uji red flag hubunganmu!`
+      ].join('\n');
+      copyTextSafe(summary, 'Rapor kecocokan berhasil disalin!');
+    }
+
+    function replaySameProfile() {
+      SoundFX.tap();
+      stopTurnTimer();
+      renderProfileAndModeScreen();
+      showScreen('screen-mode');
+    }
+
+    function fullResetGame() {
+      SoundFX.tap();
+      stopTurnTimer();
+      state.player1 = null;
+      state.player2 = null;
+      state.history = [];
+      document.getElementById('registerForm').reset();
+      document.getElementById('registerErrorBox').classList.add('hidden');
+      switchLandingTab('new');
+      showScreen('screen-register');
+    }
+  </script>
+</body>
+</html>
