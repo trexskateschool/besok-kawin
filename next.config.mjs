@@ -6,16 +6,6 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  async rewrites() {
-    return {
-      beforeFiles: [
-        {
-          source: "/",
-          destination: "/game.html",
-        },
-      ],
-    };
-  },
 };
 
 export default nextConfig;
