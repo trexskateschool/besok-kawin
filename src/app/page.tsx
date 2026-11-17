@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { QuestionItem, build20QuestionsForProfile } from "./questions";
-import { db, isFirebaseReady } from "@/lib/firebase";
+import { db, isFirebaseReady, auth, googleProvider } from "@/lib/firebase";
 import {
   doc,
   setDoc,
@@ -13,18 +13,22 @@ import {
   query,
   where,
   getDocs,
-  addDoc,
-  orderBy,
   limit,
 } from "firebase/firestore";
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  User,
+} from "firebase/auth";
 import {
   PublicMatchProfile,
   detectContactLeak,
   buildProfileId,
   publishToMatchmakingPool,
   sendLikeAndCheckMatch,
-  unlockRoomChatInDb,
 } from "@/lib/matchmaking";
+import ProfileDashboard from "@/components/ProfileDashboard";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -73,19 +77,20 @@ interface HistoryItem {
   type: "good" | "neutral" | "bad";
 }
 
-interface ChatMessageItem {
-  id: string;
-  senderName: string;
-  senderGender: "Laki-laki" | "Perempuan";
-  text: string;
-  createdAt: number;
-}
-
 interface ToastItem {
   id: number;
   message: string;
   type: "success" | "error" | "warning" | "info";
 }
+
+type ScreenType =
+  | "register"
+  | "quiz"
+  | "bursa"
+  | "mode"
+  | "game"
+  | "ending"
+  | "profile";
 
 const ROMANTIC_BGM_STEPS: {
   bass?: number;
@@ -224,6 +229,10 @@ export default function BesokKawinGame() {
   const bgmStepRef = useRef(0);
   const bgmEnabledRef = useRef(true);
   const mainScrollRef = useRef<HTMLElement | null>(null);
+
+  // Google Auth State
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [isLoggingInGoogle, setIsLoggingInGoogle] = useState(false);
 
   useEffect(() => {
     bgmEnabledRef.current = bgmEnabled;
@@ -508,11 +517,9 @@ export default function BesokKawinGame() {
     document.body.removeChild(ta);
   };
 
-  const [screen, setScreen] = useState<
-    "register" | "quiz" | "bursa" | "mode" | "game" | "ending"
-  >("register");
+  const [screen, setScreen] = useState<ScreenType>("register");
 
-  const goScreen = useCallback((next: typeof screen) => {
+  const goScreen = useCallback((next: ScreenType) => {
     if (typeof window !== "undefined") {
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
@@ -560,21 +567,7 @@ export default function BesokKawinGame() {
   >([]);
   const [isLoadingBursa, setIsLoadingBursa] = useState(false);
   const [sendingLikeId, setSendingLikeId] = useState<string | null>(null);
-
-  // Monetization & Chat State
   const [isMatchmakingRoom, setIsMatchmakingRoom] = useState(false);
-  const [chatUnlocked, setChatUnlocked] = useState(false);
-  const [unlockedBy, setUnlockedBy] = useState("");
-  const [showSawerModal, setShowSawerModal] = useState(false);
-  const [sawerLoading, setSawerLoading] = useState(false);
-  const [sawerQrUrl, setSawerQrUrl] = useState<string | null>(null);
-  const [sawerMode, setSawerMode] = useState<"live_qris" | "sandbox_demo">(
-    "sandbox_demo"
-  );
-  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [sendingChat, setSendingChat] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const [myRole, setMyRole] = useState<"player1" | "player2">("player1");
   const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
@@ -625,6 +618,110 @@ export default function BesokKawinGame() {
   const prevBatteryRef = useRef(50);
   const lastSummaryIdRef = useRef<number>(0);
   const matchedRoomHandledRef = useRef<string>("");
+
+  // Pantau status Login Google secara permanen
+  useEffect(() => {
+    if (!auth || !isFirebaseReady) return;
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      setGoogleUser(user);
+      if (user) {
+        if (user.email) setRegEmail((prev) => prev || user.email || "");
+        if (user.displayName) {
+          setRegName((prev) => prev || user.displayName?.split(" ")[0] || "");
+        }
+        if (db) {
+          try {
+            const snap = await getDoc(doc(db, "match_profiles", user.uid));
+            if (snap.exists()) {
+              const existing = snap.data() as PublicMatchProfile;
+              setMyPublicProfile(existing);
+              setRegName((prev) => prev || existing.name);
+              setRegEmail((prev) => prev || existing.email);
+              setRegGender(existing.gender);
+              setRegAge((prev) => prev || String(existing.age));
+              setRegCity((prev) => prev || existing.city || "");
+              setRegBio((prev) => prev || existing.bio || "");
+            }
+          } catch (err) {
+            console.error("Gagal memuat profil tersimpan:", err);
+          }
+        }
+      } else {
+        setMyPublicProfile(null);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // Dengarkan perubahan real-time pada profil user (termasuk status VIP setelah bayar)
+  useEffect(() => {
+    if (!myPublicProfile?.id || !isFirebaseReady || !db) return;
+    const unsub = onSnapshot(
+      doc(db, "match_profiles", myPublicProfile.id),
+      (snap) => {
+        if (snap.exists()) {
+          setMyPublicProfile(snap.data() as PublicMatchProfile);
+        }
+      }
+    );
+    return () => unsub();
+  }, [myPublicProfile?.id]);
+
+  const handleGoogleLogin = async () => {
+    sfxTap();
+    if (!auth || !isFirebaseReady) {
+      showToast("Firebase Auth belum siap. Cek pengaturan Firebase.", "error");
+      return;
+    }
+    setIsLoggingInGoogle(true);
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      const user = result.user;
+      setGoogleUser(user);
+      if (user.email) setRegEmail(user.email);
+      if (user.displayName && !regName) {
+        setRegName(user.displayName.split(" ")[0]);
+      }
+
+      if (db) {
+        const snap = await getDoc(doc(db, "match_profiles", user.uid));
+        if (snap.exists()) {
+          const existing = snap.data() as PublicMatchProfile;
+          setMyPublicProfile(existing);
+          setRegName(existing.name);
+          setRegEmail(existing.email);
+          setRegGender(existing.gender);
+          setRegAge(String(existing.age));
+          setRegCity(existing.city || "");
+          setRegBio(existing.bio || "");
+          showToast(`👋 Selamat datang kembali, ${existing.name}!`, "success");
+          goScreen("bursa");
+        } else {
+          setLandingTab("bursa");
+          showToast(
+            "✅ Masuk dengan Google berhasil! Lengkapi data & 20 pengakuan untuk masuk Bursa.",
+            "success"
+          );
+        }
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("Google login error:", err);
+      showToast(`Gagal masuk dengan Google: ${detail}`, "error");
+    } finally {
+      setIsLoggingInGoogle(false);
+    }
+  };
+
+  const handleGoogleLogout = async () => {
+    sfxTap();
+    if (!auth) return;
+    await signOut(auth);
+    setGoogleUser(null);
+    setMyPublicProfile(null);
+    showToast("Berhasil keluar dari akun Google.", "info");
+    goScreen("register");
+  };
 
   const applyBatteryDelta = (delta: number) => {
     setBattery((prev) => Math.max(0, Math.min(100, prev + delta)));
@@ -686,7 +783,7 @@ export default function BesokKawinGame() {
     needsOwnerCompromiseAction,
   ]);
 
-    // Load Bursa Candidates
+  // Load Bursa Candidates
   const fetchBursaCandidates = useCallback(async () => {
     if (!myPublicProfile || !isFirebaseReady || !db) return;
     setIsLoadingBursa(true);
@@ -723,7 +820,7 @@ export default function BesokKawinGame() {
     }
   }, [screen, myPublicProfile, fetchBursaCandidates]);
 
-  // REAL-TIME LISTENER UNTUK INCOMING LIKES & MUTUAL MATCH (Notifikasi Otomatis)
+  // REAL-TIME LISTENER UNTUK INCOMING LIKES & MUTUAL MATCH
   useEffect(() => {
     if (!myPublicProfile || !isFirebaseReady || !db) return;
 
@@ -789,13 +886,6 @@ export default function BesokKawinGame() {
       if (typeof data.isMatchmakingRoom === "boolean") {
         setIsMatchmakingRoom(data.isMatchmakingRoom);
       }
-      if (typeof data.chatUnlocked === "boolean") {
-        setChatUnlocked(data.chatUnlocked);
-        if (data.chatUnlocked) {
-          setShowSawerModal(false);
-        }
-      }
-      if (data.unlockedBy) setUnlockedBy(data.unlockedBy);
 
       if (
         data.lastRoundSummary &&
@@ -851,37 +941,6 @@ export default function BesokKawinGame() {
     return () => unsubscribe();
   }, [inviteCode, mode, screen, myRole, goScreen, showToast]);
 
-  // REAL-TIME LISTENER CHAT SAWERAN (Aktif saat chatUnlocked === true)
-  useEffect(() => {
-    if (!inviteCode || !chatUnlocked || !isFirebaseReady || !db) return;
-
-    const msgQuery = query(
-      collection(db, "rooms", inviteCode, "messages"),
-      orderBy("createdAt", "asc"),
-      limit(100)
-    );
-
-    const unsub = onSnapshot(msgQuery, (snap) => {
-      const list: ChatMessageItem[] = [];
-      snap.forEach((docItem) => {
-        const d = docItem.data();
-        list.push({
-          id: docItem.id,
-          senderName: d.senderName || "Pemain",
-          senderGender: d.senderGender || "Laki-laki",
-          text: d.text || "",
-          createdAt: d.createdAt || Date.now(),
-        });
-      });
-      setChatMessages(list);
-      setTimeout(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 80);
-    });
-
-    return () => unsub();
-  }, [inviteCode, chatUnlocked]);
-
   // Registration Handler
   const handleRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -903,8 +962,17 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Validasi anti-bocor IG/WA jika daftar Bursa Mabar
     if (landingTab === "bursa") {
+      if (!googleUser) {
+        sfxPenalty();
+        setRegError({
+          title: "Wajib Masuk dengan Google!",
+          text: "Klik tombol 'Masuk dengan Google' di atas supaya profil, daftar Match, dan status VIP Rp10.000 kamu tersimpan permanen.",
+          key: Date.now(),
+        });
+        return;
+      }
+
       const nameLeak = detectContactLeak(regName);
       if (nameLeak) {
         sfxPenalty();
@@ -1091,10 +1159,15 @@ export default function BesokKawinGame() {
           else if (completedProfile.answers[q.id] === "kayanya") kayanyaCount++;
         });
 
+        const profileId =
+          googleUser?.uid ||
+          buildProfileId(completedProfile.email, completedProfile.gender);
+
         const pubProfile: PublicMatchProfile = {
-          id: buildProfileId(completedProfile.email, completedProfile.gender),
+          id: profileId,
           name: completedProfile.name,
           email: completedProfile.email,
+          photoURL: googleUser?.photoURL || "",
           gender: completedProfile.gender,
           age: completedProfile.age,
           city: completedProfile.city || "Indonesia",
@@ -1106,6 +1179,7 @@ export default function BesokKawinGame() {
           iyaCount,
           kayanyaCount,
           isAvailable: true,
+          isUpgraded: Boolean(myPublicProfile?.isUpgraded),
           updatedAt: Date.now(),
         };
 
@@ -1118,9 +1192,10 @@ export default function BesokKawinGame() {
         );
         goScreen("bursa");
       } catch (err) {
+        const detail = err instanceof Error ? err.message : String(err);
         console.error(err);
         setIsSavingRoom(false);
-        showToast("Gagal mempublikasikan profil ke bursa.", "error");
+        showToast(`Gagal mempublikasikan ke bursa: ${detail}`, "error");
       }
       return;
     }
@@ -1186,7 +1261,6 @@ export default function BesokKawinGame() {
           player2: null,
           status: "waiting",
           isMatchmakingRoom: false,
-          chatUnlocked: false,
           round: 1,
           battery: 50,
           c1: { status: "dilemma" },
@@ -1269,10 +1343,27 @@ export default function BesokKawinGame() {
 
   // Start Solo vs Bot AI
   const startSoloGame = () => {
-    if (!player1) return;
+    const activePlayer: PlayerProfile | null =
+      player1 ||
+      (myPublicProfile
+        ? {
+            name: myPublicProfile.name,
+            email: myPublicProfile.email,
+            gender: myPublicProfile.gender,
+            age: myPublicProfile.age,
+            city: myPublicProfile.city,
+            bio: myPublicProfile.bio,
+            questions: myPublicProfile.questions,
+            answers: myPublicProfile.answers,
+          }
+        : null);
+
+    if (!activePlayer) return;
+    if (!player1) setPlayer1(activePlayer);
+
     sfxTap();
     const botGender =
-      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+      activePlayer.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
     const persona = getBotPersonaConfig(botGender, botAgeSlider);
     const botQuestions = build20QuestionsForProfile(botGender, botAgeSlider);
     const botAnswers: PlayerProfile["answers"] = {};
@@ -1799,73 +1890,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Trigger Pembayaran Sawer Rp10.000
-  const openSawerPayment = async () => {
-    if (!inviteCode || !meProfile) return;
-    sfxTap();
-    setShowSawerModal(true);
-    setSawerLoading(true);
-    try {
-      const res = await fetch("/api/sawer/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          roomCode: inviteCode,
-          payerName: meProfile.name,
-          payerEmail: meProfile.email,
-        }),
-      });
-      const data = await res.json();
-      setSawerMode(data.mode || "sandbox_demo");
-      setSawerQrUrl(data.qrImageUrl || null);
-    } catch (err) {
-      console.error(err);
-      setSawerMode("sandbox_demo");
-    } finally {
-      setSawerLoading(false);
-    }
-  };
-
-  // Konfirmasi Sawer (Untuk Testing / Sandbox Demo)
-  const confirmSandboxSawer = async () => {
-    if (!inviteCode || !meProfile) return;
-    sfxWin();
-    try {
-      await unlockRoomChatInDb(inviteCode, meProfile.name);
-      setShowSawerModal(false);
-      showToast(
-        "🎉 Saweran Rp10.000 berhasil! Ruang obrolan pribadi terbuka.",
-        "success"
-      );
-    } catch (err) {
-      console.error(err);
-      showToast("Gagal membuka ruang obrolan.", "error");
-    }
-  };
-
-  // Kirim Pesan Chat Eksklusif
-  const handleSendChat = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = chatInput.trim();
-    if (!trimmed || !inviteCode || !meProfile || !db) return;
-
-    setSendingChat(true);
-    setChatInput("");
-    try {
-      await addDoc(collection(db, "rooms", inviteCode, "messages"), {
-        senderName: meProfile.name,
-        senderGender: meProfile.gender,
-        text: trimmed,
-        createdAt: Date.now(),
-      });
-    } catch (err) {
-      console.error(err);
-      showToast("Gagal mengirim pesan.", "error");
-    } finally {
-      setSendingChat(false);
-    }
-  };
-
   const endingVerdict =
     battery >= 80
       ? {
@@ -2057,24 +2081,33 @@ export default function BesokKawinGame() {
     setMyRole("player1");
     setMode("solo");
     setIsMatchmakingRoom(false);
-    setChatUnlocked(false);
-    setChatMessages([]);
-    setShowSawerModal(false);
-    setMyPublicProfile(null);
     matchedRoomHandledRef.current = "";
     setPlayer1(null);
     setPlayer2(null);
     setC1State({ status: "dilemma" });
     setC2State({ status: "dilemma" });
     setHistory([]);
-    setRegName("");
-    setRegEmail("");
-    setRegAge("");
-    setRegCity("");
-    setRegBio("");
     setRegError(null);
-    setLandingTab("new");
-    goScreen("register");
+    if (myPublicProfile) {
+      goScreen("bursa");
+    } else {
+      setLandingTab("new");
+      goScreen("register");
+    }
+  };
+
+  const openProfileOrPrompt = () => {
+    sfxTap();
+    if (myPublicProfile) {
+      goScreen("profile");
+    } else {
+      setLandingTab("bursa");
+      goScreen("register");
+      showToast(
+        "Isi data & 20 pengakuan di Bursa Mabar dulu untuk membuka Profil & Chat!",
+        "info"
+      );
+    }
   };
 
   const activeQuizProfile = quizTarget === "player1" ? player1 : player2;
@@ -2091,7 +2124,9 @@ export default function BesokKawinGame() {
   }
 
   const botOppositeGender =
-    player1?.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+    (player1?.gender || myPublicProfile?.gender) === "Laki-laki"
+      ? "Perempuan"
+      : "Laki-laki";
   const botPreview = getBotPersonaConfig(botOppositeGender, botAgeSlider);
 
   const myConfessions =
@@ -2111,6 +2146,9 @@ export default function BesokKawinGame() {
       .toLowerCase()
       .includes(bursaCityFilter.trim().toLowerCase());
   });
+
+  // Suppress unused history warning while preserving state for room sync
+  void history;
 
   return (
     <div className="bg-grid-pattern fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
@@ -2148,8 +2186,8 @@ export default function BesokKawinGame() {
         style={{ paddingTop: "max(0.65rem, env(safe-area-inset-top))" }}
         className="w-full shrink-0 border-b border-slate-800/80 bg-[#090d16]/95 backdrop-blur-md z-40 pb-2.5"
       >
-        <div className="max-w-xl mx-auto px-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
+        <div className="max-w-xl mx-auto px-3 sm:px-4 flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
               <svg
                 className="w-4 h-4 text-white"
@@ -2166,35 +2204,49 @@ export default function BesokKawinGame() {
               </svg>
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-extrabold tracking-tight text-sm sm:text-lg text-white whitespace-nowrap">
+              <div className="flex items-center gap-1">
+                <span className="font-extrabold tracking-tight text-xs sm:text-base text-white whitespace-nowrap">
                   BESOK KAWIN?
                 </span>
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
+                <span className="text-[9px] font-mono font-bold px-1 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
                   18+
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 leading-tight truncate">
+              <p className="text-[10px] text-slate-400 leading-tight truncate hidden sm:block">
                 Dating & Red Flag Card Game
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {(googleUser || myPublicProfile) && (
+              <button
+                onClick={openProfileOrPrompt}
+                className={`px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-extrabold flex items-center gap-1 border transition btn-tactile shrink-0 ${
+                  screen === "profile"
+                    ? "bg-amber-500 text-slate-950 border-amber-400"
+                    : "bg-slate-800 hover:bg-slate-700 text-amber-300 border-amber-500/40"
+                }`}
+              >
+                <span>{myPublicProfile?.isUpgraded ? "👑" : "👤"}</span>
+                <span>Profil & Chat</span>
+              </button>
+            )}
+
             {!isAppInstalled && (
               <button
                 onClick={handleInstallClick}
-                className="px-2.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-extrabold flex items-center gap-1 shadow-lg shadow-rose-500/25 transition btn-tactile shrink-0"
+                className="px-2 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-[11px] font-extrabold flex items-center gap-1 shadow-lg shadow-rose-500/25 transition btn-tactile shrink-0"
               >
                 <span>📲</span>
-                <span>Install</span>
+                <span className="hidden sm:inline">Install</span>
               </button>
             )}
 
             <button
               onClick={toggleRomanticBgm}
               title="Musik Latar"
-              className={`px-2.5 py-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition ${
+              className={`p-1.5 sm:px-2 sm:py-1.5 rounded-xl border text-xs font-bold flex items-center transition ${
                 bgmEnabled
                   ? "bg-rose-500/15 text-rose-300 border-rose-500/40"
                   : "bg-slate-800 text-slate-400 border-slate-700"
@@ -2208,15 +2260,15 @@ export default function BesokKawinGame() {
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               title="Suara Efek"
-              className="p-2 rounded-xl bg-slate-800/80 text-slate-300 border border-slate-700/70 text-xs"
+              className="p-1.5 rounded-xl bg-slate-800/80 text-slate-300 border border-slate-700/70 text-xs"
             >
               {soundEnabled ? "🔊" : "🔈"}
             </button>
 
-            {screen !== "register" && (
+            {screen !== "register" && screen !== "profile" && (
               <button
                 onClick={fullResetGame}
-                className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 whitespace-nowrap"
+                className="text-[11px] font-semibold px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 whitespace-nowrap"
               >
                 Keluar
               </button>
@@ -2300,87 +2352,6 @@ export default function BesokKawinGame() {
         </div>
       )}
 
-      {/* SAWER QRIS MODAL (Rp10.000) */}
-      {showSawerModal && (
-        <div
-          onClick={() => setShowSawerModal(false)}
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md bg-[#111827] border-2 border-amber-500/60 rounded-3xl p-5 shadow-2xl animate-card-enter text-center"
-          >
-            <div className="flex items-center justify-between mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                UPGRADE CHAT EKSKLUSIF
-              </span>
-              <button
-                onClick={() => setShowSawerModal(false)}
-                className="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white text-xs font-bold"
-              >
-                ✕
-              </button>
-            </div>
-
-            <h3 className="text-base sm:text-lg font-extrabold text-white">
-              Sawer Rp10.000 untuk Lanjut Ngobrol
-            </h3>
-            <p className="text-xs text-slate-300 mt-1">
-              Cukup salah satu yang bayar, ruang obrolan pribadi langsung terbuka
-              untuk{" "}
-              <strong className="text-emerald-400">
-                {player1?.name} & {player2?.name}
-              </strong>
-              !
-            </p>
-
-            {sawerLoading ? (
-              <div className="my-6 py-8 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-amber-400 font-bold">
-                ⏳ Menyiapkan kode QRIS...
-              </div>
-            ) : sawerMode === "live_qris" && sawerQrUrl ? (
-              <div className="my-4 p-4 rounded-2xl bg-white inline-block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={sawerQrUrl}
-                  alt="QRIS Sawer Rp10.000"
-                  className="w-48 h-48 mx-auto"
-                />
-                <p className="text-[11px] font-bold text-slate-900 mt-2">
-                  Scan via GoPay / OVO / DANA / ShopeePay / M-Banking
-                </p>
-              </div>
-            ) : (
-              <div className="my-4 p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left space-y-2">
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Item Upgrade:</span>
-                  <span className="font-bold text-white">
-                    Unlock Chat Room ({inviteCode})
-                  </span>
-                </div>
-                <div className="flex justify-between text-xs">
-                  <span className="text-slate-400">Total Saweran:</span>
-                  <span className="font-mono font-extrabold text-amber-400">
-                    Rp 10.000
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
-                  Mode Sandbox aktif (siap disambungkan ke{" "}
-                  <code className="text-rose-400">MIDTRANS_SERVER_KEY</code>).
-                  Klik tombol di bawah untuk menguji buka ruang obrolan.
-                </p>
-                <button
-                  onClick={confirmSandboxSawer}
-                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-slate-950 font-extrabold text-xs shadow-lg btn-tactile"
-                >
-                  ✅ Konfirmasi Sawer Rp10.000 & Buka Chat
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* TOASTS */}
       <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
@@ -2400,7 +2371,7 @@ export default function BesokKawinGame() {
         className="flex-1 min-h-0 overflow-y-auto overscroll-none w-full flex flex-col"
       >
         <div className="my-auto w-full max-w-xl mx-auto px-4 py-3 sm:py-4 flex flex-col justify-center">
-          {/* ==================== SCREEN 1: REGISTER ==================== */}
+          {/* ==================== SCREEN 1: REGISTER & GOOGLE LOGIN ==================== */}
           {screen === "register" && (
             <section className="animate-card-enter py-1">
               <div className="text-center mb-3">
@@ -2413,6 +2384,77 @@ export default function BesokKawinGame() {
                     Biar Nggak Nyesel di KUA.
                   </span>
                 </h1>
+              </div>
+
+              {/* BAR LOGIN GOOGLE PERMANEN */}
+              <div className="mb-2.5">
+                {!googleUser ? (
+                  <button
+                    type="button"
+                    disabled={isLoggingInGoogle}
+                    onClick={handleGoogleLogin}
+                    className="w-full py-2.5 px-4 rounded-2xl bg-white hover:bg-slate-100 text-slate-900 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-2.5 shadow-lg btn-tactile disabled:opacity-60"
+                  >
+                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                      <path
+                        fill="#4285F4"
+                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"
+                      />
+                      <path
+                        fill="#34A853"
+                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"
+                      />
+                      <path
+                        fill="#FBBC05"
+                        d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"
+                      />
+                      <path
+                        fill="#EA4335"
+                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"
+                      />
+                    </svg>
+                    <span>
+                      {isLoggingInGoogle
+                        ? "Menghubungkan ke Google..."
+                        : "Masuk dengan Google (Simpan Profil & VIP)"}
+                    </span>
+                  </button>
+                ) : (
+                  <div className="p-2.5 rounded-2xl bg-slate-900/95 border border-emerald-500/40 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold text-emerald-400 truncate">
+                        ✅ {googleUser.email}
+                      </p>
+                      {myPublicProfile && (
+                        <p className="text-[10px] text-slate-400">
+                          Profil tersimpan:{" "}
+                          <strong className="text-white">
+                            {myPublicProfile.name}
+                          </strong>{" "}
+                          ({myPublicProfile.isUpgraded ? "👑 VIP" : "Gratis"})
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {myPublicProfile && (
+                        <button
+                          type="button"
+                          onClick={() => goScreen("bursa")}
+                          className="px-2.5 py-1 rounded-xl bg-emerald-500 text-slate-950 font-extrabold text-[11px]"
+                        >
+                          Bursa →
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleGoogleLogout}
+                        className="px-2 py-1 rounded-xl bg-slate-800 text-slate-400 hover:text-white text-[10px] font-bold"
+                      >
+                        Logout
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-2.5">
@@ -2466,9 +2508,9 @@ export default function BesokKawinGame() {
               <div className="bg-[#111827]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 shadow-2xl">
                 {landingTab === "bursa" && (
                   <div className="mb-3 p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-200">
-                    💘 <strong>Mode Cari Pasangan Mabar:</strong> Pilih lawan
-                    jenis yang terdaftar. Jika saling pilih (Match), otomatis
-                    mabar! Jika cocok 80%+, bisa lanjut ngobrol.
+                    💘 <strong>Mode Cari Pasangan Mabar:</strong> Wajib masuk
+                    dengan Google agar profil & chat Match tersimpan permanen.
+                    Upgrade VIP Rp10.000 berlaku untuk semua pasangan Match!
                   </div>
                 )}
 
@@ -2521,10 +2563,11 @@ export default function BesokKawinGame() {
                     <input
                       type="email"
                       required
+                      readOnly={Boolean(googleUser?.email)}
                       value={regEmail}
                       onChange={(e) => setRegEmail(e.target.value)}
                       placeholder="nama@email.com"
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-rose-500 rounded-xl px-3 py-2 text-sm text-white focus:outline-none read-only:opacity-75"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
@@ -2584,7 +2627,7 @@ export default function BesokKawinGame() {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-300 mb-1">
-                          Bio Singkat
+                          Bio Singkat (Tanpa IG/WA)
                         </label>
                         <input
                           type="text"
@@ -2606,7 +2649,9 @@ export default function BesokKawinGame() {
                     {isCheckingRoom
                       ? "Mengecek Kode Undangan..."
                       : landingTab === "bursa"
-                      ? "Isi 20 Pengakuan & Masuk Bursa"
+                      ? myPublicProfile
+                        ? "Perbarui 20 Pengakuan & Masuk Bursa"
+                        : "Isi 20 Pengakuan & Masuk Bursa"
                       : landingTab === "new"
                       ? "Lanjut ke 20 Pengakuan"
                       : "Gabung Kode & Isi 20 Pengakuan"}
@@ -2694,12 +2739,20 @@ export default function BesokKawinGame() {
                       : "Laki-laki"}
                     )
                   </h2>
-                  <button
-                    onClick={fetchBursaCandidates}
-                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-300 border border-slate-700"
-                  >
-                    🔄 Refresh
-                  </button>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => goScreen("profile")}
+                      className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-[11px] font-bold text-amber-300 border border-amber-500/40"
+                    >
+                      💬 Kotak Masuk
+                    </button>
+                    <button
+                      onClick={fetchBursaCandidates}
+                      className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-300 border border-slate-700"
+                    >
+                      🔄 Refresh
+                    </button>
+                  </div>
                 </div>
                 <p className="text-[11px] text-slate-400 mb-2.5">
                   Pilih yang bikin kamu penasaran. Jika dia juga memilihmu,
@@ -3169,7 +3222,7 @@ export default function BesokKawinGame() {
               </section>
             )}
 
-          {/* ==================== SCREEN 5: ENDING + MONETIZATION CHAT ==================== */}
+          {/* ==================== SCREEN 5: ENDING ==================== */}
           {screen === "ending" && player1 && player2 && (
             <section className="animate-card-enter space-y-3 py-1 text-center">
               <div
@@ -3195,95 +3248,27 @@ export default function BesokKawinGame() {
                 </div>
               </div>
 
-              {/* PAYWALL SAWER Rp10.000 JIKA MATCHMAKING & HASIL BESOK KAWIN (>= 80%) */}
-              {mode === "couple" && isMatchmakingRoom && battery >= 80 && (
-                <div className="bg-[#111827]/95 border-2 border-amber-500/60 rounded-3xl p-4 shadow-xl text-left">
-                  {!chatUnlocked ? (
-                    <div className="text-center space-y-2">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        🔒 RUANG OBROLAN PRIBADI TERKUNCI
-                      </span>
-                      <h3 className="text-sm sm:text-base font-extrabold text-white">
-                        Mau Lanjut Ngobrol & Tukeran Kontak?
-                      </h3>
-                      <p className="text-xs text-slate-300">
-                        Kalian berdua lolos uji red flag dengan hasil{" "}
-                        <strong className="text-emerald-400">
-                          BESOK KAWIN!
-                        </strong>{" "}
-                        Sawer <strong>Rp10.000</strong> untuk upgrade dan buka
-                        ruang obrolan eksklusif kalian.
-                      </p>
-                      <button
-                        onClick={openSawerPayment}
-                        className="w-full mt-1 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-rose-500 text-slate-950 font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/25 btn-tactile"
-                      >
-                        💸 Sawer Rp10.000 untuk Upgrade Chat
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                        <span className="text-xs font-extrabold text-emerald-400">
-                          💬 Ruang Obrolan Pribadi Terbuka
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          Disawer oleh {unlockedBy || "Pasangan"}
-                        </span>
-                      </div>
-
-                      <div className="h-44 overflow-y-auto space-y-2 p-2.5 rounded-2xl bg-slate-950 border border-slate-800">
-                        {chatMessages.length === 0 ? (
-                          <p className="text-[11px] text-slate-500 text-center my-12">
-                            Belum ada pesan. Sapa pasangan mabar kamu sekarang!
-                          </p>
-                        ) : (
-                          chatMessages.map((m) => {
-                            const isMe = m.senderName === meProfile?.name;
-                            return (
-                              <div
-                                key={m.id}
-                                className={`flex flex-col ${
-                                  isMe ? "items-end" : "items-start"
-                                }`}
-                              >
-                                <span className="text-[9px] text-slate-500 mb-0.5 px-1">
-                                  {m.senderName}
-                                </span>
-                                <div
-                                  className={`px-3 py-1.5 rounded-2xl text-xs max-w-[82%] ${
-                                    isMe
-                                      ? "bg-rose-500 text-white rounded-br-sm"
-                                      : "bg-slate-800 text-slate-100 rounded-bl-sm"
-                                  }`}
-                                >
-                                  {m.text}
-                                </div>
-                              </div>
-                            );
-                          })
-                        )}
-                        <div ref={chatEndRef} />
-                      </div>
-
-                      <form onSubmit={handleSendChat} className="flex gap-1.5">
-                        <input
-                          type="text"
-                          value={chatInput}
-                          onChange={(e) => setChatInput(e.target.value)}
-                          placeholder="Ketik pesan atau tukeran IG/WA..."
-                          className="flex-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
-                        />
-                        <button
-                          type="submit"
-                          disabled={sendingChat}
-                          className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs btn-tactile"
-                        >
-                          Kirim
-                        </button>
-                      </form>
-                    </div>
-                  )}
+              {/* ARAHKAN KE DASHBOARD PROFIL & CHAT UNTUK PASANGAN MATCHMAKING */}
+              {mode === "couple" && isMatchmakingRoom && myPublicProfile && (
+                <div className="bg-[#111827]/95 border-2 border-amber-500/60 rounded-3xl p-4 shadow-xl text-center space-y-2">
+                  <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    💬 RUANG OBROLAN MATCH TERSEDIA
+                  </span>
+                  <h3 className="text-sm sm:text-base font-extrabold text-white">
+                    Mau Lanjut Ngobrol & Tukeran Kontak?
+                  </h3>
+                  <p className="text-xs text-slate-300">
+                    Buka <strong>Profil & Chat</strong> untuk mengirim pesan ke
+                    pasangan Match kamu. Upgrade VIP{" "}
+                    <strong>Rp10.000 sekali bayar</strong> berlaku untuk baca &
+                    balas pesan ke semua Match tanpa sensor blur!
+                  </p>
+                  <button
+                    onClick={() => goScreen("profile")}
+                    className="w-full mt-1 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-rose-500 text-slate-950 font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/25 btn-tactile"
+                  >
+                    👤 Buka Profil & Chat Sekarang →
+                  </button>
                 </div>
               )}
 
@@ -3325,9 +3310,19 @@ export default function BesokKawinGame() {
                 onClick={fullResetGame}
                 className="w-full py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-xs border border-slate-700 btn-tactile"
               >
-                ✨ Main Ulang Dari Awal
+                ✨ Kembali ke Bursa / Beranda
               </button>
             </section>
+          )}
+
+          {/* ==================== SCREEN 6: DASHBOARD PROFIL & CHAT ==================== */}
+          {screen === "profile" && myPublicProfile && (
+            <ProfileDashboard
+              profile={myPublicProfile}
+              onClose={() => goScreen("bursa")}
+              onGoBursa={() => goScreen("bursa")}
+              showToast={showToast}
+            />
           )}
         </div>
 
