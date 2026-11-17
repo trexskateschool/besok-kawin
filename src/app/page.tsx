@@ -203,6 +203,28 @@ export default function BesokKawinGame() {
     bgmEnabledRef.current = bgmEnabled;
   }, [bgmEnabled]);
 
+  // Reset posisi viewport agar header tidak tertahan ke atas setelah keyboard HP ditutup
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const resetRootScroll = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+    const handleFocusOut = () => {
+      setTimeout(resetRootScroll, 80);
+    };
+    resetRootScroll();
+    window.addEventListener("focusout", handleFocusOut);
+    window.addEventListener("resize", resetRootScroll);
+    window.visualViewport?.addEventListener("resize", resetRootScroll);
+    return () => {
+      window.removeEventListener("focusout", handleFocusOut);
+      window.removeEventListener("resize", resetRootScroll);
+      window.visualViewport?.removeEventListener("resize", resetRootScroll);
+    };
+  }, []);
+
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
@@ -448,6 +470,11 @@ export default function BesokKawinGame() {
   >("register");
 
   const goScreen = useCallback((next: typeof screen) => {
+    if (typeof window !== "undefined") {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    }
     setScreen(next);
     if (mainScrollRef.current)
       mainScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
@@ -664,6 +691,9 @@ export default function BesokKawinGame() {
   // Registration Handler
   const handleRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     const ageNum = parseInt(regAge, 10);
 
     if (isNaN(ageNum) || ageNum < 18) {
@@ -1683,9 +1713,9 @@ export default function BesokKawinGame() {
       : meProfile?.questions[0];
 
   return (
-    <div className="bg-grid-pattern min-h-[100dvh] h-[100dvh] overflow-hidden overscroll-none flex flex-col bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
+    <div className="bg-grid-pattern fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
       <style>{`
-        html, body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+        html, body { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
         .bg-grid-pattern {
           background-image: 
             radial-gradient(circle at 15% 15%, rgba(244, 63, 94, 0.12), transparent 35%),
@@ -1714,10 +1744,13 @@ export default function BesokKawinGame() {
       `}</style>
 
       {/* TOP NAVIGATION BAR */}
-      <header className="w-full shrink-0 border-b border-slate-800/80 bg-[#090d16]/90 backdrop-blur-md z-40">
-        <div className="max-w-xl mx-auto px-4 py-2.5 sm:py-3 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
+      <header
+        style={{ paddingTop: "max(0.65rem, env(safe-area-inset-top))" }}
+        className="w-full shrink-0 border-b border-slate-800/80 bg-[#090d16]/95 backdrop-blur-md z-40 pb-2.5"
+      >
+        <div className="max-w-xl mx-auto px-4 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 shrink-0 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
               <svg
                 className="w-4 h-4 text-white"
                 fill="none"
@@ -1732,22 +1765,22 @@ export default function BesokKawinGame() {
                 />
               </svg>
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-extrabold tracking-tight text-sm sm:text-lg text-white">
+                <span className="font-extrabold tracking-tight text-sm sm:text-lg text-white whitespace-nowrap">
                   BESOK KAWIN?
                 </span>
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30 shrink-0">
                   18+
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 leading-none">
+              <p className="text-[10px] text-slate-400 leading-tight truncate">
                 Dating & Red Flag Card Game
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             {!isAppInstalled && installPromptEvent && (
               <button
                 onClick={handleInstallClick}
@@ -1783,7 +1816,7 @@ export default function BesokKawinGame() {
             {screen !== "register" && (
               <button
                 onClick={fullResetGame}
-                className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
+                className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 whitespace-nowrap"
               >
                 Keluar
               </button>
@@ -1793,7 +1826,7 @@ export default function BesokKawinGame() {
       </header>
 
       {/* TOASTS */}
-      <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
+      <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
           <div
             key={t.id}
@@ -1810,10 +1843,10 @@ export default function BesokKawinGame() {
         ref={mainScrollRef}
         className="flex-1 min-h-0 overflow-y-auto overscroll-none w-full flex flex-col"
       >
-        <div className="my-auto w-full max-w-xl mx-auto px-4 py-2 sm:py-4 flex flex-col justify-center">
+        <div className="my-auto w-full max-w-xl mx-auto px-4 py-3 sm:py-4 flex flex-col justify-center">
           {/* ==================== SCREEN 1: REGISTER ==================== */}
           {screen === "register" && (
-            <section className="animate-card-enter py-2">
+            <section className="animate-card-enter py-1">
               <div className="text-center mb-3">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-1.5">
                   🔥 Uji Nyali Sebelum DP Gedung
@@ -1970,7 +2003,7 @@ export default function BesokKawinGame() {
 
           {/* ==================== SCREEN 2: QUIZ ==================== */}
           {screen === "quiz" && activeQuizProfile && activeQuizQuestion && (
-            <section className="py-2">
+            <section className="py-1">
               <div className="mb-2.5">
                 <div className="flex items-center justify-between text-xs mb-1">
                   <span className="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
@@ -2036,7 +2069,7 @@ export default function BesokKawinGame() {
 
           {/* ==================== SCREEN 3: LOBBY / MODE ==================== */}
           {screen === "mode" && player1 && (
-            <section className="animate-card-enter space-y-3 py-2">
+            <section className="animate-card-enter space-y-3 py-1">
               <div className="bg-[#111827]/95 border-2 border-emerald-500/40 rounded-3xl p-4 shadow-xl text-center">
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 mb-2">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -2390,7 +2423,7 @@ export default function BesokKawinGame() {
 
           {/* ==================== SCREEN 5: ENDING ==================== */}
           {screen === "ending" && player1 && player2 && (
-            <section className="animate-card-enter space-y-3 py-2 text-center">
+            <section className="animate-card-enter space-y-3 py-1 text-center">
               <div
                 className={`bg-[#111827]/95 border-2 rounded-3xl p-4 sm:p-5 shadow-2xl ${endingVerdict.border}`}
               >
