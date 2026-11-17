@@ -2257,7 +2257,7 @@ export default function BesokKawinGame() {
                     <span>
                       {isLoggingInGoogle
                         ? "Menghubungkan ke Google..."
-                        : "Masuk dengan Google (Simpan Profil & VIP)"}
+                        : "Masuk dengan Google"}
                     </span>
                   </button>
                 ) : (
