@@ -790,26 +790,22 @@ const ROMANTIC_BGM_STEPS: {
   melody?: number;
   dur?: number;
 }[] = [
-  // Bar 1: Fmaj7
-  { bass: 174.61, chord: [261.63, 329.63], melody: 440.0, dur: 1.5 }, // F3 + C4/E4 + A4
-  { chord: [329.63], melody: 392.0, dur: 0.9 }, // G4
-  { melody: 329.63, dur: 0.9 }, // E4
-  { chord: [261.63], melody: 293.66, dur: 1.1 }, // D4
-  // Bar 2: Em7
-  { bass: 164.81, chord: [246.94, 293.66], melody: 392.0, dur: 1.5 }, // E3 + B3/D4 + G4
-  { chord: [293.66], melody: 493.88, dur: 0.9 }, // B4
-  { melody: 587.33, dur: 1.1 }, // D5
-  { chord: [246.94], melody: 493.88, dur: 0.9 }, // B4
-  // Bar 3: Dm7
-  { bass: 146.83, chord: [220.0, 261.63], melody: 523.25, dur: 1.5 }, // D3 + A3/C4 + C5
-  { chord: [261.63], melody: 440.0, dur: 0.9 }, // A4
-  { melody: 349.23, dur: 0.9 }, // F4
-  { chord: [220.0], melody: 329.63, dur: 1.1 }, // E4
-  // Bar 4: Cmaj7 -> G/B
-  { bass: 130.81, chord: [196.0, 246.94], melody: 329.63, dur: 1.4 }, // C3 + G3/B3 + E4
-  { melody: 392.0, dur: 0.9 }, // G4
-  { bass: 123.47, chord: [196.0, 293.66], melody: 493.88, dur: 1.1 }, // B2 + G3/D4 + B4
-  { melody: 523.25, dur: 1.2 }, // C5
+  { bass: 174.61, chord: [261.63, 329.63], melody: 440.0, dur: 1.5 },
+  { chord: [329.63], melody: 392.0, dur: 0.9 },
+  { melody: 329.63, dur: 0.9 },
+  { chord: [261.63], melody: 293.66, dur: 1.1 },
+  { bass: 164.81, chord: [246.94, 293.66], melody: 392.0, dur: 1.5 },
+  { chord: [293.66], melody: 493.88, dur: 0.9 },
+  { melody: 587.33, dur: 1.1 },
+  { chord: [246.94], melody: 493.88, dur: 0.9 },
+  { bass: 146.83, chord: [220.0, 261.63], melody: 523.25, dur: 1.5 },
+  { chord: [261.63], melody: 440.0, dur: 0.9 },
+  { melody: 349.23, dur: 0.9 },
+  { chord: [220.0], melody: 329.63, dur: 1.1 },
+  { bass: 130.81, chord: [196.0, 246.94], melody: 329.63, dur: 1.4 },
+  { melody: 392.0, dur: 0.9 },
+  { bass: 123.47, chord: [196.0, 293.66], melody: 493.88, dur: 1.1 },
+  { melody: 523.25, dur: 1.2 },
 ];
 
 function build20QuestionsForProfile(
@@ -1007,7 +1003,6 @@ export default function BesokKawinGame() {
     bgmTimerRef.current = setInterval(triggerStep, 440);
   }, [getOrCreateAudioContext, playPianoVoice]);
 
-  // Unlock BGM otomatis saat interaksi pertama pengguna di layar
   useEffect(() => {
     if (typeof window === "undefined") return;
     const unlockAudio = () => {
@@ -1023,7 +1018,6 @@ export default function BesokKawinGame() {
     };
   }, [startRomanticBgm]);
 
-  // Bersihkan timer saat komponen ditutup
   useEffect(() => {
     return () => stopRomanticBgm();
   }, [stopRomanticBgm]);
@@ -1125,7 +1119,7 @@ export default function BesokKawinGame() {
 
   // Screens & Navigation
   const [screen, setScreen] = useState<
-    "register" | "quiz" | "mode" | "partner-join" | "game" | "ending"
+    "register" | "quiz" | "mode" | "game" | "ending"
   >("register");
 
   const goScreen = (next: typeof screen) => {
@@ -1162,16 +1156,6 @@ export default function BesokKawinGame() {
 
   // Mode Screen State
   const [botAgeSlider, setBotAgeSlider] = useState(25);
-  const [partnerNameInput, setPartnerNameInput] = useState("");
-  const [partnerGenderInput, setPartnerGenderInput] = useState<
-    "Laki-laki" | "Perempuan"
-  >("Perempuan");
-  const [partnerAgeInput, setPartnerAgeInput] = useState("");
-  const [partnerError, setPartnerError] = useState<{
-    title: string;
-    text: string;
-    key: number;
-  } | null>(null);
 
   // Gameplay State
   const [battery, setBattery] = useState(50);
@@ -1388,31 +1372,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  const autoCompleteQuizDemo = () => {
-    sfxTap();
-    const activeProfile = quizTarget === "player1" ? player1 : player2;
-    if (!activeProfile) return;
-
-    const choices: ("iya" | "kayanya" | "engga")[] = [
-      "iya",
-      "iya",
-      "kayanya",
-      "engga",
-    ];
-    const newAnswers = { ...activeProfile.answers };
-    for (let i = quizIndex; i < activeProfile.questions.length; i++) {
-      const q = activeProfile.questions[i];
-      newAnswers[q.id] =
-        choices[(i + Math.floor(Math.random() * 3)) % choices.length];
-    }
-    const updatedProfile = { ...activeProfile, answers: newAnswers };
-    if (quizTarget === "player1") setPlayer1(updatedProfile);
-    else setPlayer2(updatedProfile);
-
-    showToast("Sisa pertanyaan otomatis terisi untuk simulasi!", "success");
-    finishQuizPhase(updatedProfile);
-  };
-
   const finishQuizPhase = (completedProfile: PlayerProfile) => {
     if (quizTarget === "player2" && player1) {
       showToast(
@@ -1425,7 +1384,7 @@ export default function BesokKawinGame() {
     goScreen("mode");
   };
 
-  // Handlers: Screen 3 & 3B (Mode & Partner Join)
+  // Handlers: Screen 3 (Mode)
   const startSoloGame = () => {
     if (!player1) return;
     sfxTap();
@@ -1458,73 +1417,6 @@ export default function BesokKawinGame() {
     setMode("solo");
     setPlayer2(botProfile);
     initMatchArena(player1, botProfile, "solo");
-  };
-
-  const openPartnerSimulatorModal = () => {
-    if (!player1) return;
-    sfxTap();
-    setPartnerError(null);
-    setPartnerGenderInput(
-      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
-    );
-    goScreen("partner-join");
-  };
-
-  const quickFillPartnerDemo = () => {
-    if (!player1) return;
-    sfxTap();
-    const opp = player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
-    setPartnerNameInput(opp === "Perempuan" ? "Salsa" : "Reza");
-    setPartnerGenderInput(opp);
-    setPartnerAgeInput("25");
-    setPartnerError(null);
-  };
-
-  const handlePartnerJoinSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!player1) return;
-    const pAge = parseInt(partnerAgeInput, 10);
-
-    if (isNaN(pAge) || pAge < 18) {
-      sfxPenalty();
-      setPartnerError({
-        title: "Akses Ditolak! Minimal Usia 18+",
-        text: "Pasangan harus berusia minimal 18 tahun untuk bermain.",
-        key: Date.now(),
-      });
-      return;
-    }
-
-    if (partnerGenderInput === player1.gender) {
-      sfxPenalty();
-      setPartnerError({
-        title:
-          "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
-        text: `${player1.name} terdaftar sebagai ${
-          player1.gender
-        }. Pasangan harus berjenis kelamin ${
-          player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
-        }.`,
-        key: Date.now(),
-      });
-      return;
-    }
-
-    sfxTap();
-    setPartnerError(null);
-    const p2: PlayerProfile = {
-      name: partnerNameInput.trim(),
-      email: "pasangan@invite.id",
-      gender: partnerGenderInput,
-      age: pAge,
-      questions: build20QuestionsForProfile(partnerGenderInput, pAge),
-      answers: {},
-    };
-    setMode("couple");
-    setPlayer2(p2);
-    setQuizTarget("player2");
-    setQuizIndex(0);
-    goScreen("quiz");
   };
 
   // Match Deck Builder & Arena Init
@@ -2656,15 +2548,6 @@ export default function BesokKawinGame() {
                 </span>
               </button>
             </div>
-
-            <div className="mt-4 text-center">
-              <button
-                onClick={autoCompleteQuizDemo}
-                className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition"
-              >
-                ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
-              </button>
-            </div>
           </section>
         )}
 
@@ -2844,13 +2727,13 @@ export default function BesokKawinGame() {
                     Mode Ajak Pasangan (Kode Undangan)
                   </h4>
                   <p className="text-xs text-slate-400">
-                    Kirim kode ke pasangan lawan jenis & main bergantian di
-                    perangkat ini.
+                    Kirim kode ke pasangan lawan jenis untuk bergabung di sesi
+                    uji kecocokan.
                   </p>
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 mb-3">
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2">
                 <div>
                   <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">
                     Kode Undangan Kamu
@@ -2871,133 +2754,6 @@ export default function BesokKawinGame() {
                   Salin Kode
                 </button>
               </div>
-
-              <button
-                onClick={openPartnerSimulatorModal}
-                className="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile"
-              >
-                📲 Simulasikan Pasangan Masuk Pakai Kode Ini
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* ==================== SCREEN 3B: PARTNER JOIN ==================== */}
-        {screen === "partner-join" && player1 && (
-          <section className="animate-card-enter">
-            <div className="bg-[#111827]/95 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl">
-              <div className="flex items-center justify-between mb-4">
-                <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  Kode: {inviteCode}
-                </span>
-                <button
-                  onClick={() => {
-                    sfxTap();
-                    goScreen("mode");
-                  }}
-                  className="text-xs text-slate-400 hover:text-white"
-                >
-                  ← Kembali
-                </button>
-              </div>
-
-              <h2 className="text-xl font-extrabold text-white">
-                Pasangan Bergabung!
-              </h2>
-              <p className="text-xs text-slate-400 mt-1 mb-4">
-                <span className="text-rose-400 font-semibold">
-                  {player1.name} ({player1.gender}, {player1.age} thn)
-                </span>{" "}
-                mengundangmu uji kecocokan. Masukkan datamu (wajib lawan jenis
-                & 18+).
-              </p>
-
-              {partnerError && (
-                <div
-                  key={partnerError.key}
-                  className="mb-4 p-3.5 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
-                >
-                  <p className="text-xs font-extrabold text-red-400">
-                    {partnerError.title}
-                  </p>
-                  <p className="text-xs text-red-200/90 mt-0.5">
-                    {partnerError.text}
-                  </p>
-                </div>
-              )}
-
-              <form onSubmit={handlePartnerJoinSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">
-                    Nama Panggilan Pasangan
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={partnerNameInput}
-                    onChange={(e) => setPartnerNameInput(e.target.value)}
-                    placeholder="Nama pasanganmu"
-                    className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Jenis Kelamin Pasangan
-                    </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {(["Laki-laki", "Perempuan"] as const).map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setPartnerGenderInput(g)}
-                          className={`py-2.5 px-2 rounded-xl border text-xs font-bold text-center ${
-                            partnerGenderInput === g
-                              ? "border-emerald-500 bg-emerald-500/15 text-white"
-                              : "border-slate-700 bg-slate-950 text-slate-400"
-                          }`}
-                        >
-                          {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Usia Pasangan (18+)
-                    </label>
-                    <input
-                      type="number"
-                      required
-                      min={10}
-                      max={80}
-                      value={partnerAgeInput}
-                      onChange={(e) => setPartnerAgeInput(e.target.value)}
-                      placeholder="Contoh: 25"
-                      className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <button
-                    type="button"
-                    onClick={quickFillPartnerDemo}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4"
-                  >
-                    ⚡ Isi Cepat Data Pasangan
-                  </button>
-                </div>
-
-                <button
-                  type="submit"
-                  className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/25 btn-tactile"
-                >
-                  Generate Dek Masalah Pasangan & Mulai →
-                </button>
-              </form>
             </div>
           </section>
         )}
@@ -3597,7 +3353,7 @@ export default function BesokKawinGame() {
 
       {/* FOOTER */}
       <footer className="w-full py-4 text-center text-[11px] text-slate-600">
-        BESOK KAWIN? • Simulasi Mekanik Game & Red Flag Card Engine
+        BESOK KAWIN? • Dating & Red Flag Card Game
       </footer>
     </div>
   );
