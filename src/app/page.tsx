@@ -874,7 +874,9 @@ export default function BesokKawinGame() {
     try {
       if (!audioCtxRef.current && typeof window !== "undefined") {
         const AudioCtx =
-          window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext;
         if (AudioCtx) audioCtxRef.current = new AudioCtx();
       }
       const ctx = audioCtxRef.current;
@@ -1674,6 +1676,234 @@ export default function BesokKawinGame() {
     }
   };
 
+  // Ending Verdict Config
+  const endingVerdict =
+    battery >= 80
+      ? {
+          emoji: "💍",
+          title: "BESOK KAWIN!",
+          subtitle:
+            "Red flag kalian berdua ternyata saling mengunci kayak puzzle! Kesiapan mental dan kompromi kalian udah matang. Langsung booking KUA dan sebar undangan!",
+          border: "border-emerald-500/60 shadow-emerald-500/15",
+          iconBg: "bg-emerald-500/20 border-emerald-500/40",
+          badgeBg: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
+          titleClass:
+            "text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-300 to-amber-300",
+        }
+      : battery >= 45
+      ? {
+          emoji: "⏳",
+          title: "PACARAN DULU AJA",
+          subtitle:
+            "Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Jangan buru-buru DP gedung — pacaran dulu aja sambil benerin komunikasi!",
+          border: "border-amber-500/60 shadow-amber-500/10",
+          iconBg: "bg-amber-500/20 border-amber-500/40",
+          badgeBg: "bg-amber-500/20 text-amber-300 border-amber-500/40",
+          titleClass: "text-amber-400",
+        }
+      : {
+          emoji: "🚨",
+          title: "STOP THE WEDDING",
+          subtitle: endingReason
+            ? `${endingReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama di pengadilan agama!`
+            : "Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!",
+          border: "border-red-500/60 shadow-red-500/15",
+          iconBg: "bg-red-500/20 border-red-500/40",
+          badgeBg: "bg-red-500/20 text-red-300 border-red-500/40",
+          titleClass: "text-red-500",
+        };
+
+  // IG Story PNG Generator
+  const downloadStoryCardPNG = () => {
+    if (!player1 || !player2 || typeof document === "undefined") return;
+    sfxTap();
+
+    const canvas = document.createElement("canvas");
+    canvas.width = 1080;
+    canvas.height = 1920;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    // 1. Background Obsidian & Radial Glow
+    ctx.fillStyle = "#090d16";
+    ctx.fillRect(0, 0, 1080, 1920);
+
+    const isWin = battery >= 80;
+    const isMid = battery >= 45 && battery < 80;
+    const accentColor = isWin ? "#10b981" : isMid ? "#f59e0b" : "#f43f5e";
+    const accentGlow = isWin
+      ? "rgba(16, 185, 129, 0.22)"
+      : isMid
+      ? "rgba(245, 158, 11, 0.22)"
+      : "rgba(244, 63, 94, 0.25)";
+
+    const grad = ctx.createRadialGradient(540, 620, 60, 540, 620, 760);
+    grad.addColorStop(0, accentGlow);
+    grad.addColorStop(1, "rgba(9, 13, 22, 0)");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1080, 1920);
+
+    // Pola Grid Tipis
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+    ctx.lineWidth = 2;
+    for (let x = 0; x <= 1080; x += 54) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 1920);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= 1920; y += 54) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(1080, y);
+      ctx.stroke();
+    }
+
+    const roundRect = (
+      x: number,
+      y: number,
+      w: number,
+      h: number,
+      r: number
+    ) => {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      ctx.closePath();
+    };
+
+    // 2. Header Brand
+    ctx.fillStyle = "#f43f5e";
+    ctx.font = "900 44px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("BESOK KAWIN? • 18+", 540, 160);
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "600 28px sans-serif";
+    ctx.fillText("HASIL UJI NYALI & RED FLAG PASANGAN", 540, 210);
+
+    // 3. Kartu Vonis Utama
+    roundRect(80, 280, 920, 1180, 48);
+    ctx.fillStyle = "rgba(17, 24, 39, 0.94)";
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = accentColor;
+    ctx.stroke();
+
+    ctx.font = "130px sans-serif";
+    ctx.fillText(endingVerdict.emoji, 540, 460);
+
+    roundRect(310, 515, 460, 64, 32);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
+    ctx.fill();
+    ctx.fillStyle = accentColor;
+    ctx.font = "800 30px monospace";
+    ctx.fillText(`BATERAI CINTA: ${battery}%`, 540, 558);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 66px sans-serif";
+    ctx.fillText(endingVerdict.title, 540, 665);
+
+    ctx.fillStyle = "#e2e8f0";
+    ctx.font = "700 34px sans-serif";
+    ctx.fillText(
+      `${player1.name} (${player1.age})  ⚡  ${player2.name} (${player2.age})`,
+      540,
+      740
+    );
+
+    // Progress Bar Baterai
+    roundRect(150, 795, 780, 44, 22);
+    ctx.fillStyle = "#020617";
+    ctx.fill();
+    if (battery > 0) {
+      roundRect(156, 801, Math.max(32, (768 * battery) / 100), 32, 16);
+      ctx.fillStyle = accentColor;
+      ctx.fill();
+    }
+
+    // Wrap Teks Penjelasan Vonis
+    ctx.fillStyle = "#cbd5e1";
+    ctx.font = "500 30px sans-serif";
+    const words = endingVerdict.subtitle.split(" ");
+    let line = "";
+    let lineY = 915;
+    for (let i = 0; i < words.length; i++) {
+      const testLine = line + words[i] + " ";
+      if (ctx.measureText(testLine).width > 780 && i > 0) {
+        ctx.fillText(line.trim(), 540, lineY);
+        line = words[i] + " ";
+        lineY += 44;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line.trim(), 540, lineY);
+
+    // 4. Grid Statistik 2x2
+    const statBoxes = [
+      {
+        label: "TERIMA MANTAP",
+        val: `${stats.terimaMantap}x (+10%)`,
+        color: "#10b981",
+      },
+      {
+        label: "NYESEL TERIMA",
+        val: `${stats.menyesal}x (-12%)`,
+        color: "#f43f5e",
+      },
+      {
+        label: "KOMPROMI SEPAKAT",
+        val: `${stats.kompromiSepakat}x (+5%)`,
+        color: "#f59e0b",
+      },
+      {
+        label: "DEADLOCK / AFK",
+        val: `${stats.deadlockOrAfk}x (-15%)`,
+        color: "#ef4444",
+      },
+    ];
+
+    statBoxes.forEach((box, idx) => {
+      const col = idx % 2;
+      const row = Math.floor(idx / 2);
+      const bx = 140 + col * 410;
+      const by = 1140 + row * 135;
+      roundRect(bx, by, 390, 115, 24);
+      ctx.fillStyle = "rgba(2, 6, 23, 0.85)";
+      ctx.fill();
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.2)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = box.color;
+      ctx.font = "900 34px monospace";
+      ctx.fillText(box.val, bx + 195, by + 54);
+
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "700 22px sans-serif";
+      ctx.fillText(box.label, bx + 195, by + 90);
+    });
+
+    // 5. Footer Watermark
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "600 28px sans-serif";
+    ctx.fillText("Berani buka borokmu sebelum ke KUA?", 540, 1580);
+
+    ctx.fillStyle = "#f43f5e";
+    ctx.font = "800 34px monospace";
+    ctx.fillText("besok-kawin.vercel.app", 540, 1635);
+
+    const link = document.createElement("a");
+    link.download = `BESOK-KAWIN-${player1.name}-${player2.name}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    showToast("📸 Kartu Hasil IG Story (PNG) berhasil diunduh!", "success");
+  };
+
   const fullResetGame = () => {
     sfxTap();
     setTimerActive(false);
@@ -1729,42 +1959,6 @@ export default function BesokKawinGame() {
     responderConfessions.length > 0
       ? responderConfessions[round % responderConfessions.length]
       : currentResponder?.questions[0];
-
-  const endingVerdict =
-    battery >= 80
-      ? {
-          emoji: "💍",
-          title: "BESOK KAWIN!",
-          subtitle:
-            "Red flag kalian berdua ternyata saling mengunci kayak puzzle! Kesiapan mental dan kompromi kalian udah matang. Langsung booking KUA dan sebar undangan!",
-          border: "border-emerald-500/60 shadow-emerald-500/15",
-          iconBg: "bg-emerald-500/20 border-emerald-500/40",
-          badgeBg: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-          titleClass:
-            "text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-300 to-amber-300",
-        }
-      : battery >= 45
-      ? {
-          emoji: "⏳",
-          title: "PACARAN DULU AJA",
-          subtitle:
-            "Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Jangan buru-buru DP gedung — pacaran dulu aja sambil benerin komunikasi!",
-          border: "border-amber-500/60 shadow-amber-500/10",
-          iconBg: "bg-amber-500/20 border-amber-500/40",
-          badgeBg: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-          titleClass: "text-amber-400",
-        }
-      : {
-          emoji: "🚨",
-          title: "STOP THE WEDDING",
-          subtitle: endingReason
-            ? `${endingReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama di pengadilan agama!`
-            : "Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!",
-          border: "border-red-500/60 shadow-red-500/15",
-          iconBg: "bg-red-500/20 border-red-500/40",
-          badgeBg: "bg-red-500/20 text-red-300 border-red-500/40",
-          titleClass: "text-red-500",
-        };
 
   return (
     <div className="bg-grid-pattern min-h-screen flex flex-col justify-between bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
@@ -3092,6 +3286,13 @@ export default function BesokKawinGame() {
                 </span>
               </div>
             </div>
+
+            <button
+              onClick={downloadStoryCardPNG}
+              className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:brightness-110 text-slate-950 font-extrabold text-sm shadow-lg shadow-amber-500/20 flex items-center justify-center gap-2 btn-tactile"
+            >
+              <span>📸 Unduh Kartu Hasil IG Story (PNG)</span>
+            </button>
 
             <div className="grid grid-cols-4 gap-2">
               <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
