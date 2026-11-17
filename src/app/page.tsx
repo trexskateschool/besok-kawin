@@ -188,6 +188,8 @@ export default function BesokKawinGame() {
   const [installPromptEvent, setInstallPromptEvent] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isAppInstalled, setIsAppInstalled] = useState(false);
+  const [showInstallGuide, setShowInstallGuide] = useState(false);
+  const [isIosDevice, setIsIosDevice] = useState(false);
 
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [bgmEnabled, setBgmEnabled] = useState(true);
@@ -225,12 +227,31 @@ export default function BesokKawinGame() {
     };
   }, []);
 
+  // PWA Service Worker & Install Prompt Listener
   useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const ua = window.navigator.userAgent;
+    setIsIosDevice(/iPad|iPhone|iPod/.test(ua));
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setInstallPromptEvent(e as BeforeInstallPromptEvent);
     };
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setInstallPromptEvent(null);
+      setShowInstallGuide(false);
+      showToast("✅ Besok Kawin? berhasil terpasang di HP!", "success");
+    };
+
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
 
     if (
       window.matchMedia("(display-mode: standalone)").matches ||
@@ -244,23 +265,24 @@ export default function BesokKawinGame() {
         "beforeinstallprompt",
         handleBeforeInstallPrompt
       );
+      window.removeEventListener("appinstalled", handleAppInstalled);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleInstallClick = async () => {
-    if (!installPromptEvent) {
-      showToast(
-        "Gunakan menu browser (titik tiga) lalu pilih 'Add to Home Screen'.",
-        "info"
-      );
+    sfxTap();
+    if (installPromptEvent) {
+      await installPromptEvent.prompt();
+      const { outcome } = await installPromptEvent.userChoice;
+      if (outcome === "accepted") {
+        setIsAppInstalled(true);
+        setInstallPromptEvent(null);
+        showToast("Menginstal Besok Kawin? ke layar utama...", "success");
+      }
       return;
     }
-    await installPromptEvent.prompt();
-    const { outcome } = await installPromptEvent.userChoice;
-    if (outcome === "accepted") {
-      showToast("Terima kasih telah menginstal Besok Kawin!", "success");
-      setInstallPromptEvent(null);
-    }
+    setShowInstallGuide(true);
   };
 
   const getOrCreateAudioContext = useCallback(() => {
@@ -556,7 +578,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Reset local stage & timer whenever round increments in online multiplayer
   useEffect(() => {
     if (screen === "game" && mode === "couple") {
       setGameStage("dilemma");
@@ -565,7 +586,6 @@ export default function BesokKawinGame() {
     }
   }, [round, screen, mode]);
 
-  // Derived online card states for current user
   const myResponderCardState = myRole === "player1" ? c1State : c2State;
   const myOwnedCardState = myRole === "player1" ? c2State : c1State;
 
@@ -610,7 +630,7 @@ export default function BesokKawinGame() {
     needsOwnerCompromiseAction,
   ]);
 
-  // REAL-TIME LISTENER FIRESTORE (Sinkronisasi 2 HP secara langsung)
+  // REAL-TIME LISTENER FIRESTORE
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     if (mode === "solo" && screen === "game") return;
@@ -655,7 +675,6 @@ export default function BesokKawinGame() {
         setRound(data.round);
       }
 
-      // Saat Pasangan (Player 2) selesai kuis & status berubah jadi "playing" -> Kedua HP masuk bersamaan!
       if (
         data.status === "playing" &&
         data.player1 &&
@@ -675,7 +694,6 @@ export default function BesokKawinGame() {
         goScreen("game");
       }
 
-      // Saat ronde ke-8 selesai atau baterai 0% -> Kedua HP masuk layar Ending bersamaan!
       if (data.status === "finished" && screen === "game") {
         setTimerActive(false);
         if ((data.battery ?? 0) >= 80) sfxWin();
@@ -805,7 +823,6 @@ export default function BesokKawinGame() {
       }
     }
 
-    // Pemain 1 (Pembuat Room Baru)
     sfxTap();
     setRegError(null);
     setMyRole("player1");
@@ -849,7 +866,6 @@ export default function BesokKawinGame() {
   };
 
   const finishQuizPhase = async (completedProfile: PlayerProfile) => {
-    // Pemain 2 selesai kuis -> Simpan ke Firestore & mulai permainan serentak!
     if (myRole === "player2" && player1 && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -899,7 +915,6 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Pemain 1 selesai kuis -> Buat room online berstatus "waiting"
     if (myRole === "player1" && inviteCode && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -990,7 +1005,6 @@ export default function BesokKawinGame() {
     goScreen("game");
   };
 
-  // Helper: Check if both c1 & c2 are resolved in transaction and advance round
   const finalizeRoundIfBothResolved = (
     data: Record<string, unknown>,
     c1: CardRoundState,
@@ -1080,7 +1094,6 @@ export default function BesokKawinGame() {
     };
   };
 
-  // Online Action 1: Responder resolves card (Accept + Consequence OR Timeout)
   const submitOnlineResponderDirect = async (
     delta: number,
     outcomeLabel: string,
@@ -1129,7 +1142,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Online Action 2: Responder rejects card & picks their compromise choice (0, 1, 2)
   const submitOnlineResponderRejectChoice = async (chosenIdx: number) => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     setIsSubmittingDecision(true);
@@ -1170,7 +1182,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Online Action 3: Owner of rejected card picks their compromise choice (0, 1, 2) -> Resolves Match or Deadlock!
   const submitOnlineOwnerCompromiseChoice = async (ownerIdx: number) => {
     if (!inviteCode || !isFirebaseReady || !db || !player1 || !player2) return;
     setIsSubmittingDecision(true);
@@ -1187,7 +1198,6 @@ export default function BesokKawinGame() {
         const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
         const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
 
-        // My owned card is c2 if I am player1, or c1 if I am player2
         const ownedCard = myRole === "player1" ? c2 : c1;
         const responderIdx = ownedCard.responderChoice ?? 0;
         const isTimeout = ownerIdx === -1;
@@ -1230,7 +1240,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Solo Advance Helper
   const advanceSoloRound = (projectedBattery: number) => {
     if (projectedBattery <= 0) {
       setTimerActive(false);
@@ -1255,7 +1264,6 @@ export default function BesokKawinGame() {
     setTimerActive(true);
   };
 
-  // Active Cards for Current User
   const myActiveDeck =
     mode === "solo"
       ? soloDeck
@@ -1272,7 +1280,6 @@ export default function BesokKawinGame() {
   const partnerProfile =
     mode === "solo" ? player2 : myRole === "player1" ? player2 : player1;
 
-  // Timeout Handler
   const handleTimeoutPenalty = async () => {
     sfxPenalty();
     if (!currentCard || !meProfile) return;
@@ -1324,7 +1331,6 @@ export default function BesokKawinGame() {
     setTimeout(() => advanceSoloRound(nextBattery), 950);
   };
 
-  // Stage 1 Choices
   const chooseAcceptCard = () => {
     sfxFlip();
     setConsecutiveTimeouts(0);
@@ -1337,7 +1343,6 @@ export default function BesokKawinGame() {
     setGameStage("negotiate");
   };
 
-  // Stage 2A: Consequence Resolution
   const resolveConsequence = async (isFirm: boolean) => {
     if (!currentCard || !meProfile) return;
 
@@ -1362,7 +1367,6 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Solo Mode
     setTimerActive(false);
     if (isFirm) {
       sfxCharge();
@@ -1405,7 +1409,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Stage 2B: Compromise Resolution (Responder side)
   const resolveNegotiation = async (chosenIdx: number) => {
     if (!currentCard || !meProfile || !partnerProfile) return;
 
@@ -1415,7 +1418,6 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Solo Mode
     setTimerActive(false);
     const tier = partnerProfile.tier || "mid";
     const botIdx = currentCard.botPref[tier] ?? 0;
@@ -1476,7 +1478,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Ending Verdict
   const endingVerdict =
     battery >= 80
       ? {
@@ -1513,7 +1514,6 @@ export default function BesokKawinGame() {
           titleClass: "text-red-500",
         };
 
-  // Full IG Story PNG Generator
   const downloadStoryCardPNG = () => {
     if (!player1 || !player2 || typeof document === "undefined") return;
     sfxTap();
@@ -1781,13 +1781,13 @@ export default function BesokKawinGame() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {!isAppInstalled && installPromptEvent && (
+            {!isAppInstalled && (
               <button
                 onClick={handleInstallClick}
-                className="px-2.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold flex items-center gap-1 shadow-lg shadow-rose-500/25 transition btn-tactile"
+                className="px-2.5 py-1.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-extrabold flex items-center gap-1 shadow-lg shadow-rose-500/25 transition btn-tactile shrink-0"
               >
-                <span>📱</span>
-                <span className="hidden sm:inline">Install</span>
+                <span>📲</span>
+                <span>Install</span>
               </button>
             )}
 
@@ -1824,6 +1824,79 @@ export default function BesokKawinGame() {
           </div>
         </div>
       </header>
+
+      {/* INSTALL GUIDE MODAL (Untuk iOS Safari / Browser In-App WA/IG) */}
+      {showInstallGuide && (
+        <div
+          onClick={() => setShowInstallGuide(false)}
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#111827] border border-slate-700 rounded-3xl p-5 shadow-2xl animate-card-enter"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-xl">📲</span>
+                <h3 className="font-extrabold text-white text-sm sm:text-base">
+                  Pasang Besok Kawin? di HP
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowInstallGuide(false)}
+                className="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {isIosDevice ? (
+              <ol className="space-y-2.5 text-xs text-slate-300 mb-4">
+                <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                  <strong>1.</strong> Pastikan membuka link ini di{" "}
+                  <strong className="text-white">Safari</strong>.
+                </li>
+                <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                  <strong>2.</strong> Tekan ikon{" "}
+                  <strong className="text-rose-400">Share (Kotak Panah Atas)</strong>{" "}
+                  di bilah bawah browser.
+                </li>
+                <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                  <strong>3.</strong> Pilih{" "}
+                  <strong className="text-emerald-400">
+                    Add to Home Screen (Tambah ke Layar Utama)
+                  </strong>
+                  .
+                </li>
+              </ol>
+            ) : (
+              <ol className="space-y-2.5 text-xs text-slate-300 mb-4">
+                <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                  <strong>1.</strong> Jika membuka dari WhatsApp/Instagram, ketuk{" "}
+                  <strong className="text-amber-400">Titik Tiga (⋮)</strong> lalu
+                  pilih <strong className="text-white">Buka di Chrome</strong>.
+                </li>
+                <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                  <strong>2.</strong> Di Chrome, ketuk{" "}
+                  <strong className="text-amber-400">Titik Tiga (⋮)</strong> di
+                  pojok kanan atas, lalu pilih{" "}
+                  <strong className="text-emerald-400">
+                    Install app / Tambahkan ke Layar utama
+                  </strong>
+                  .
+                </li>
+              </ol>
+            )}
+
+            <button
+              onClick={() => setShowInstallGuide(false)}
+              className="w-full py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-extrabold text-xs btn-tactile"
+            >
+              Mengerti
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* TOASTS */}
       <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
@@ -2145,7 +2218,6 @@ export default function BesokKawinGame() {
             meProfile &&
             partnerProfile && (
               <section className="space-y-2.5 py-1">
-                {/* BATERAI CINTA HUD */}
                 <div
                   key={shakeHud}
                   className={`bg-[#111827]/95 border border-slate-800 rounded-3xl p-3 shadow-xl relative ${
@@ -2202,6 +2274,7 @@ export default function BesokKawinGame() {
                   <div className="flex justify-between mt-2 text-[11px] text-slate-400">
                     <span>
                       Ronde <strong className="text-rose-400">{round}</strong>/8
+                      • HP Kamu:{" "}
                       <strong className="text-white">{meProfile.name}</strong>
                     </span>
                     <span
@@ -2214,7 +2287,6 @@ export default function BesokKawinGame() {
                   </div>
                 </div>
 
-                {/* PRIORITY 1: JAWAB KARTU MASALAH MILIK PASANGAN */}
                 {(mode === "solo" || needsResponderAction) && (
                   <>
                     {gameStage === "dilemma" && (
@@ -2332,7 +2404,6 @@ export default function BesokKawinGame() {
                   </>
                 )}
 
-                {/* PRIORITY 2: PASANGAN MENOLAK MASALAHMU -> GILIRAN KAMU PILIH KOMPROMI YANG SAMA */}
                 {mode === "couple" &&
                   needsOwnerCompromiseAction &&
                   myOwnedCard && (
@@ -2382,7 +2453,6 @@ export default function BesokKawinGame() {
                     </div>
                   )}
 
-                {/* PRIORITY 3: MENUNGGU PASANGAN SELESAI DI RONDE INI */}
                 {mode === "couple" &&
                   !needsResponderAction &&
                   !needsOwnerCompromiseAction && (
