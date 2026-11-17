@@ -9,7 +9,22 @@ import {
   getDoc,
   onSnapshot,
   runTransaction,
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  orderBy,
+  limit,
 } from "firebase/firestore";
+import {
+  PublicMatchProfile,
+  detectContactLeak,
+  buildProfileId,
+  publishToMatchmakingPool,
+  sendLikeAndCheckMatch,
+  unlockRoomChatInDb,
+} from "@/lib/matchmaking";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -21,12 +36,13 @@ interface PlayerProfile {
   email: string;
   gender: "Laki-laki" | "Perempuan";
   age: number;
+  city?: string;
+  bio?: string;
   questions: QuestionItem[];
   answers: Record<string, "iya" | "kayanya" | "engga">;
   emoji?: string;
   tier?: "young" | "mid" | "mature";
   vibe?: string;
-  bio?: string;
   reactAccept?: string;
   reactReject?: string;
 }
@@ -55,6 +71,14 @@ interface HistoryItem {
   outcomeLabel: string;
   delta: number;
   type: "good" | "neutral" | "bad";
+}
+
+interface ChatMessageItem {
+  id: string;
+  senderName: string;
+  senderGender: "Laki-laki" | "Perempuan";
+  text: string;
+  createdAt: number;
 }
 
 interface ToastItem {
@@ -205,7 +229,6 @@ export default function BesokKawinGame() {
     bgmEnabledRef.current = bgmEnabled;
   }, [bgmEnabled]);
 
-  // Reset posisi viewport agar header tidak tertahan ke atas setelah keyboard HP ditutup
   useEffect(() => {
     if (typeof window === "undefined") return;
     const resetRootScroll = () => {
@@ -227,10 +250,8 @@ export default function BesokKawinGame() {
     };
   }, []);
 
-  // PWA Service Worker & Install Prompt Listener
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const ua = window.navigator.userAgent;
     setIsIosDevice(/iPad|iPhone|iPod/.test(ua));
 
@@ -442,7 +463,7 @@ export default function BesokKawinGame() {
       setToasts((prev) => [...prev, { id, message, type }]);
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 3200);
+      }, 3600);
     },
     []
   );
@@ -488,7 +509,7 @@ export default function BesokKawinGame() {
   };
 
   const [screen, setScreen] = useState<
-    "register" | "quiz" | "mode" | "game" | "ending"
+    "register" | "quiz" | "bursa" | "mode" | "game" | "ending"
   >("register");
 
   const goScreen = useCallback((next: typeof screen) => {
@@ -503,7 +524,9 @@ export default function BesokKawinGame() {
   }, []);
 
   // Registration & Role State
-  const [landingTab, setLandingTab] = useState<"new" | "invite">("new");
+  const [landingTab, setLandingTab] = useState<"new" | "bursa" | "invite">(
+    "new"
+  );
   const [inviteCode, setInviteCode] = useState("");
   const [inputJoinCode, setInputJoinCode] = useState("");
   const [isCheckingRoom, setIsCheckingRoom] = useState(false);
@@ -514,11 +537,44 @@ export default function BesokKawinGame() {
     "Laki-laki"
   );
   const [regAge, setRegAge] = useState("");
+  const [regCity, setRegCity] = useState("");
+  const [regBio, setRegBio] = useState("");
   const [regError, setRegError] = useState<{
     title: string;
     text: string;
     key: number;
   } | null>(null);
+
+  // Matchmaking / Bursa State
+  const [myPublicProfile, setMyPublicProfile] =
+    useState<PublicMatchProfile | null>(null);
+  const [bursaCandidates, setBursaCandidates] = useState<PublicMatchProfile[]>(
+    []
+  );
+  const [bursaCityFilter, setBursaCityFilter] = useState("");
+  const [likedTargetIds, setLikedTargetIds] = useState<Record<string, boolean>>(
+    {}
+  );
+  const [incomingLikes, setIncomingLikes] = useState<
+    { fromId: string; fromName: string }[]
+  >([]);
+  const [isLoadingBursa, setIsLoadingBursa] = useState(false);
+  const [sendingLikeId, setSendingLikeId] = useState<string | null>(null);
+
+  // Monetization & Chat State
+  const [isMatchmakingRoom, setIsMatchmakingRoom] = useState(false);
+  const [chatUnlocked, setChatUnlocked] = useState(false);
+  const [unlockedBy, setUnlockedBy] = useState("");
+  const [showSawerModal, setShowSawerModal] = useState(false);
+  const [sawerLoading, setSawerLoading] = useState(false);
+  const [sawerQrUrl, setSawerQrUrl] = useState<string | null>(null);
+  const [sawerMode, setSawerMode] = useState<"live_qris" | "sandbox_demo">(
+    "sandbox_demo"
+  );
+  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [sendingChat, setSendingChat] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   const [myRole, setMyRole] = useState<"player1" | "player2">("player1");
   const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
@@ -540,7 +596,6 @@ export default function BesokKawinGame() {
   const [round, setRound] = useState(1);
   const maxRounds = 8;
 
-  // Solo deck & Multiplayer separate decks + dual card states
   const [soloDeck, setSoloDeck] = useState<DeckCard[]>([]);
   const [p1OnlineDeck, setP1OnlineDeck] = useState<DeckCard[]>([]);
   const [p2OnlineDeck, setP2OnlineDeck] = useState<DeckCard[]>([]);
@@ -569,6 +624,7 @@ export default function BesokKawinGame() {
 
   const prevBatteryRef = useRef(50);
   const lastSummaryIdRef = useRef<number>(0);
+  const matchedRoomHandledRef = useRef<string>("");
 
   const applyBatteryDelta = (delta: number) => {
     setBattery((prev) => Math.max(0, Math.min(100, prev + delta)));
@@ -630,7 +686,86 @@ export default function BesokKawinGame() {
     needsOwnerCompromiseAction,
   ]);
 
-  // REAL-TIME LISTENER FIRESTORE
+  // Load Bursa Candidates
+  const fetchBursaCandidates = useCallback(async () => {
+    if (!myPublicProfile || !isFirebaseReady || !db) return;
+    setIsLoadingBursa(true);
+    try {
+      const oppositeGender =
+        myPublicProfile.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+      const q = query(
+        collection(db, "match_profiles"),
+        where("gender", "==", oppositeGender),
+        where("isAvailable", "==", true),
+        limit(40)
+      );
+      const snap = await getDocs(q);
+      const list: PublicMatchProfile[] = [];
+      snap.forEach((docItem) => {
+        const d = docItem.data() as PublicMatchProfile;
+        if (d.id !== myPublicProfile.id) list.push(d);
+      });
+      list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      setBursaCandidates(list);
+    } catch (err) {
+      console.error("Gagal memuat bursa:", err);
+      showToast("Gagal memuat daftar pemain lawan jenis.", "error");
+    } finally {
+      setIsLoadingBursa(false);
+    }
+  }, [myPublicProfile, showToast]);
+
+  useEffect(() => {
+    if (screen === "bursa" && myPublicProfile) {
+      fetchBursaCandidates();
+    }
+  }, [screen, myPublicProfile, fetchBursaCandidates]);
+
+  // REAL-TIME LISTENER UNTUK INCOMING LIKES & MUTUAL MATCH (Notifikasi Otomatis)
+  useEffect(() => {
+    if (!myPublicProfile || !isFirebaseReady || !db) return;
+
+    const incomingQuery = query(
+      collection(db, "match_swipes"),
+      where("toId", "==", myPublicProfile.id)
+    );
+
+    const unsubIncoming = onSnapshot(incomingQuery, (snap) => {
+      const likes: { fromId: string; fromName: string }[] = [];
+      snap.forEach((d) => {
+        const data = d.data();
+        if (data.status === "liked") {
+          likes.push({ fromId: data.fromId, fromName: data.fromName });
+        }
+        if (
+          data.status === "matched" &&
+          data.roomCode &&
+          matchedRoomHandledRef.current !== data.roomCode
+        ) {
+          matchedRoomHandledRef.current = data.roomCode;
+          const role: "player1" | "player2" =
+            myPublicProfile.gender === "Laki-laki" ? "player1" : "player2";
+          setMyRole(role);
+          setMode("couple");
+          setIsMatchmakingRoom(true);
+          setInviteCode(data.roomCode);
+          sfxWin();
+          showToast(
+            `💘 IT'S A MATCH dengan ${data.fromName}! ${
+              data.maleInitiatorName || "Si cowok"
+            } otomatis ngasih kode ${data.roomCode}. Masuk arena!`,
+            "success"
+          );
+          goScreen("game");
+        }
+      });
+      setIncomingLikes(likes);
+    });
+
+    return () => unsubIncoming();
+  }, [myPublicProfile, goScreen, showToast]);
+
+  // REAL-TIME LISTENER FIRESTORE ROOM
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     if (mode === "solo" && screen === "game") return;
@@ -649,6 +784,16 @@ export default function BesokKawinGame() {
       if (data.history) setHistory(data.history);
       if (data.stats) setStats(data.stats);
       if (data.endingReason) setEndingReason(data.endingReason);
+      if (typeof data.isMatchmakingRoom === "boolean") {
+        setIsMatchmakingRoom(data.isMatchmakingRoom);
+      }
+      if (typeof data.chatUnlocked === "boolean") {
+        setChatUnlocked(data.chatUnlocked);
+        if (data.chatUnlocked) {
+          setShowSawerModal(false);
+        }
+      }
+      if (data.unlockedBy) setUnlockedBy(data.unlockedBy);
 
       if (
         data.lastRoundSummary &&
@@ -679,7 +824,9 @@ export default function BesokKawinGame() {
         data.status === "playing" &&
         data.player1 &&
         data.player2 &&
-        (screen === "mode" || (screen === "quiz" && myRole === "player2"))
+        (screen === "mode" ||
+          screen === "bursa" ||
+          (screen === "quiz" && myRole === "player2"))
       ) {
         setMode("couple");
         prevBatteryRef.current = data.battery ?? 50;
@@ -687,10 +834,6 @@ export default function BesokKawinGame() {
         setTimerSeconds(60);
         setTimerActive(true);
         sfxCharge();
-        showToast(
-          `🔥 ${data.player1.name} & ${data.player2.name} terhubung! Jawab pertanyaan pasangan secara bersamaan!`,
-          "success"
-        );
         goScreen("game");
       }
 
@@ -705,6 +848,37 @@ export default function BesokKawinGame() {
 
     return () => unsubscribe();
   }, [inviteCode, mode, screen, myRole, goScreen, showToast]);
+
+  // REAL-TIME LISTENER CHAT SAWERAN (Aktif saat chatUnlocked === true)
+  useEffect(() => {
+    if (!inviteCode || !chatUnlocked || !isFirebaseReady || !db) return;
+
+    const msgQuery = query(
+      collection(db, "rooms", inviteCode, "messages"),
+      orderBy("createdAt", "asc"),
+      limit(100)
+    );
+
+    const unsub = onSnapshot(msgQuery, (snap) => {
+      const list: ChatMessageItem[] = [];
+      snap.forEach((docItem) => {
+        const d = docItem.data();
+        list.push({
+          id: docItem.id,
+          senderName: d.senderName || "Pemain",
+          senderGender: d.senderGender || "Laki-laki",
+          text: d.text || "",
+          createdAt: d.createdAt || Date.now(),
+        });
+      });
+      setChatMessages(list);
+      setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 80);
+    });
+
+    return () => unsub();
+  }, [inviteCode, chatUnlocked]);
 
   // Registration Handler
   const handleRegistration = async (e: React.FormEvent) => {
@@ -727,6 +901,39 @@ export default function BesokKawinGame() {
       return;
     }
 
+    // Validasi anti-bocor IG/WA jika daftar Bursa Mabar
+    if (landingTab === "bursa") {
+      const nameLeak = detectContactLeak(regName);
+      if (nameLeak) {
+        sfxPenalty();
+        setRegError({
+          title: "Nama Panggilan Tidak Valid!",
+          text: nameLeak,
+          key: Date.now(),
+        });
+        return;
+      }
+      const bioLeak = detectContactLeak(regBio);
+      if (bioLeak) {
+        sfxPenalty();
+        setRegError({
+          title: "Bio Singkat Terdeteksi Kontak!",
+          text: bioLeak,
+          key: Date.now(),
+        });
+        return;
+      }
+      if (!regCity.trim()) {
+        sfxPenalty();
+        setRegError({
+          title: "Domisili Wajib Diisi!",
+          text: "Masukkan kota tempat tinggalmu agar pasangan mabar tahu jarak kalian.",
+          key: Date.now(),
+        });
+        return;
+      }
+    }
+
     if (landingTab === "invite") {
       const code = inputJoinCode.trim().toUpperCase();
       if (!code || code.length < 4) {
@@ -743,7 +950,7 @@ export default function BesokKawinGame() {
         sfxPenalty();
         setRegError({
           title: "Database Online Belum Terkonfigurasi",
-          text: "Pastikan file src/lib/firebase.ts dan Environment Variables Firebase di Vercel sudah dipasang.",
+          text: "Pastikan Firebase di Vercel sudah terpasang.",
           key: Date.now(),
         });
         return;
@@ -773,7 +980,7 @@ export default function BesokKawinGame() {
           setRegError({
             title:
               "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
-            text: `Kode ${code} dibuat oleh ${hostProfile.name} (${hostProfile.gender}). Kamu tidak bisa bergabung dengan jenis kelamin yang sama.`,
+            text: `Kode ${code} dibuat oleh ${hostProfile.name} (${hostProfile.gender}).`,
             key: Date.now(),
           });
           setIsCheckingRoom(false);
@@ -796,6 +1003,7 @@ export default function BesokKawinGame() {
         setMyRole("player2");
         setInviteCode(code);
         setMode("couple");
+        setIsMatchmakingRoom(false);
         setPlayer1(hostProfile);
         setPlayer2({
           name: regName.trim(),
@@ -823,10 +1031,12 @@ export default function BesokKawinGame() {
       }
     }
 
+    // Pemain Baru (Mode Invite Link atau Mode Bursa Matchmaking)
     sfxTap();
     setRegError(null);
     setMyRole("player1");
     setMode("solo");
+    setIsMatchmakingRoom(landingTab === "bursa");
     const generatedCode = "KAWIN-" + Math.floor(100 + Math.random() * 899);
     setInviteCode(generatedCode);
     setPlayer1({
@@ -834,6 +1044,8 @@ export default function BesokKawinGame() {
       email: regEmail.trim(),
       gender: regGender,
       age: ageNum,
+      city: regCity.trim(),
+      bio: regBio.trim(),
       questions: build20QuestionsForProfile(regGender, ageNum),
       answers: {},
     });
@@ -866,6 +1078,52 @@ export default function BesokKawinGame() {
   };
 
   const finishQuizPhase = async (completedProfile: PlayerProfile) => {
+    // Jika masuk lewat tab Bursa Mabar -> publikasikan profil ke bursa lawan jenis!
+    if (landingTab === "bursa" && isFirebaseReady && db) {
+      setIsSavingRoom(true);
+      try {
+        let iyaCount = 0;
+        let kayanyaCount = 0;
+        completedProfile.questions.forEach((q) => {
+          if (completedProfile.answers[q.id] === "iya") iyaCount++;
+          else if (completedProfile.answers[q.id] === "kayanya") kayanyaCount++;
+        });
+
+        const pubProfile: PublicMatchProfile = {
+          id: buildProfileId(completedProfile.email, completedProfile.gender),
+          name: completedProfile.name,
+          email: completedProfile.email,
+          gender: completedProfile.gender,
+          age: completedProfile.age,
+          city: completedProfile.city || "Indonesia",
+          bio:
+            completedProfile.bio ||
+            "Siap uji kecocokan red flag sebelum ke KUA!",
+          questions: completedProfile.questions,
+          answers: completedProfile.answers,
+          iyaCount,
+          kayanyaCount,
+          isAvailable: true,
+          updatedAt: Date.now(),
+        };
+
+        await publishToMatchmakingPool(pubProfile);
+        setMyPublicProfile(pubProfile);
+        setIsSavingRoom(false);
+        showToast(
+          "✨ Profilmu sudah tayang di Bursa Mabar! Pilih lawan jenis untuk mulai.",
+          "success"
+        );
+        goScreen("bursa");
+      } catch (err) {
+        console.error(err);
+        setIsSavingRoom(false);
+        showToast("Gagal mempublikasikan profil ke bursa.", "error");
+      }
+      return;
+    }
+
+    // Pemain 2 via Kode Undangan Manual
     if (myRole === "player2" && player1 && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -915,6 +1173,7 @@ export default function BesokKawinGame() {
       return;
     }
 
+    // Pemain 1 via Kode Undangan Manual
     if (myRole === "player1" && inviteCode && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -924,6 +1183,8 @@ export default function BesokKawinGame() {
           player1: completedProfile,
           player2: null,
           status: "waiting",
+          isMatchmakingRoom: false,
+          chatUnlocked: false,
           round: 1,
           battery: 50,
           c1: { status: "dilemma" },
@@ -945,6 +1206,63 @@ export default function BesokKawinGame() {
     }
 
     goScreen("mode");
+  };
+
+  // Handler Pilih Lawan Jenis di Bursa Mabar
+  const handleSelectCandidate = async (candidate: PublicMatchProfile) => {
+    if (!myPublicProfile) return;
+    sfxTap();
+    setSendingLikeId(candidate.id);
+    try {
+      const res = await sendLikeAndCheckMatch<DeckCard>({
+        me: myPublicProfile,
+        target: candidate,
+        buildDecks: (maleProfile, femaleProfile) => ({
+          p1Deck: buildDeckFromPartnerProfile(
+            femaleProfile,
+            "player1",
+            maxRounds
+          ),
+          p2Deck: buildDeckFromPartnerProfile(
+            maleProfile,
+            "player2",
+            maxRounds
+          ),
+        }),
+      });
+
+      setLikedTargetIds((prev) => ({ ...prev, [candidate.id]: true }));
+
+      if (res.matched && res.roomCode) {
+        matchedRoomHandledRef.current = res.roomCode;
+        const role: "player1" | "player2" =
+          myPublicProfile.gender === "Laki-laki" ? "player1" : "player2";
+        const maleName =
+          myPublicProfile.gender === "Laki-laki"
+            ? myPublicProfile.name
+            : candidate.name;
+        setMyRole(role);
+        setMode("couple");
+        setIsMatchmakingRoom(true);
+        setInviteCode(res.roomCode);
+        sfxWin();
+        showToast(
+          `💘 MATCH dengan ${candidate.name}! ${maleName} otomatis ngasih kode ${res.roomCode}!`,
+          "success"
+        );
+        goScreen("game");
+      } else {
+        showToast(
+          `💌 Pilihan terkirim ke ${candidate.name}! Jika dia memilihmu balik, game otomatis dimulai.`,
+          "info"
+        );
+      }
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal mengirim pilihan. Coba lagi.", "error");
+    } finally {
+      setSendingLikeId(null);
+    }
   };
 
   // Start Solo vs Bot AI
@@ -984,6 +1302,7 @@ export default function BesokKawinGame() {
     );
 
     setMode("solo");
+    setIsMatchmakingRoom(false);
     setPlayer2(botProfile);
     setSoloDeck(generatedSoloDeck);
     setBattery(50);
@@ -1478,6 +1797,73 @@ export default function BesokKawinGame() {
     }
   };
 
+  // Trigger Pembayaran Sawer Rp10.000
+  const openSawerPayment = async () => {
+    if (!inviteCode || !meProfile) return;
+    sfxTap();
+    setShowSawerModal(true);
+    setSawerLoading(true);
+    try {
+      const res = await fetch("/api/sawer/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomCode: inviteCode,
+          payerName: meProfile.name,
+          payerEmail: meProfile.email,
+        }),
+      });
+      const data = await res.json();
+      setSawerMode(data.mode || "sandbox_demo");
+      setSawerQrUrl(data.qrImageUrl || null);
+    } catch (err) {
+      console.error(err);
+      setSawerMode("sandbox_demo");
+    } finally {
+      setSawerLoading(false);
+    }
+  };
+
+  // Konfirmasi Sawer (Untuk Testing / Sandbox Demo)
+  const confirmSandboxSawer = async () => {
+    if (!inviteCode || !meProfile) return;
+    sfxWin();
+    try {
+      await unlockRoomChatInDb(inviteCode, meProfile.name);
+      setShowSawerModal(false);
+      showToast(
+        "🎉 Saweran Rp10.000 berhasil! Ruang obrolan pribadi terbuka.",
+        "success"
+      );
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal membuka ruang obrolan.", "error");
+    }
+  };
+
+  // Kirim Pesan Chat Eksklusif
+  const handleSendChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = chatInput.trim();
+    if (!trimmed || !inviteCode || !meProfile || !db) return;
+
+    setSendingChat(true);
+    setChatInput("");
+    try {
+      await addDoc(collection(db, "rooms", inviteCode, "messages"), {
+        senderName: meProfile.name,
+        senderGender: meProfile.gender,
+        text: trimmed,
+        createdAt: Date.now(),
+      });
+    } catch (err) {
+      console.error(err);
+      showToast("Gagal mengirim pesan.", "error");
+    } finally {
+      setSendingChat(false);
+    }
+  };
+
   const endingVerdict =
     battery >= 80
       ? {
@@ -1486,7 +1872,6 @@ export default function BesokKawinGame() {
           subtitle:
             "Red flag kalian berdua ternyata saling mengunci kayak puzzle! Kesiapan mental dan kompromi kalian udah matang. Langsung booking KUA!",
           border: "border-emerald-500/60 shadow-emerald-500/15",
-          iconBg: "bg-emerald-500/20 border-emerald-500/40",
           badgeBg: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
           titleClass:
             "text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-300 to-amber-300",
@@ -1498,7 +1883,6 @@ export default function BesokKawinGame() {
           subtitle:
             "Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Pacaran dulu aja sambil benerin komunikasi!",
           border: "border-amber-500/60 shadow-amber-500/10",
-          iconBg: "bg-amber-500/20 border-amber-500/40",
           badgeBg: "bg-amber-500/20 text-amber-300 border-amber-500/40",
           titleClass: "text-amber-400",
         }
@@ -1509,7 +1893,6 @@ export default function BesokKawinGame() {
             ? `${endingReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama!`
             : "Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban seumur hidup!",
           border: "border-red-500/60 shadow-red-500/15",
-          iconBg: "bg-red-500/20 border-red-500/40",
           badgeBg: "bg-red-500/20 text-red-300 border-red-500/40",
           titleClass: "text-red-500",
         };
@@ -1671,6 +2054,12 @@ export default function BesokKawinGame() {
     setInviteCode("");
     setMyRole("player1");
     setMode("solo");
+    setIsMatchmakingRoom(false);
+    setChatUnlocked(false);
+    setChatMessages([]);
+    setShowSawerModal(false);
+    setMyPublicProfile(null);
+    matchedRoomHandledRef.current = "";
     setPlayer1(null);
     setPlayer2(null);
     setC1State({ status: "dilemma" });
@@ -1679,6 +2068,8 @@ export default function BesokKawinGame() {
     setRegName("");
     setRegEmail("");
     setRegAge("");
+    setRegCity("");
+    setRegBio("");
     setRegError(null);
     setLandingTab("new");
     goScreen("register");
@@ -1711,6 +2102,13 @@ export default function BesokKawinGame() {
     myConfessions.length > 0
       ? myConfessions[round % myConfessions.length]
       : meProfile?.questions[0];
+
+  const filteredCandidates = bursaCandidates.filter((c) => {
+    if (!bursaCityFilter.trim()) return true;
+    return c.city
+      .toLowerCase()
+      .includes(bursaCityFilter.trim().toLowerCase());
+  });
 
   return (
     <div className="bg-grid-pattern fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-[#090d16] text-slate-50 selection:bg-rose-500 selection:text-white">
@@ -1825,7 +2223,7 @@ export default function BesokKawinGame() {
         </div>
       </header>
 
-      {/* INSTALL GUIDE MODAL (Untuk iOS Safari / Browser In-App WA/IG) */}
+      {/* INSTALL GUIDE MODAL */}
       {showInstallGuide && (
         <div
           onClick={() => setShowInstallGuide(false)}
@@ -1858,7 +2256,9 @@ export default function BesokKawinGame() {
                 </li>
                 <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
                   <strong>2.</strong> Tekan ikon{" "}
-                  <strong className="text-rose-400">Share (Kotak Panah Atas)</strong>{" "}
+                  <strong className="text-rose-400">
+                    Share (Kotak Panah Atas)
+                  </strong>{" "}
                   di bilah bawah browser.
                 </li>
                 <li className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
@@ -1898,6 +2298,87 @@ export default function BesokKawinGame() {
         </div>
       )}
 
+      {/* SAWER QRIS MODAL (Rp10.000) */}
+      {showSawerModal && (
+        <div
+          onClick={() => setShowSawerModal(false)}
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-md bg-[#111827] border-2 border-amber-500/60 rounded-3xl p-5 shadow-2xl animate-card-enter text-center"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                UPGRADE CHAT EKSKLUSIF
+              </span>
+              <button
+                onClick={() => setShowSawerModal(false)}
+                className="w-7 h-7 rounded-full bg-slate-800 text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <h3 className="text-base sm:text-lg font-extrabold text-white">
+              Sawer Rp10.000 untuk Lanjut Ngobrol
+            </h3>
+            <p className="text-xs text-slate-300 mt-1">
+              Cukup salah satu yang bayar, ruang obrolan pribadi langsung terbuka
+              untuk{" "}
+              <strong className="text-emerald-400">
+                {player1?.name} & {player2?.name}
+              </strong>
+              !
+            </p>
+
+            {sawerLoading ? (
+              <div className="my-6 py-8 rounded-2xl bg-slate-950 border border-slate-800 text-xs text-amber-400 font-bold">
+                ⏳ Menyiapkan kode QRIS...
+              </div>
+            ) : sawerMode === "live_qris" && sawerQrUrl ? (
+              <div className="my-4 p-4 rounded-2xl bg-white inline-block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={sawerQrUrl}
+                  alt="QRIS Sawer Rp10.000"
+                  className="w-48 h-48 mx-auto"
+                />
+                <p className="text-[11px] font-bold text-slate-900 mt-2">
+                  Scan via GoPay / OVO / DANA / ShopeePay / M-Banking
+                </p>
+              </div>
+            ) : (
+              <div className="my-4 p-4 rounded-2xl bg-slate-950 border border-slate-800 text-left space-y-2">
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">Item Upgrade:</span>
+                  <span className="font-bold text-white">
+                    Unlock Chat Room ({inviteCode})
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-400">Total Saweran:</span>
+                  <span className="font-mono font-extrabold text-amber-400">
+                    Rp 10.000
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 pt-1 border-t border-slate-800">
+                  Mode Sandbox aktif (siap disambungkan ke{" "}
+                  <code className="text-rose-400">MIDTRANS_SERVER_KEY</code>).
+                  Klik tombol di bawah untuk menguji buka ruang obrolan.
+                </p>
+                <button
+                  onClick={confirmSandboxSawer}
+                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-rose-500 text-slate-950 font-extrabold text-xs shadow-lg btn-tactile"
+                >
+                  ✅ Konfirmasi Sawer Rp10.000 & Buka Chat
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* TOASTS */}
       <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => (
@@ -1932,7 +2413,7 @@ export default function BesokKawinGame() {
                 </h1>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-2.5">
+              <div className="grid grid-cols-3 gap-1.5 p-1 rounded-2xl bg-slate-900/90 border border-slate-800 mb-2.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -1940,13 +2421,28 @@ export default function BesokKawinGame() {
                     setLandingTab("new");
                     setRegError(null);
                   }}
-                  className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-bold transition ${
                     landingTab === "new"
                       ? "bg-rose-500 text-white"
                       : "text-slate-400"
                   }`}
                 >
-                  Daftar Pemain Baru
+                  Main / Buat Room
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfxTap();
+                    setLandingTab("bursa");
+                    setRegError(null);
+                  }}
+                  className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-bold transition ${
+                    landingTab === "bursa"
+                      ? "bg-emerald-500 text-slate-950"
+                      : "text-slate-400"
+                  }`}
+                >
+                  💘 Bursa Mabar
                 </button>
                 <button
                   type="button"
@@ -1955,17 +2451,26 @@ export default function BesokKawinGame() {
                     setLandingTab("invite");
                     setRegError(null);
                   }}
-                  className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-bold transition ${
                     landingTab === "invite"
                       ? "bg-amber-500 text-slate-950"
                       : "text-slate-400"
                   }`}
                 >
-                  Punya Kode Undangan?
+                  Punya Kode?
                 </button>
               </div>
 
               <div className="bg-[#111827]/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 shadow-2xl">
+                {landingTab === "bursa" && (
+                  <div className="mb-3 p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-200">
+                    💘 <strong>Mode Cari Pasangan Mabar:</strong> Pilih lawan
+                    jenis yang terdaftar. Jika saling pilih (Match), otomatis
+                    mabar! Jika cocok 80%+, bisa upgrade sawer Rp10.000 untuk
+                    lanjut ngobrol.
+                  </div>
+                )}
+
                 {landingTab === "invite" && (
                   <div className="mb-3 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30">
                     <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1">
@@ -2001,6 +2506,7 @@ export default function BesokKawinGame() {
                     <input
                       type="text"
                       required
+                      maxLength={24}
                       value={regName}
                       onChange={(e) => setRegName(e.target.value)}
                       placeholder="Misal: Raka / Nadya"
@@ -2037,7 +2543,7 @@ export default function BesokKawinGame() {
                                 : "border-slate-700 bg-slate-950 text-slate-400"
                             }`}
                           >
-                            {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
+                            {g === "Laki-laki" ? "👨 Laki" : "👩 Perempuan"}
                           </button>
                         ))}
                       </div>
@@ -2058,6 +2564,39 @@ export default function BesokKawinGame() {
                       />
                     </div>
                   </div>
+
+                  {landingTab === "bursa" && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">
+                          Domisili / Kota
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          maxLength={30}
+                          value={regCity}
+                          onChange={(e) => setRegCity(e.target.value)}
+                          placeholder="Misal: Jakarta Selatan / Bandung"
+                          className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1">
+                          Bio Singkat (Tanpa IG/WA)
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={90}
+                          value={regBio}
+                          onChange={(e) => setRegBio(e.target.value)}
+                          placeholder="Misal: Suka kopi, nyari yang nggak gampang ngilang"
+                          className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+                        />
+                      </div>
+                    </>
+                  )}
+
                   <button
                     type="submit"
                     disabled={isCheckingRoom}
@@ -2065,6 +2604,8 @@ export default function BesokKawinGame() {
                   >
                     {isCheckingRoom
                       ? "Mengecek Kode Undangan..."
+                      : landingTab === "bursa"
+                      ? "Isi 20 Pengakuan & Masuk Bursa"
                       : landingTab === "new"
                       ? "Lanjut ke 20 Pengakuan"
                       : "Gabung Kode & Isi 20 Pengakuan"}
@@ -2107,7 +2648,7 @@ export default function BesokKawinGame() {
 
               {isSavingRoom ? (
                 <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 text-center text-xs font-bold text-emerald-400">
-                  ⏳ Menghubungkan dek pertanyaanmu dengan pasangan...
+                  ⏳ Menyimpan profil & menyinkronkan data...
                 </div>
               ) : (
                 <div className="grid grid-cols-1 gap-2">
@@ -2140,6 +2681,143 @@ export default function BesokKawinGame() {
             </section>
           )}
 
+          {/* ==================== SCREEN 2B: BURSA LAWAN JENIS ==================== */}
+          {screen === "bursa" && myPublicProfile && (
+            <section className="animate-card-enter space-y-3 py-1">
+              <div className="bg-[#111827]/95 border border-emerald-500/40 rounded-3xl p-4 shadow-xl">
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <h2 className="text-sm sm:text-base font-extrabold text-white">
+                    💘 Bursa Mabar (
+                    {myPublicProfile.gender === "Laki-laki"
+                      ? "Perempuan"
+                      : "Laki-laki"}
+                    )
+                  </h2>
+                  <button
+                    onClick={fetchBursaCandidates}
+                    className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] font-bold text-slate-300 border border-slate-700"
+                  >
+                    🔄 Refresh
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-400 mb-2.5">
+                  Pilih yang bikin kamu penasaran. Jika dia juga memilihmu,
+                  kalian langsung <strong>MATCH</strong> dan masuk arena mabar!
+                </p>
+
+                {incomingLikes.length > 0 && (
+                  <div className="mb-2.5 p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-xs text-rose-200">
+                    🔥{" "}
+                    <strong>
+                      {incomingLikes.map((l) => l.fromName).join(", ")}
+                    </strong>{" "}
+                    sudah memilihmu! Pilih balik di daftar bawah untuk langsung
+                    mabar.
+                  </div>
+                )}
+
+                <input
+                  type="text"
+                  value={bursaCityFilter}
+                  onChange={(e) => setBursaCityFilter(e.target.value)}
+                  placeholder="🔍 Filter berdasarkan kota (misal: Jakarta, Bandung)..."
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                />
+              </div>
+
+              {isLoadingBursa ? (
+                <div className="p-6 rounded-3xl bg-[#111827]/95 border border-slate-800 text-center text-xs text-slate-400">
+                  ⏳ Mencari pemain lawan jenis yang siap mabar...
+                </div>
+              ) : filteredCandidates.length === 0 ? (
+                <div className="p-6 rounded-3xl bg-[#111827]/95 border border-slate-800 text-center space-y-2.5">
+                  <p className="text-xs text-slate-300 font-bold">
+                    Belum ada pemain lawan jenis yang aktif di kota ini.
+                  </p>
+                  <p className="text-[11px] text-slate-400">
+                    Profilmu sudah masuk daftar tunggu. Kamu akan otomatis
+                    mendapat notifikasi saat ada yang memilihmu, atau latihan
+                    dulu lawan Bot AI.
+                  </p>
+                  <button
+                    onClick={startSoloGame}
+                    className="px-4 py-2 rounded-xl bg-rose-500/20 border border-rose-500/50 text-rose-300 font-extrabold text-xs"
+                  >
+                    Latihan Lawan Bot AI Sambil Menunggu →
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {filteredCandidates.map((cand) => {
+                    const alreadyLiked = Boolean(likedTargetIds[cand.id]);
+                    const likedMeBack = incomingLikes.some(
+                      (l) => l.fromId === cand.id
+                    );
+
+                    return (
+                      <div
+                        key={cand.id}
+                        className={`bg-[#111827]/95 border rounded-3xl p-3.5 shadow-lg transition ${
+                          likedMeBack
+                            ? "border-rose-500/60"
+                            : "border-slate-800"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-extrabold text-white">
+                                {cand.gender === "Laki-laki" ? "👨" : "👩"}{" "}
+                                {cand.name}, {cand.age}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                                📍 {cand.city}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-300 mt-1">
+                              &ldquo;{cand.bio}&rdquo;
+                            </p>
+                            <div className="flex items-center gap-2 mt-2 text-[10px] font-mono text-slate-400">
+                              <span className="text-rose-400">
+                                🔥 {cand.iyaCount} Red Flag Utama
+                              </span>
+                              <span>•</span>
+                              <span className="text-amber-400">
+                                🤔 {cand.kayanyaCount} Wildcard
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            disabled={
+                              alreadyLiked || sendingLikeId === cand.id
+                            }
+                            onClick={() => handleSelectCandidate(cand)}
+                            className={`px-3 py-2 rounded-xl font-extrabold text-xs shrink-0 btn-tactile ${
+                              alreadyLiked
+                                ? "bg-slate-800 text-slate-400 border border-slate-700"
+                                : likedMeBack
+                                ? "bg-gradient-to-r from-rose-500 to-amber-500 text-slate-950 shadow-lg"
+                                : "bg-emerald-500 hover:bg-emerald-600 text-slate-950"
+                            }`}
+                          >
+                            {sendingLikeId === cand.id
+                              ? "..."
+                              : alreadyLiked
+                              ? "✓ Dipilih"
+                              : likedMeBack
+                              ? "💘 Balas Match!"
+                              : "💚 Pilih Mabar"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
           {/* ==================== SCREEN 3: LOBBY / MODE ==================== */}
           {screen === "mode" && player1 && (
             <section className="animate-card-enter space-y-3 py-1">
@@ -2165,7 +2843,7 @@ export default function BesokKawinGame() {
                 <button
                   onClick={() =>
                     copyTextSafe(
-                      `Ayo uji red flag kita di BESOK KAWIN! Buka https://besok-kawin.vercel.app lalu pilih "Punya Kode Undangan?" dan masukkan kode: ${inviteCode}`,
+                      `Ayo uji red flag kita di BESOK KAWIN! Buka https://besok-kawin.vercel.app lalu pilih "Punya Kode?" dan masukkan kode: ${inviteCode}`,
                       "Kode & pesan ajakan berhasil disalin!"
                     )
                   }
@@ -2490,7 +3168,7 @@ export default function BesokKawinGame() {
               </section>
             )}
 
-          {/* ==================== SCREEN 5: ENDING ==================== */}
+          {/* ==================== SCREEN 5: ENDING + MONETIZATION CHAT ==================== */}
           {screen === "ending" && player1 && player2 && (
             <section className="animate-card-enter space-y-3 py-1 text-center">
               <div
@@ -2515,6 +3193,98 @@ export default function BesokKawinGame() {
                   <strong className="text-rose-400">{player2.name}</strong>
                 </div>
               </div>
+
+              {/* PAYWALL SAWER Rp10.000 JIKA MATCHMAKING & HASIL BESOK KAWIN (>= 80%) */}
+              {mode === "couple" && isMatchmakingRoom && battery >= 80 && (
+                <div className="bg-[#111827]/95 border-2 border-amber-500/60 rounded-3xl p-4 shadow-xl text-left">
+                  {!chatUnlocked ? (
+                    <div className="text-center space-y-2">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        🔒 RUANG OBROLAN PRIBADI TERKUNCI
+                      </span>
+                      <h3 className="text-sm sm:text-base font-extrabold text-white">
+                        Mau Lanjut Ngobrol & Tukeran Kontak?
+                      </h3>
+                      <p className="text-xs text-slate-300">
+                        Kalian berdua lolos uji red flag dengan hasil{" "}
+                        <strong className="text-emerald-400">
+                          BESOK KAWIN!
+                        </strong>{" "}
+                        Sawer <strong>Rp10.000</strong> untuk upgrade dan buka
+                        ruang obrolan eksklusif kalian.
+                      </p>
+                      <button
+                        onClick={openSawerPayment}
+                        className="w-full mt-1 py-3 rounded-2xl bg-gradient-to-r from-amber-400 via-amber-500 to-rose-500 text-slate-950 font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/25 btn-tactile"
+                      >
+                        💸 Sawer Rp10.000 untuk Upgrade Chat
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                        <span className="text-xs font-extrabold text-emerald-400">
+                          💬 Ruang Obrolan Pribadi Terbuka
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          Disawer oleh {unlockedBy || "Pasangan"}
+                        </span>
+                      </div>
+
+                      <div className="h-44 overflow-y-auto space-y-2 p-2.5 rounded-2xl bg-slate-950 border border-slate-800">
+                        {chatMessages.length === 0 ? (
+                          <p className="text-[11px] text-slate-500 text-center my-12">
+                            Belum ada pesan. Sapa pasangan mabar kamu sekarang!
+                          </p>
+                        ) : (
+                          chatMessages.map((m) => {
+                            const isMe = m.senderName === meProfile?.name;
+                            return (
+                              <div
+                                key={m.id}
+                                className={`flex flex-col ${
+                                  isMe ? "items-end" : "items-start"
+                                }`}
+                              >
+                                <span className="text-[9px] text-slate-500 mb-0.5 px-1">
+                                  {m.senderName}
+                                </span>
+                                <div
+                                  className={`px-3 py-1.5 rounded-2xl text-xs max-w-[82%] ${
+                                    isMe
+                                      ? "bg-rose-500 text-white rounded-br-sm"
+                                      : "bg-slate-800 text-slate-100 rounded-bl-sm"
+                                  }`}
+                                >
+                                  {m.text}
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                        <div ref={chatEndRef} />
+                      </div>
+
+                      <form onSubmit={handleSendChat} className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          placeholder="Ketik pesan atau tukeran IG/WA..."
+                          className="flex-1 bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                        />
+                        <button
+                          type="submit"
+                          disabled={sendingChat}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-extrabold text-xs btn-tactile"
+                        >
+                          Kirim
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="grid grid-cols-4 gap-1.5">
                 <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
