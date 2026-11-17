@@ -719,17 +719,18 @@ export default function BesokKawinGame() {
         setIsCheckingRoom(false);
         goScreen("quiz");
         return;
-      } catch (err) {
-        console.error(err);
+            } catch (err: unknown) {
+        const detail = err instanceof Error ? err.message : String(err);
         sfxPenalty();
         setRegError({
           title: "Gagal Terhubung ke Server",
-          text: "Periksa koneksi internetmu atau aturan Firestore Database (pastikan Test Mode aktif).",
+          text: `Penyebab: ${detail}`,
           key: Date.now(),
         });
         setIsCheckingRoom(false);
         return;
       }
+
     }
 
     // Pemain 1 (Pembuat Room Baru)
