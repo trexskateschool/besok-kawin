@@ -92,30 +92,6 @@ type ScreenType =
   | "ending"
   | "profile";
 
-const ROMANTIC_BGM_STEPS: {
-  bass?: number;
-  chord?: number[];
-  melody?: number;
-  dur?: number;
-}[] = [
-  { bass: 174.61, chord: [261.63, 329.63], melody: 440.0, dur: 1.5 },
-  { chord: [329.63], melody: 392.0, dur: 0.9 },
-  { melody: 329.63, dur: 0.9 },
-  { chord: [261.63], melody: 293.66, dur: 1.1 },
-  { bass: 164.81, chord: [246.94, 293.66], melody: 392.0, dur: 1.5 },
-  { chord: [293.66], melody: 493.88, dur: 0.9 },
-  { melody: 587.33, dur: 1.1 },
-  { chord: [246.94], melody: 493.88, dur: 0.9 },
-  { bass: 146.83, chord: [220.0, 261.63], melody: 523.25, dur: 1.5 },
-  { chord: [261.63], melody: 440.0, dur: 0.9 },
-  { melody: 349.23, dur: 0.9 },
-  { chord: [220.0], melody: 329.63, dur: 1.1 },
-  { bass: 130.81, chord: [196.0, 246.94], melody: 329.63, dur: 1.4 },
-  { melody: 392.0, dur: 0.9 },
-  { bass: 123.47, chord: [196.0, 293.66], melody: 493.88, dur: 1.1 },
-  { melody: 523.25, dur: 1.2 },
-];
-
 function getBotPersonaConfig(
   botGender: "Laki-laki" | "Perempuan",
   botAge: number
@@ -221,18 +197,12 @@ export default function BesokKawinGame() {
   const [isIosDevice, setIsIosDevice] = useState(false);
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  
-
   const audioCtxRef = useRef<AudioContext | null>(null);
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
   // Google Auth State
   const [googleUser, setGoogleUser] = useState<User | null>(null);
   const [isLoggingInGoogle, setIsLoggingInGoogle] = useState(false);
-
-  useEffect(() => {
-    bgmEnabledRef.current = bgmEnabled;
-  }, [bgmEnabled]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -327,97 +297,6 @@ export default function BesokKawinGame() {
     return ctx;
   }, []);
 
-  const playPianoVoice = useCallback(
-    (freq: number, dur: number, peakGain: number) => {
-      const ctx = getOrCreateAudioContext();
-      if (!ctx || ctx.state !== "running") return;
-      const now = ctx.currentTime;
-      const oscMain = ctx.createOscillator();
-      const oscWarm = ctx.createOscillator();
-      const filter = ctx.createBiquadFilter();
-      const gain = ctx.createGain();
-
-      oscMain.type = "sine";
-      oscMain.frequency.setValueAtTime(freq, now);
-      oscWarm.type = "triangle";
-      oscWarm.frequency.setValueAtTime(freq, now);
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(920, now);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.linearRampToValueAtTime(peakGain, now + 0.06);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-
-      const warmSubGain = ctx.createGain();
-      warmSubGain.gain.setValueAtTime(0.32, now);
-
-      oscMain.connect(filter);
-      oscWarm.connect(warmSubGain);
-      warmSubGain.connect(filter);
-      filter.connect(gain);
-      gain.connect(ctx.destination);
-
-      oscMain.start(now);
-      oscWarm.start(now);
-      oscMain.stop(now + dur + 0.05);
-      oscWarm.stop(now + dur + 0.05);
-    },
-    [getOrCreateAudioContext]
-  );
-
-  const stopRomanticBgm = useCallback(() => {
-    if (bgmTimerRef.current) {
-      clearInterval(bgmTimerRef.current);
-      bgmTimerRef.current = null;
-    }
-    setBgmPlaying(false);
-  }, []);
-
-  const startRomanticBgm = useCallback(() => {
-    if (!bgmEnabledRef.current) return;
-    const ctx = getOrCreateAudioContext();
-    if (!ctx) return;
-    if (ctx.state === "suspended") ctx.resume().catch(() => {});
-    if (bgmTimerRef.current) return;
-
-    const triggerStep = () => {
-      if (!bgmEnabledRef.current) return;
-      const activeCtx = getOrCreateAudioContext();
-      if (!activeCtx || activeCtx.state !== "running") return;
-      setBgmPlaying(true);
-      const stepData =
-        ROMANTIC_BGM_STEPS[bgmStepRef.current % ROMANTIC_BGM_STEPS.length];
-      const dur = stepData.dur ?? 1.1;
-
-      if (stepData.bass) playPianoVoice(stepData.bass, dur * 1.35, 0.028);
-      if (stepData.chord)
-        stepData.chord.forEach((f) => playPianoVoice(f, dur * 1.2, 0.017));
-      if (stepData.melody) playPianoVoice(stepData.melody, dur * 1.15, 0.032);
-
-      bgmStepRef.current =
-        (bgmStepRef.current + 1) % ROMANTIC_BGM_STEPS.length;
-    };
-
-    triggerStep();
-    bgmTimerRef.current = setInterval(triggerStep, 440);
-  }, [getOrCreateAudioContext, playPianoVoice]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const unlockAudio = () => {
-      if (bgmEnabledRef.current) startRomanticBgm();
-    };
-    window.addEventListener("pointerdown", unlockAudio, { once: true });
-    window.addEventListener("keydown", unlockAudio, { once: true });
-    return () => {
-      window.removeEventListener("pointerdown", unlockAudio);
-      window.removeEventListener("keydown", unlockAudio);
-    };
-  }, [startRomanticBgm]);
-
-  useEffect(() => {
-    return () => stopRomanticBgm();
-  }, [stopRomanticBgm]);
-
   const playTone = (
     freq: number,
     type: OscillatorType = "sine",
@@ -472,19 +351,6 @@ export default function BesokKawinGame() {
     },
     []
   );
-
-  const toggleRomanticBgm = () => {
-    const next = !bgmEnabled;
-    setBgmEnabled(next);
-    bgmEnabledRef.current = next;
-    if (next) {
-      startRomanticBgm();
-      showToast("🎹 Musik latar romantis dinyalakan", "info");
-    } else {
-      stopRomanticBgm();
-      showToast("🔇 Musik latar dimatikan", "info");
-    }
-  };
 
   const copyTextSafe = (text: string, successMsg: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -649,7 +515,7 @@ export default function BesokKawinGame() {
     return () => unsub();
   }, []);
 
-  // Dengarkan perubahan real-time pada profil user (termasuk status VIP setelah bayar)
+  // Dengarkan perubahan real-time pada profil user
   useEffect(() => {
     if (!myPublicProfile?.id || !isFirebaseReady || !db) return;
     const unsub = onSnapshot(
@@ -1097,7 +963,6 @@ export default function BesokKawinGame() {
       }
     }
 
-    // Pemain Baru (Mode Invite Link atau Mode Bursa Matchmaking)
     sfxTap();
     setRegError(null);
     setMyRole("player1");
@@ -1144,7 +1009,6 @@ export default function BesokKawinGame() {
   };
 
   const finishQuizPhase = async (completedProfile: PlayerProfile) => {
-    // Jika masuk lewat tab Bursa Mabar -> publikasikan profil ke bursa lawan jenis!
     if (landingTab === "bursa" && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -1196,7 +1060,6 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Pemain 2 via Kode Undangan Manual
     if (myRole === "player2" && player1 && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -1246,7 +1109,6 @@ export default function BesokKawinGame() {
       return;
     }
 
-    // Pemain 1 via Kode Undangan Manual
     if (myRole === "player1" && inviteCode && isFirebaseReady && db) {
       setIsSavingRoom(true);
       try {
@@ -1280,7 +1142,6 @@ export default function BesokKawinGame() {
     goScreen("mode");
   };
 
-  // Handler Pilih Lawan Jenis di Bursa Mabar
   const handleSelectCandidate = async (candidate: PublicMatchProfile) => {
     if (!myPublicProfile) return;
     sfxTap();
@@ -1337,7 +1198,6 @@ export default function BesokKawinGame() {
     }
   };
 
-  // Start Solo vs Bot AI
   const startSoloGame = () => {
     const activePlayer: PlayerProfile | null =
       player1 ||
@@ -2143,7 +2003,6 @@ export default function BesokKawinGame() {
       .includes(bursaCityFilter.trim().toLowerCase());
   });
 
-  // Suppress unused history warning while preserving state for room sync
   void history;
 
   return (
@@ -2238,7 +2097,6 @@ export default function BesokKawinGame() {
                 <span className="hidden sm:inline">Install</span>
               </button>
             )}
-
 
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
@@ -3231,7 +3089,6 @@ export default function BesokKawinGame() {
                 </div>
               </div>
 
-              {/* ARAHKAN KE DASHBOARD PROFIL & CHAT UNTUK PASANGAN MATCHMAKING */}
               {mode === "couple" && isMatchmakingRoom && myPublicProfile && (
                 <div className="bg-[#111827]/95 border-2 border-amber-500/60 rounded-3xl p-4 shadow-xl text-center space-y-2">
                   <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
