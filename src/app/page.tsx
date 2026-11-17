@@ -3129,7 +3129,7 @@ export default function BesokKawinGame() {
                 }}
                 className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
               >
-                💤 Simulasi Timeout / Pasangan AFK (-15%)
+                💤 Pasangan AFK (-15%)
               </button>
             </div>
           </section>
@@ -3300,3 +3300,11 @@ export default function BesokKawinGame() {
           </section>
         )}
       </main>
+
+      {/* FOOTER */}
+      <footer className="w-full py-4 text-center text-[11px] text-slate-600">
+        BESOK KAWIN? • Dating & Red Flag Card Game
+      </footer>
+    </div>
+  );
+}
