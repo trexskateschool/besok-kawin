@@ -1964,7 +1964,7 @@ export default function BesokKawinGame() {
                                 : "border-slate-700 bg-slate-950 text-slate-400"
                             }`}
                           >
-                            {g === "Laki-laki" ? "👨 Laki" : "👩 Perempuan"}
+                            {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
                           </button>
                         ))}
                       </div>
