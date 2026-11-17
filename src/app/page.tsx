@@ -686,7 +686,7 @@ export default function BesokKawinGame() {
     needsOwnerCompromiseAction,
   ]);
 
-  // Load Bursa Candidates
+    // Load Bursa Candidates
   const fetchBursaCandidates = useCallback(async () => {
     if (!myPublicProfile || !isFirebaseReady || !db) return;
     setIsLoadingBursa(true);
@@ -696,20 +696,22 @@ export default function BesokKawinGame() {
       const q = query(
         collection(db, "match_profiles"),
         where("gender", "==", oppositeGender),
-        where("isAvailable", "==", true),
-        limit(40)
+        limit(50)
       );
       const snap = await getDocs(q);
       const list: PublicMatchProfile[] = [];
       snap.forEach((docItem) => {
         const d = docItem.data() as PublicMatchProfile;
-        if (d.id !== myPublicProfile.id) list.push(d);
+        if (d.id !== myPublicProfile.id && d.isAvailable !== false) {
+          list.push(d);
+        }
       });
       list.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       setBursaCandidates(list);
     } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       console.error("Gagal memuat bursa:", err);
-      showToast("Gagal memuat daftar pemain lawan jenis.", "error");
+      showToast(`Gagal memuat daftar lawan jenis: ${detail}`, "error");
     } finally {
       setIsLoadingBursa(false);
     }
