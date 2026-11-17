@@ -1214,49 +1214,6 @@ export default function BesokKawinGame() {
   }, [screen, timerActive, round]);
 
   // Handlers: Screen 1
-  const quickFillDemoUser = () => {
-    sfxTap();
-    const samples = [
-      {
-        name: "Raka",
-        email: "raka.drama@mail.com",
-        gender: "Laki-laki" as const,
-        age: "24",
-      },
-      {
-        name: "Nadya",
-        email: "nadya.jujur@mail.com",
-        gender: "Perempuan" as const,
-        age: "27",
-      },
-      {
-        name: "Dimas",
-        email: "dimas.realistis@mail.com",
-        gender: "Laki-laki" as const,
-        age: "29",
-      },
-      {
-        name: "Keisya",
-        email: "keisya.overthink@mail.com",
-        gender: "Perempuan" as const,
-        age: "22",
-      },
-    ];
-    const pick =
-      landingTab === "invite"
-        ? samples[1]
-        : samples[Math.floor(Math.random() * samples.length)];
-    setRegName(pick.name);
-    setRegEmail(pick.email);
-    setRegGender(pick.gender);
-    setRegAge(pick.age);
-    setRegError(null);
-    showToast(
-      `Data demo (${pick.name}, ${pick.gender}, ${pick.age} thn) diisi!`,
-      "success"
-    );
-  };
-
   const handleRegistration = (e: React.FormEvent) => {
     e.preventDefault();
     const ageNum = parseInt(regAge, 10);
@@ -2324,17 +2281,10 @@ export default function BesokKawinGame() {
               )}
 
               <form onSubmit={handleRegistration} className="space-y-4">
-                <div className="flex items-center justify-between">
+                <div>
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
                     Identitas Pemain
                   </span>
-                  <button
-                    type="button"
-                    onClick={quickFillDemoUser}
-                    className="text-xs font-semibold text-rose-400 hover:text-rose-300 underline underline-offset-4"
-                  >
-                    ⚡ Isi Cepat (Demo)
-                  </button>
                 </div>
 
                 <div>
@@ -3350,11 +3300,3 @@ export default function BesokKawinGame() {
           </section>
         )}
       </main>
-
-      {/* FOOTER */}
-      <footer className="w-full py-4 text-center text-[11px] text-slate-600">
-        BESOK KAWIN? • Dating & Red Flag Card Game
-      </footer>
-    </div>
-  );
-}
