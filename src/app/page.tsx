@@ -1,19 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-
-interface QuestionItem {
-  id: string;
-  category: "Ketakutan Hidup" | "Kebiasaan Buruk" | "Sifat Jelek & Red Flag Ego";
-  gender: "ALL" | "Laki-laki" | "Perempuan";
-  ageGroup: "ALL" | "young" | "adult";
-  segmentLabel: string;
-  statement: string;
-  partnerPrompt: string;
-  consequenceQuestion: string;
-  compromises: string[];
-  botPref: { young: number; mid: number; mature: number };
-}
+import { QuestionItem, build20QuestionsForProfile } from "./questions";
 
 interface PlayerProfile {
   name: string;
@@ -53,736 +41,6 @@ interface ToastItem {
   type: "success" | "error" | "warning" | "info";
 }
 
-const QUESTION_BANK: QuestionItem[] = [
-  // ==================== KATEGORI 1: KETAKUTAN HIDUP ====================
-  {
-    id: "KH_U1",
-    category: "Ketakutan Hidup",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua sering ngerasa hidup gua jalan di tempat, sementara temen-temen seumuran udah pada mapan atau nikah.",
-    partnerPrompt:
-      "Dia sering kena quarter-life crisis dan ngerasa hidupnya jalan di tempat dibanding teman-temannya.",
-    consequenceQuestion:
-      "Lu yakin siap jadi tempat sampah curhat overthinking-nya tiap malem, padahal lu sendiri lagi pusing ngurusin hidup?",
-    compromises: [
-      "Bikin jadwal quality time bebas bahas pencapaian orang lain.",
-      "Saling evaluasi target 6 bulan bareng tanpa saling nyalahin.",
-      "Sepakat puasa buka media sosial tiap akhir pekan.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 1 },
-  },
-  {
-    id: "KH_U2",
-    category: "Ketakutan Hidup",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Jauh di lubuk hati, gua takut kalau orang yang paling gua sayang tahu sisi tergelap gua, dia bakal pergi.",
-    partnerPrompt:
-      "Dia nyimpen sisi kelam/trauma masa lalu dan takut banget bakal ditinggalin kalau lu tahu aslinya.",
-    consequenceQuestion:
-      "Lu sanggup nerima masa lalunya tanpa pernah ngungkit itu pas kalian lagi berantem hebat nanti?",
-    compromises: [
-      "Buka-bukaan bertahap sesuai kesiapan tanpa paksaan.",
-      "Datang ke konselor/psikolog pra-nikah bareng.",
-      "Bikin perjanjian masa lalu nggak boleh dibawa saat konflik.",
-    ],
-    botPref: { young: 0, mid: 2, mature: 1 },
-  },
-  {
-    id: "KH_U3",
-    category: "Ketakutan Hidup",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua lebih takut kesepian sendirian daripada terjebak di hubungan yang sebenernya udah nggak sehat.",
-    partnerPrompt:
-      "Dia punya ketergantungan emosional tinggi dan lebih takut kesepian daripada terjebak hubungan toxic.",
-    consequenceQuestion:
-      "Kalau suatu hari hubungan kalian hambar, lu yakin dia bertahan karena cinta—bukan cuma karena takut sendirian?",
-    compromises: [
-      "Wajib punya lingkar pertemanan dan me-time masing-masing.",
-      "Check-in kondisi mental hubungan tiap 3 bulan secara jujur.",
-      "Sepakat berani selesai baik-baik kalau udah saling nyakitin.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 2 },
-  },
-  {
-    id: "KH_U4",
-    category: "Ketakutan Hidup",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua takut banget pernikahan cuma bakal ngubah cinta jadi rutinitas tagihan listrik, cicilan, dan urusan dapur yang ngebosenin.",
-    partnerPrompt:
-      "Dia takut banget kehidupan pernikahan bakal ngebunuh sisi romantis dan cuma jadi rutinitas bayar tagihan.",
-    consequenceQuestion:
-      "Lu sanggup tetep usaha bikin hubungan seru di tengah capeknya kerja dan cicilan menumpuk?",
-    compromises: [
-      'Wajib alokasi budget khusus "date night" bulanan anti-batal.',
-      "Bagi tugas domestik & keuangan pakai sistem otomatis biar nggak ribut.",
-      "Jadwalin liburan singkat minimal 2 kali setahun.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 1 },
-  },
-  {
-    id: "KH_M_ALL",
-    category: "Ketakutan Hidup",
-    gender: "Laki-laki",
-    ageGroup: "ALL",
-    segmentLabel: "Laki-laki • 18–35",
-    statement:
-      "Gua takut banget kelihatan lemah atau nangis di depan pasangan karena ngerasa laki-laki harus selalu kelihatan kuat.",
-    partnerPrompt:
-      "Dia gengsi kelihatan lemah dan milih mendem beban berat sendirian demi menjaga harga diri.",
-    consequenceQuestion:
-      "Lu siap menghadapi pasangan yang tiba-tiba meledak marah cuma karena dia nahan tangis dan stres sendirian?",
-    compromises: [
-      "Kasih ruang aman buat cerita tanpa langsung diceramahin.",
-      "Boleh diem dulu 2 jam pas capek, tapi habis itu wajib ngomong.",
-      "Gunakan kode khusus kalau lagi butuh dipeluk tanpa ditanya-tanya.",
-    ],
-    botPref: { young: 2, mid: 0, mature: 1 },
-  },
-  {
-    id: "KH_F_ALL",
-    category: "Ketakutan Hidup",
-    gender: "Perempuan",
-    ageGroup: "ALL",
-    segmentLabel: "Perempuan • 18–35",
-    statement:
-      "Gua takut kehilangan jati diri, karier, dan kebebasan gua begitu masuk ke kehidupan rumah tangga.",
-    partnerPrompt:
-      "Dia takut banget kehilangan karier dan kebebasan pribadinya setelah resmi menikah nanti.",
-    consequenceQuestion:
-      "Lu yakin nggak bakal nuntut dia buat ngurangin jam kerja atau fokus ngurus rumah tangga sepenuhnya?",
-    compromises: [
-      "Sepakat sama-sama tetap berkarya dan bagi rata urusan rumah.",
-      "Hire asisten rumah tangga / jasa laundry biar sama-sama punya waktu.",
-      "Bikin kesepakatan tertulis soal pembagian peran sebelum nikah.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 2 },
-  },
-  {
-    id: "KH_M_Y1",
-    category: "Ketakutan Hidup",
-    gender: "Laki-laki",
-    ageGroup: "young",
-    segmentLabel: "Laki-laki • 18–25",
-    statement:
-      "Gua takut banget gagal secara finansial sebelum umur 30 dan dianggap nggak punya masa depan sama keluarga pasangan.",
-    partnerPrompt:
-      "Dia terobsesi ngejar mapan sebelum 30 sampai sering ngorbanin waktu pacaran demi kerja sampingan.",
-    consequenceQuestion:
-      "Lu rela weekend-mu sering batal dan chat dibales lama karena dia sibuk ngejar target finansial?",
-    compromises: [
-      "Jadwalin minimal 1 hari penuh per minggu bebas dari urusan kerjaan.",
-      "Transparan soal target tabungan bareng biar sama-sama tenang.",
-      "Support ambisinya tapi tetap pasang batas jam kerja maksimal.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 1 },
-  },
-  {
-    id: "KH_M_Y2",
-    category: "Ketakutan Hidup",
-    gender: "Laki-laki",
-    ageGroup: "young",
-    segmentLabel: "Laki-laki • 18–25",
-    statement:
-      "Gua takut komitmen jangka panjang karena ngerasa masa muda gua belum puas buat eksplor banyak hal.",
-    partnerPrompt:
-      "Dia masih ragu komitmen serius karena takut masa mudanya habis terlalu cepat.",
-    consequenceQuestion:
-      "Lu yakin mau lanjut serius sama orang yang setengah kakinya masih pengen bebas sana-sini?",
-    compromises: [
-      "Pasang timeline hubungan yang jelas (misal evaluasi serius 1 tahun lagi).",
-      "Tetap kasih kebebasan hobi & solo trip asal komunikasi jelas.",
-      "Sepakat fokus bangun fondasi dulu tanpa buru-buru bahas nikah.",
-    ],
-    botPref: { young: 1, mid: 0, mature: 0 },
-  },
-  {
-    id: "KH_F_Y1",
-    category: "Ketakutan Hidup",
-    gender: "Perempuan",
-    ageGroup: "young",
-    segmentLabel: "Perempuan • 18–25",
-    statement:
-      "Gua sering ngerasa nggak cukup menarik atau nggak cukup berprestasi kalau dibandingin sama standar di media sosial.",
-    partnerPrompt:
-      "Dia gampang insecure sama penampilan dan pencapaian orang lain di media sosial.",
-    consequenceQuestion:
-      "Lu sanggup ngasih validasi dan pujian berulang kali tiap hari pas dia lagi kumat insecure-nya?",
-    compromises: [
-      'Kasih afirmasi positif rutin tanpa nunggu dia nanya "aku cantik nggak?".',
-      "Kurangi konsumsi konten pamer gaya hidup di medsos.",
-      "Fokus bikin aktivitas offline bareng yang ningkatin kepercayaan diri.",
-    ],
-    botPref: { young: 0, mid: 2, mature: 1 },
-  },
-  {
-    id: "KH_F_Y2",
-    category: "Ketakutan Hidup",
-    gender: "Perempuan",
-    ageGroup: "young",
-    segmentLabel: "Perempuan • 18–25",
-    statement:
-      "Gua takut banget udah nemenin pasangan dari nol, eh pas dia sukses malah ninggalin gua demi orang baru.",
-    partnerPrompt:
-      "Dia punya trauma takut ditinggalin setelah nemenin pasangan berjuang dari nol.",
-    consequenceQuestion:
-      "Lu siap menghadapi kecurigaan dia tiap kali karier lu naik atau lu mulai kenal lingkungan baru?",
-    compromises: [
-      "Kenalin dia ke lingkungan kerja dan temen-temen baru secara terbuka.",
-      "Bikin pencapaian finansial tercatat transparan sebagai hasil bareng.",
-      "Jaga batasan tegas sama lawan jenis di lingkungan profesional.",
-    ],
-    botPref: { young: 0, mid: 2, mature: 1 },
-  },
-  {
-    id: "KH_M_A1",
-    category: "Ketakutan Hidup",
-    gender: "Laki-laki",
-    ageGroup: "adult",
-    segmentLabel: "Laki-laki • 26+",
-    statement:
-      "Gua takut nggak sanggup jadi tulang punggung keluarga sendiri karena masih harus nanggung beban ekonomi orang tua (sandwich generation).",
-    partnerPrompt:
-      "Dia adalah sandwich generation yang wajib menyisihkan sebagian besar gajinya buat keluarga besar.",
-    consequenceQuestion:
-      "Lu ikhlas jatah liburan, skincare, atau tabungan rumah tangga kalian kepotong rutin buat biayain keluarganya?",
-    compromises: [
-      "Tetapkan batas nominal maksimal per bulan buat keluarga besar.",
-      "Pisahkan rekening keluarga inti dan rekening bantuan orang tua.",
-      "Cari sumber penghasilan tambahan bareng khusus pos keluarga.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 1 },
-  },
-  {
-    id: "KH_M_A2",
-    category: "Ketakutan Hidup",
-    gender: "Laki-laki",
-    ageGroup: "adult",
-    segmentLabel: "Laki-laki • 26+",
-    statement:
-      "Gua takut salah pilih istri yang ternyata nggak bisa akur sama ibu dan keluarga besar gua.",
-    partnerPrompt:
-      "Dia sangat memprioritaskan restu dan keharmonisan antara pasangannya dengan ibunya.",
-    consequenceQuestion:
-      "Kalau suatu hari terjadi gesekan antara lu dan mertua, lu siap kalau dia lebih milih belain ibunya dulu?",
-    compromises: [
-      "Wajib tinggal terpisah (ngontrak/rumah sendiri) dari orang tua setelah nikah.",
-      "Suami jadi penengah netral tanpa menyudutkan salah satu pihak.",
-      "Batasi frekuensi kumpul keluarga besar biar minim gesekan.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 0 },
-  },
-  {
-    id: "KH_F_A1",
-    category: "Ketakutan Hidup",
-    gender: "Perempuan",
-    ageGroup: "adult",
-    segmentLabel: "Perempuan • 26+",
-    statement:
-      "Gua takut salah pilih pasangan cuma karena dikejar umur dan tekanan pertanyaan keluarga soal kapan nikah.",
-    partnerPrompt:
-      "Dia jujur takut kalau keputusannya nikah dipengaruhi tekanan umur dan desakan keluarga.",
-    consequenceQuestion:
-      "Lu sanggup nerima kenyataan bahwa lu mungkin dipilih sebagian karena faktor kejar tayang usia?",
-    compromises: [
-      "Tunda tanggal nikah minimal 6 bulan sampai yakin 100% bukan karena panik.",
-      "Pasang tameng bareng menghadapi pertanyaan keluarga besar.",
-      "Uji kecocokan lewat manajemen proyek/keuangan bareng sebelum lamaran.",
-    ],
-    botPref: { young: 0, mid: 2, mature: 2 },
-  },
-  {
-    id: "KH_F_A2",
-    category: "Ketakutan Hidup",
-    gender: "Perempuan",
-    ageGroup: "adult",
-    segmentLabel: "Perempuan • 26+",
-    statement:
-      "Gua takut banget udah umur segini harus mulai kenalan dan adaptasi dari nol lagi kalau hubungan ini gagal.",
-    partnerPrompt:
-      "Dia kelelahan secara mental buat mulai PDKT dari awal lagi kalau hubungan ini kandas.",
-    consequenceQuestion:
-      "Lu yakin dia bertahan di diskusi ini karena beneran cocok sama lu, bukan karena males mulai dari nol lagi?",
-    compromises: [
-      'Sepakat nggak bertahan cuma karena faktor "sayang udah lama".',
-      "Bikin komitmen perbaikan nyata dengan tenggat waktu jelas.",
-      "Berani ambil jeda evaluasi 1 minggu tanpa komunikasi kalau buntu.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 0 },
-  },
-
-  // ==================== KATEGORI 2: KEBIASAAN BURUK ====================
-  {
-    id: "KB_U1",
-    category: "Kebiasaan Buruk",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Kalau lagi stres atau capek mental, pelarian gua adalah belanja impulsif atau jajan mahal walau saldo lagi sekarat.",
-    partnerPrompt:
-      'Dia punya kebiasaan "retail therapy" — belanja impulsif dan jajan mahal tiap lagi stres meski saldo tipis.',
-    consequenceQuestion:
-      "Lu sanggup ngerem kebiasaan jajan impulsifnya tanpa bikin dia ngerasa dikekang soal duitnya sendiri?",
-    compromises: [
-      'Sediakan pos "Dana Jajan Stres" maksimal 5% dari gaji per bulan.',
-      "Wajib terapkan aturan tunggu 48 jam sebelum checkout barang di atas 200rb.",
-      "Alihkan pelarian stres ke olahraga atau masak bareng di rumah.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 1 },
-  },
-  {
-    id: "KB_U2",
-    category: "Kebiasaan Buruk",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua sering doomscrolling sampai subuh, terus besoknya ngeluh capek dan nunda semua kerjaan penting.",
-    partnerPrompt:
-      "Dia sering begadang doomscrolling sampai subuh, lalu besoknya moody dan ngaret semua jadwal.",
-    consequenceQuestion:
-      "Lu tahan punya pasangan yang susah diajak ketemu pagi dan sering bad mood karena kurang tidur?",
-    compromises: [
-      "Sepakat taruh HP di luar kamar tidur 30 menit sebelum jam tidur.",
-      "Nggak ada jadwal kencan atau urusan penting sebelum jam 11 siang di weekend.",
-      "Saling ingetin jam tidur tanpa nada menggurui.",
-    ],
-    botPref: { young: 1, mid: 0, mature: 0 },
-  },
-  {
-    id: "KB_U3",
-    category: "Kebiasaan Buruk",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua gampang tergiur cicilan atau paylater demi gaya hidup yang sebenernya di luar kemampuan gaji gua.",
-    partnerPrompt:
-      "Dia gampang tergoda pakai paylater dan cicilan demi menjaga gengsi gaya hidup.",
-    consequenceQuestion:
-      "Lu siap kalau suatu saat tabunganku harus kepake buat nutupin tunggakan paylater atau cicilannya?",
-    compromises: [
-      "Wajib tutup semua akun paylater sebelum masuk tahap lamaran.",
-      "Cek SLIK OJK / riwayat kredit masing-masing secara transparan.",
-      "Bikin aturan dilarang nyicil barang konsumtif (hanya aset produktif).",
-    ],
-    botPref: { young: 2, mid: 1, mature: 1 },
-  },
-  {
-    id: "KB_U4",
-    category: "Kebiasaan Buruk",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua orangnya berantakan banget soal barang dan kamar, dan baru gerak beres-beres kalau udah bener-bener sumpek.",
-    partnerPrompt:
-      "Dia cukup berantakan soal kerapian ruangan dan baru bersih-bersih kalau kondisinya udah parah.",
-    consequenceQuestion:
-      "Lu siap jadi pihak yang lebih sering beres-beres, atau tahan tinggal di rumah yang berantakan?",
-    compromises: [
-      'Terapkan aturan "15 menit beres-beres bareng" tiap malam sebelum tidur.',
-      "Patungan bayar layanan home cleaning seminggu sekali.",
-      "Punya zona pribadi masing-masing yang bebas diatur sesuka hati.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 1 },
-  },
-  {
-    id: "KB_M_ALL",
-    category: "Kebiasaan Buruk",
-    gender: "Laki-laki",
-    ageGroup: "ALL",
-    segmentLabel: "Laki-laki • 18–35",
-    statement:
-      "Gua sering lupa tanggal-tanggal penting, detail cerita pasangan, atau janji-janji kecil yang menurut gua sepele.",
-    partnerPrompt:
-      "Dia pelupa banget soal tanggal penting, detail obrolan, dan janji-janji kecil.",
-    consequenceQuestion:
-      "Lu yakin nggak bakal sakit hati pas dia lupa tanggal anniversary atau hal kecil yang udah lu ceritain?",
-    compromises: [
-      "Wajib pasang pengingat kalender bareng dengan alarm H-3.",
-      "Pasangan boleh ngingetin langsung tanpa kode-kodean ngambek.",
-      "Fokus ke konsistensi perhatian harian daripada seremoni tanggal.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 2 },
-  },
-  {
-    id: "KB_F_ALL",
-    category: "Kebiasaan Buruk",
-    gender: "Perempuan",
-    ageGroup: "ALL",
-    segmentLabel: "Perempuan • 18–35",
-    statement:
-      "Kalau mood gua lagi hancur atau PMS, nada bicara gua bisa ketus banget padahal pasangan gua nggak salah apa-apa.",
-    partnerPrompt:
-      "Dia sering melampiaskan bad mood atau PMS lewat nada bicara yang ketus meski lu nggak salah.",
-    consequenceQuestion:
-      "Lu sanggup tetep kalem dan nggak ikut terpancing emosi pas kena semprot tanpa sebab?",
-    compromises: [
-      'Kasih peringatan awal "mood lagi sensitif" sebelum ngobrol serius.',
-      "Wajib minta maaf setelah emosi reda kalau sempat bicara kasar.",
-      "Kasih waktu menyendiri 1-2 jam + makanan favorit sampai tenang.",
-    ],
-    botPref: { young: 2, mid: 1, mature: 1 },
-  },
-  {
-    id: "KB_M_Y1",
-    category: "Kebiasaan Buruk",
-    gender: "Laki-laki",
-    ageGroup: "young",
-    segmentLabel: "Laki-laki • 18–25",
-    statement:
-      "Kalau udah keasyikan main game, nongkrong, atau hobi, gua bisa ngilang berjam-jam tanpa ngabarin pasangan.",
-    partnerPrompt:
-      "Dia bisa hilang kabar berjam-jam tanpa notif kalau udah asyik mabar game atau nongkrong sama temennya.",
-    consequenceQuestion:
-      "Lu sanggup nahan overthinking pas chat lu cuma centang satu berjam-jam demi hobinya?",
-    compromises: [
-      "Wajib kirim kabar singkat sebelum mulai mabar/nongkrong + estimasi selesai.",
-      "Bebas hobi tanpa diganggu asal komitmen 1 jam ngobrol sebelum tidur.",
-      "Ikut nimbrung sesekali biar kenal circle pertemanannya.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 1 },
-  },
-  {
-    id: "KB_M_Y2",
-    category: "Kebiasaan Buruk",
-    gender: "Laki-laki",
-    ageGroup: "young",
-    segmentLabel: "Laki-laki • 18–25",
-    statement:
-      "Gua susah nolak ajakan temen buat nongkrong dadakan, meskipun sebenernya gaji/uang bulanan gua udah menipis.",
-    partnerPrompt:
-      "Dia nggak enakan sama temen tongkrongan sampai sering maksain nongkrong meski dompet lagi tipis.",
-    consequenceQuestion:
-      "Lu siap ngadepin dia yang lebih takut dibilang pelit sama temennya daripada mikirin tabungan kalian?",
-    compromises: [
-      "Bikin jatah budget nongkrong bulanan yang kalau habis ya wajib di rumah.",
-      "Ganti lokasi nongkrong ke rumah/kost biar tetep kumpul tapi hemat.",
-      'Belajar bilang "lagi nabung buat masa depan" tanpa gengsi.',
-    ],
-    botPref: { young: 1, mid: 0, mature: 2 },
-  },
-  {
-    id: "KB_F_Y1",
-    category: "Kebiasaan Buruk",
-    gender: "Perempuan",
-    ageGroup: "young",
-    segmentLabel: "Perempuan • 18–25",
-    statement:
-      'Gua sering bilang "terserah" atau "aku gapapa", padahal dalam hati ngarep pasangan peka dan nebak sendiri maunya gua apa.',
-    partnerPrompt:
-      'Dia hobi bilang "terserah" atau "gapapa", tapi ngambek kalau lu gagal nebak isi pikirannya.',
-    consequenceQuestion:
-      "Lu sanggup main tebak-tebakan perasaan tiap minggu tanpa kehilangan kesabaran?",
-    compromises: [
-      'Hapus kata "terserah" — wajib kasih minimal 2 opsi pilihan konkret.',
-      'Kalau bilang "gapapa", pasangan berhak menganggap beneran aman.',
-      "Latihan ngomong langsung apa yang dibutuhin dalam 1 kalimat jelas.",
-    ],
-    botPref: { young: 0, mid: 2, mature: 2 },
-  },
-  {
-    id: "KB_F_Y2",
-    category: "Kebiasaan Buruk",
-    gender: "Perempuan",
-    ageGroup: "young",
-    segmentLabel: "Perempuan • 18–25",
-    statement:
-      "Gua sering curhat detail masalah hubungan kita ke sahabat-sahabat gua tiap kali kita lagi ribut.",
-    partnerPrompt:
-      "Dia sering curhatin masalah internal hubungan kalian ke sahabat-sahabatnya setiap kali ribut.",
-    consequenceQuestion:
-      "Lu siap kalau setiap kesalahan lu bakal diketahui dan dihakimi sama geng sahabatnya?",
-    compromises: [
-      "Sepakat masalah internal dilarang diceritain ke temen sebelum dibahas berdua.",
-      "Boleh curhat maksimal ke 1 orang netral yang dewasa, bukan ke grup.",
-      "Selesaikan konflik di hari yang sama biar nggak bocor keluar.",
-    ],
-    botPref: { young: 1, mid: 0, mature: 0 },
-  },
-  {
-    id: "KB_M_A1",
-    category: "Kebiasaan Buruk",
-    gender: "Laki-laki",
-    ageGroup: "adult",
-    segmentLabel: "Laki-laki • 26+",
-    statement:
-      "Kalau lagi ada masalah berat di kerjaan, gua milih nutup diri dan diem seharian daripada cerita ke pasangan.",
-    partnerPrompt:
-      'Dia tipe yang masuk ke "gua" dan membisu seharian kalau lagi stres berat sama kerjaan.',
-    consequenceQuestion:
-      "Lu tahan nggak ngerasa dicuekin atau diabaikan pas dia butuh waktu diem seharian?",
-    compromises: [
-      'Kirim pesan singkat "Lagi butuh waktu mikir sampai malem ya" biar nggak bikin cemas.',
-      "Maksimal waktu tutup diri adalah 24 jam, setelah itu wajib cerita.",
-      "Pasangan cukup nemenin di ruangan yang sama tanpa maksa ngobrol.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 0 },
-  },
-  {
-    id: "KB_M_A2",
-    category: "Kebiasaan Buruk",
-    gender: "Laki-laki",
-    ageGroup: "adult",
-    segmentLabel: "Laki-laki • 26+",
-    statement:
-      "Gua terlalu workaholic sampai sering buka laptop atau bales chat kerjaan pas lagi jalan berdua sama pasangan.",
-    partnerPrompt:
-      "Dia workaholic akut yang masih sering balesin chat kerjaan pas lagi kencan berdua.",
-    consequenceQuestion:
-      "Lu ikhlas posisi lu sering jadi nomor dua setelah urusan klien dan deadline kantornya?",
-    compromises: [
-      'Terapkan aturan "No Laptop & Silent Work Chat" selama 2 jam pas kencan.',
-      "Pisahkan HP kerja dan HP pribadi setelah jam 8 malam.",
-      "Kompensasi waktu kerja lembur dengan liburan berkualitas di akhir pekan.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 1 },
-  },
-  {
-    id: "KB_F_A1",
-    category: "Kebiasaan Buruk",
-    gender: "Perempuan",
-    ageGroup: "adult",
-    segmentLabel: "Perempuan • 26+",
-    statement:
-      "Gua punya kebiasaan nge-stalk masa lalu pasangan atau mantan-mantannya sampai bikin mood gua sendiri rusak.",
-    partnerPrompt:
-      "Dia hobi kepo dan nge-stalk jejak digital mantan-mantanmu sampai akhirnya bad mood sendiri.",
-    consequenceQuestion:
-      "Lu siap ngadepin kecemburuan masa lalu yang sebenernya udah selesai bertahun-tahun lalu?",
-    compromises: [
-      "Bersihkan foto/jejak mantan di media sosial demi ketenangan bersama.",
-      "Sepakat stop kepo akun masa lalu dan fokus ke masa depan.",
-      "Kasih kepastian sikap nyata kalau masa lalu udah beneran tutup buku.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 1 },
-  },
-  {
-    id: "KB_F_A2",
-    category: "Kebiasaan Buruk",
-    gender: "Perempuan",
-    ageGroup: "adult",
-    segmentLabel: "Perempuan • 26+",
-    statement:
-      "Gua gampang panik dan over-planning soal masa depan sampai bikin pasangan ngerasa lagi di-interview kerja.",
-    partnerPrompt:
-      "Dia suka bikin checklist masa depan yang kaku sampai diskusi hubungan berasa kayak interview HRD.",
-    consequenceQuestion:
-      "Lu sanggup ngikutin standar timeline hidupnya yang detail tanpa ngerasa tertekan?",
-    compromises: [
-      "Bahas rencana jangka panjang cukup 1 bulan sekali dalam suasana santai.",
-      "Ubah checklist kaku jadi rencana fleksibel yang disusun berdua.",
-      "Sisihkan waktu kencan tanpa boleh bahas target masa depan sama sekali.",
-    ],
-    botPref: { young: 2, mid: 0, mature: 1 },
-  },
-
-  // ==================== KATEGORI 3: SIFAT JELEK & RED FLAG EGO ====================
-  {
-    id: "SJ_U1",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Kalau lagi berantem, gua lebih milih menang debat dan nyari siapa yang salah daripada nyari solusi bareng.",
-    partnerPrompt:
-      "Dia kompetitif banget pas berantem — lebih fokus menang debat daripada nyari jalan keluar.",
-    consequenceQuestion:
-      "Lu siap nelen ego buat ngalah duluan cuma supaya debat kusir kalian berhenti?",
-    compromises: [
-      'Gunakan prinsip "Kita lawan masalah, bukan aku lawan kamu".',
-      "Stop debat kalau nada suara udah naik; lanjut setelah dingin 30 menit.",
-      'Fokus bahas "ke depannya gimana" daripada nyalahin "tadi siapa yang mulai".',
-    ],
-    botPref: { young: 1, mid: 0, mature: 0 },
-  },
-  {
-    id: "SJ_U2",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua sering ngasih silent treatment (mendiamkan pasangan) berhari-hari daripada ngomongin masalahnya secara dewasa.",
-    partnerPrompt:
-      "Dia sering ngasih silent treatment dingin berhari-hari setiap kali kecewa atau marah.",
-    consequenceQuestion:
-      "Lu kuat mental didiemin berhari-hari tanpa kepastian di tengah konflik yang menggantung?",
-    compromises: [
-      'Ganti silent treatment dengan "time-out" resmi maksimal 3 jam.',
-      "Wajib selesaikan masalah sebelum tidur, minimal sepakat damai sementara.",
-      "Tulis lewat chat kalau emang lagi susah ngomong langsung.",
-    ],
-    botPref: { young: 0, mid: 1, mature: 0 },
-  },
-  {
-    id: "SJ_U3",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua sering terlalu ngatur dan nuntut pasangan berubah sesuai standar gua, tapi gua sendiri ogah dikritik.",
-    partnerPrompt:
-      "Dia cenderung perfeksionis ngatur standar pasangannya, tapi defensif kalau dirinya dikritik.",
-    consequenceQuestion:
-      "Lu rela kehilangan sebagian kebebasan pribadimu demi ngikutin standar aturannya?",
-    compromises: [
-      'Pisahkan mana "prinsip wajib" dan mana "preferensi pribadi" yang nggak boleh dipaksa.',
-      "Terapkan aturan kritik 1-banding-1 (setiap koreksi wajib dibarengi apresiasi).",
-      "Hormati cara masing-masing dalam menyelesaikan hal teknis.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 0 },
-  },
-  {
-    id: "SJ_U4",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "ALL",
-    ageGroup: "ALL",
-    segmentLabel: "Universal • 18–35",
-    statement:
-      "Gua gampang ilfeel dan pengen kabur menjauh begitu hubungan mulai masuk fase serius atau ngebosenin.",
-    partnerPrompt:
-      "Dia punya kecenderungan avoidant — gampang ilfeel dan pengen kabur pas hubungan mulai datar atau serius.",
-    consequenceQuestion:
-      "Lu siap berjuang sendirian menjaga api hubungan pas dia tiba-tiba ngerasa hambar dan pengen menjauh?",
-    compromises: [
-      "Pahami bahwa fase tenang bukan berarti hilang rasa, tapi tanda hubungan stabil.",
-      "Cari tantangan atau hobi baru bareng tiap 3 bulan buat ngusir jenuh.",
-      "Komitmen nggak ambil keputusan putus pas lagi ngerasa bosan sesaat.",
-    ],
-    botPref: { young: 1, mid: 0, mature: 0 },
-  },
-  {
-    id: "SJ_M_ALL",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "Laki-laki",
-    ageGroup: "ALL",
-    segmentLabel: "Laki-laki • 18–35",
-    statement:
-      "Gua susah banget minta maaf duluan, bahkan di saat gua sadar kalau gua yang salah.",
-    partnerPrompt:
-      'Dia punya ego tinggi yang bikin dia susah banget ngucapin kata "maaf" duluan meski sadar salah.',
-    consequenceQuestion:
-      "Lu sanggup hidup bareng orang yang gengsi minta maaf dan cuma nunjukkin penyesalan lewat tindakan?",
-    compromises: [
-      'Latih ucapkan kata "maaf" secara verbal minimal untuk kesalahan besar.',
-      "Pasangan belajar baca bahasa permintaan maaf lewat tindakannya.",
-      "Buat kode lucu buat mencairkan gengsi pas sama-sama sadar salah.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 1 },
-  },
-  {
-    id: "SJ_F_ALL",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "Perempuan",
-    ageGroup: "ALL",
-    segmentLabel: "Perempuan • 18–35",
-    statement:
-      "Gua gampang ngungkit-ngungkit kesalahan lama pasangan tiap kali kita lagi ribut soal masalah baru.",
-    partnerPrompt:
-      'Dia punya "arsip ingatan tajam" dan suka ngungkit kesalahan lama tiap kali kalian ribut masalah baru.',
-    consequenceQuestion:
-      "Lu siap mental kalau kesalahan lu hari ini bakal terus diputar ulang di pertengkaran tahun depan?",
-    compromises: [
-      'Terapkan aturan "1 Konflik = 1 Topik", dilarang bawa arsip masa lalu.',
-      "Masalah yang udah dimaafin dianggap hangus dan nggak valid lagi.",
-      "Boleh bahas pola berulang hanya kalau terjadi lagi dalam 30 hari terakhir.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 0 },
-  },
-  {
-    id: "SJ_M_Y1",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "Laki-laki",
-    ageGroup: "young",
-    segmentLabel: "Laki-laki • 18–25",
-    statement:
-      "Gua gampang cemburu dan posesif kalau pasangan deket sama temen lawan jenis, meski gua sendiri pengen bebas berteman.",
-    partnerPrompt:
-      "Dia punya standar ganda: gampang cemburu sama temen lawan jenismu, tapi nuntut bebas buat dirinya sendiri.",
-    consequenceQuestion:
-      "Lu sanggup ngejalanin aturan pertemanan yang ketat sementara dia dapet kelonggaran lebih?",
-    compromises: [
-      "Terapkan standar batasan pertemanan lawan jenis yang 100% adil & sama.",
-      "Saling kenalin temen-temen deket biar nggak ada rasa curiga.",
-      "Transparan soal aktivitas tanpa harus saling cek HP tiap jam.",
-    ],
-    botPref: { young: 1, mid: 0, mature: 0 },
-  },
-  {
-    id: "SJ_F_Y1",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "Perempuan",
-    ageGroup: "young",
-    segmentLabel: "Perempuan • 18–25",
-    statement:
-      "Gua sering ngetes kesetiaan atau kesabaran pasangan pakai drama kecil cuma buat mastiin dia masih peduli.",
-    partnerPrompt:
-      'Dia suka bikin drama kecil buat "ngetes" seberapa sabar dan peduli lu sama dia.',
-    consequenceQuestion:
-      "Lu tahan ngadepin ujian drama dadakan yang sebenernya cuma cara dia nyari perhatian?",
-    compromises: [
-      "Stop bikin tes drama — ganti dengan minta perhatian secara langsung.",
-      "Pasangan kasih waktu perhatian penuh 30 menit tiap hari tanpa HP.",
-      "Kalau ketahuan ngetes, diskusi langsung kenapa dia lagi butuh kepastian.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 0 },
-  },
-  {
-    id: "SJ_M_A1",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "Laki-laki",
-    ageGroup: "adult",
-    segmentLabel: "Laki-laki • 26+",
-    statement:
-      "Gua cenderung ngerasa paling logis dan nganggep perasaan pasangan terlalu emosional atau lebay pas lagi diskusi.",
-    partnerPrompt:
-      'Dia sering ngeremehin perasaanmu sebagai "terlalu emosional" karena ngerasa dirinya paling logis.',
-    consequenceQuestion:
-      "Lu siap kalau keluhan emosionalmu sering dibales pakai argumen dingin dan data logika?",
-    compromises: [
-      'Validasi emosi pasangan dulu ("Aku ngerti kamu capek") sebelum kasih solusi.',
-      'Tanya dulu: "Kamu lagi pengen didengerin aja atau dicariin solusi?".',
-      "Hormati bahwa empati dan logika punya bobot yang sama pentingnya.",
-    ],
-    botPref: { young: 1, mid: 1, mature: 0 },
-  },
-  {
-    id: "SJ_F_A1",
-    category: "Sifat Jelek & Red Flag Ego",
-    gender: "Perempuan",
-    ageGroup: "adult",
-    segmentLabel: "Perempuan • 26+",
-    statement:
-      "Gua gampang nyimpen dendam halus dan bersikap pasif-agresif (nyindir halus) kalau keinginan gua nggak diturutin.",
-    partnerPrompt:
-      "Dia cenderung pasif-agresif dan nyindir halus kalau kemauannya nggak keturutan.",
-    consequenceQuestion:
-      "Lu sanggup nangkap sindiran halusnya atau tahan sama suasana dingin penuh kode sindiran?",
-    compromises: [
-      'Dilarang nyindir — biasakan bilang "Aku kecewa karena..." secara lugas.',
-      "Pasangan wajib dengerin keberatan tanpa langsung defensif.",
-      "Evaluasi ekspektasi masing-masing biar nggak ada harapan sepihak.",
-    ],
-    botPref: { young: 0, mid: 0, mature: 0 },
-  },
-];
-
 // Pola melodi & akor piano romantis (Fmaj7 -> Em7 -> Dm7 -> Cmaj7/G)
 const ROMANTIC_BGM_STEPS: {
   bass?: number;
@@ -808,37 +66,12 @@ const ROMANTIC_BGM_STEPS: {
   { melody: 523.25, dur: 1.2 },
 ];
 
-function build20QuestionsForProfile(
-  gender: "Laki-laki" | "Perempuan",
-  age: number
-): QuestionItem[] {
-  const ageGroup = age <= 25 ? "young" : "adult";
-  const categories: QuestionItem["category"][] = [
-    "Ketakutan Hidup",
-    "Kebiasaan Buruk",
-    "Sifat Jelek & Red Flag Ego",
-  ];
-  let finalDeck: QuestionItem[] = [];
-
-  categories.forEach((cat) => {
-    const pool = QUESTION_BANK.filter(
-      (q) =>
-        q.category === cat &&
-        (q.gender === "ALL" || q.gender === gender) &&
-        (q.ageGroup === "ALL" || q.ageGroup === ageGroup)
-    );
-    finalDeck = finalDeck.concat(pool);
-  });
-
-  return finalDeck.slice(0, 20);
-}
-
 function getBotPersonaConfig(
   botGender: "Laki-laki" | "Perempuan",
   botAge: number
 ) {
   const isFemale = botGender === "Perempuan";
-  if (botAge <= 24) {
+  if (botAge <= 23) {
     return {
       name: isFemale ? "Keisya" : "Arkan",
       age: botAge,
@@ -852,7 +85,7 @@ function getBotPersonaConfig(
       reactReject:
         "Tuh kan! Pasti ujung-ujungnya kamu nggak ngertiin aku. Yaudah coba cari jalan tengahnya gimana!",
     };
-  } else if (botAge <= 32) {
+  } else if (botAge <= 33) {
     return {
       name: isFemale ? "Nadya" : "Bagas",
       age: botAge,
@@ -860,7 +93,7 @@ function getBotPersonaConfig(
       tier: "mid" as const,
       emoji: isFemale ? "👩" : "👨",
       vibe: "Quarter-Life Realistis",
-      bio: "Mikirin karier, stabilitas finansial, dan trauma masa lalu. Suka diskusi objektif.",
+      bio: "Mikirin karier, stabilitas finansial, dan kesiapan rumah tangga. Suka diskusi objektif.",
       reactAccept:
         "Oke, aku hargai kejujuranmu nerima itu. Tapi pastiin kamu sanggup nanggung efek sampingnya ya.",
       reactReject:
@@ -873,10 +106,10 @@ function getBotPersonaConfig(
       gender: botGender,
       tier: "mature" as const,
       emoji: isFemale ? "👩‍💼" : "👨‍💼",
-      vibe: "Pragmatis Siap Nikah",
-      bio: "To-the-point, anti-drama, fokus efisiensi keuangan, keluarga, dan komitmen konkret.",
+      vibe: "Senior Pragmatis & To-The-Point",
+      bio: "Anti-drama, fokus ketenangan hidup, proteksi aset, dan komitmen konkret.",
       reactAccept:
-        "Bagus. Dalam pernikahan memang butuh kesiapan mental nerima kekurangan pasangan tanpa banyak drama.",
+        "Bagus. Dalam pernikahan memang butuh kesiapan mental nerima kekurangan pasangan tanpa drama.",
       reactReject:
         "Saya menghargai ketegasan kamu menolak. Sekarang pilih solusi paling praktis supaya ini nggak jadi masalah di rumah tangga.",
     };
@@ -2183,9 +1416,9 @@ export default function BesokKawinGame() {
                 </span>
               </h1>
               <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-md mx-auto">
-                Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi
-                kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian
-                sanggup bertahan.
+                Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur sesuai
+                usia &amp; gendermu, hadapi kartu masalah pasangan, dan ukur
+                apakah Baterai Cinta kalian sanggup bertahan.
               </p>
             </div>
 
@@ -2609,7 +1842,7 @@ export default function BesokKawinGame() {
                       <span className="text-rose-400 font-semibold">
                         {botOppositeGender}
                       </span>
-                      ) dengan kepribadian sesuai usia.
+                      ) dengan 20 pertanyaan realistis sesuai usianya.
                     </p>
                   </div>
                 </div>
@@ -2627,15 +1860,15 @@ export default function BesokKawinGame() {
                 <input
                   type="range"
                   min={18}
-                  max={40}
+                  max={45}
                   value={botAgeSlider}
                   onChange={(e) => setBotAgeSlider(parseInt(e.target.value, 10))}
                   className="w-full my-2"
                 />
                 <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-3">
-                  <span>18 (Dramatis)</span>
-                  <span>28 (Realistis)</span>
-                  <span>40 (Pragmatis)</span>
+                  <span>18 (Gen-Z)</span>
+                  <span>30 (Matang)</span>
+                  <span>45 (Senior)</span>
                 </div>
 
                 <div className="flex items-center gap-3 pt-3 border-t border-slate-800/80">
@@ -3129,7 +2362,7 @@ export default function BesokKawinGame() {
                 }}
                 className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
               >
-                💤 Pasangan AFK (-15%)
+                💤 Simulasi Timeout / Pasangan AFK (-15%)
               </button>
             </div>
           </section>
