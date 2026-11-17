@@ -3582,7 +3582,7 @@ export default function BesokKawinGame() {
                 }}
                 className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile"
               >
-                🔄 Ganti Lawan / Mode
+                🔄 Ganti Pasangan / Mode
               </button>
               <button
                 onClick={fullResetGame}
