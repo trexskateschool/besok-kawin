@@ -221,13 +221,9 @@ export default function BesokKawinGame() {
   const [isIosDevice, setIsIosDevice] = useState(false);
 
   const [soundEnabled, setSoundEnabled] = useState(true);
-  const [bgmEnabled, setBgmEnabled] = useState(true);
-  const [bgmPlaying, setBgmPlaying] = useState(false);
+  
 
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const bgmTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bgmStepRef = useRef(0);
-  const bgmEnabledRef = useRef(true);
   const mainScrollRef = useRef<HTMLElement | null>(null);
 
   // Google Auth State
@@ -2243,19 +2239,6 @@ export default function BesokKawinGame() {
               </button>
             )}
 
-            <button
-              onClick={toggleRomanticBgm}
-              title="Musik Latar"
-              className={`p-1.5 sm:px-2 sm:py-1.5 rounded-xl border text-xs font-bold flex items-center transition ${
-                bgmEnabled
-                  ? "bg-rose-500/15 text-rose-300 border-rose-500/40"
-                  : "bg-slate-800 text-slate-400 border-slate-700"
-              }`}
-            >
-              <span className={bgmEnabled && bgmPlaying ? "animate-pulse" : ""}>
-                {bgmEnabled ? "🎹" : "🔇"}
-              </span>
-            </button>
 
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
