@@ -2468,8 +2468,7 @@ export default function BesokKawinGame() {
                   <div className="mb-3 p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-[11px] text-emerald-200">
                     💘 <strong>Mode Cari Pasangan Mabar:</strong> Pilih lawan
                     jenis yang terdaftar. Jika saling pilih (Match), otomatis
-                    mabar! Jika cocok 80%+, bisa upgrade sawer Rp10.000 untuk
-                    lanjut ngobrol.
+                    mabar! Jika cocok 80%+, bisa lanjut ngobrol.
                   </div>
                 )}
 
