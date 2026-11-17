@@ -2585,7 +2585,7 @@ export default function BesokKawinGame() {
                       </div>
                       <div>
                         <label className="block text-xs font-semibold text-slate-300 mb-1">
-                          Bio Singkat (Tanpa IG/WA)
+                          Bio Singkat
                         </label>
                         <input
                           type="text"
