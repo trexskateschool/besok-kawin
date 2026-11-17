@@ -2202,7 +2202,6 @@ export default function BesokKawinGame() {
                   <div className="flex justify-between mt-2 text-[11px] text-slate-400">
                     <span>
                       Ronde <strong className="text-rose-400">{round}</strong>/8
-                      • HP Kamu:{" "}
                       <strong className="text-white">{meProfile.name}</strong>
                     </span>
                     <span
