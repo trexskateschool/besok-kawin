@@ -79,10 +79,7 @@ const STAKE_PRESETS = [
   "Kalah wajib nurutin 1 permintaan pasangan seharian",
 ];
 
-function formatRejectedProblemForOwner(
-  rejectorName: string,
-  rawStatement: string
-): string {
+function formatStatementToSecondPerson(rawStatement: string): string {
   let text = rawStatement.trim().replace(/[.!?]+$/, "");
 
   text = text.replace(
@@ -105,7 +102,25 @@ function formatRejectedProblemForOwner(
     text = `kamu${text.slice(4)}`;
   }
 
-  return `${rejectorName} menolak masalahmu soal ${text}.`;
+  return text;
+}
+
+function formatAcceptedProblemForOwner(
+  acceptorName: string,
+  rawStatement: string
+): string {
+  return `${acceptorName} menerima soal ${formatStatementToSecondPerson(
+    rawStatement
+  )}.`;
+}
+
+function formatRejectedProblemForOwner(
+  rejectorName: string,
+  rawStatement: string
+): string {
+  return `${rejectorName} menolak masalahmu soal ${formatStatementToSecondPerson(
+    rawStatement
+  )}.`;
 }
 
 function findContradictoryConfession(
@@ -3129,7 +3144,7 @@ export default function SefrekuensiGame() {
             <div className="bg-cardbg/95 border border-amber-500/40 rounded-3xl p-5 shadow-xl">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                  🎯 Taruhan Nyata (Tercetak di Rapor PNG)
+                  🎯 Taruhan Nyata (Tercetak di Rapor)
                 </span>
               </div>
               <input
@@ -3833,11 +3848,13 @@ export default function SefrekuensiGame() {
                       </div>
 
                       <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 mb-4">
-                        <p className="text-xs text-amber-300 font-bold mb-1">
-                          {responder.name} menekan TERIMA untuk masalahmu:
-                        </p>
                         <p className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
-                          &ldquo;{currentCard.consequenceQuestion}&rdquo;
+                          &ldquo;
+                          {formatAcceptedProblemForOwner(
+                            responder.name,
+                            currentCard.statement
+                          )}
+                          &rdquo;
                         </p>
                       </div>
 
@@ -4279,7 +4296,7 @@ export default function SefrekuensiGame() {
                 <span>
                   {isDownloadingImage
                     ? "Menyiapkan Gambar Rapor..."
-                    : "📸 Download Gambar Rapor (.PNG)"}
+                    : "📸 Download Gambar Rapor"}
                 </span>
               </button>
 
