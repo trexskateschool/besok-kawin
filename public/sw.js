@@ -1,4 +1,4 @@
-const CACHE_NAME = "besok-kawin-v1";
+const CACHE_NAME = "sefrekuensi-v1";
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
