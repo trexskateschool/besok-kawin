@@ -414,9 +414,12 @@ export default function SefrekuensiGame() {
   const [gameStage, setGameStage] = useState<
     "dilemma" | "consequence" | "negotiate1" | "negotiate2"
   >("dilemma");
-  const [coupleNegotiationP1Choice, setCoupleNegotiationP1Choice] = useState<
-    number | null
-  >(null);
+  
+  // Perbaikan Kunci Negosiasi:
+  // negociate1 = Pemilik Kartu (yang kartunya ditolak) memilih jalan tengah pertama.
+  // negociate2 = Penolak (Responder awal) mengonfirmasi apakah setuju dengan pilihan jalan tengah tersebut.
+  const [negotiateOwnerChoice, setNegotiateOwnerChoice] = useState<number | null>(null);
+
   const [timerSeconds, setTimerSeconds] = useState(60);
   const [timerRunning, setTimerRunning] = useState(false);
   const [consecutiveTimeouts, setConsecutiveTimeouts] = useState(0);
@@ -458,7 +461,7 @@ export default function SefrekuensiGame() {
             round: 1,
             battery: 50,
             stage: "dilemma",
-            negChoice1: null,
+            negotiateOwnerChoice: null,
             consecutiveTimeouts: 0,
             history: [],
             stats: {
@@ -494,8 +497,8 @@ export default function SefrekuensiGame() {
         if (data.player2) setPlayer2(data.player2);
         if (data.deck) setDeck(data.deck);
         if (data.stage) setGameStage(data.stage);
-        if (typeof data.negChoice1 === "number" || data.negChoice1 === null) {
-          setCoupleNegotiationP1Choice(data.negChoice1);
+        if (typeof data.negotiateOwnerChoice === "number" || data.negotiateOwnerChoice === null) {
+          setNegotiateOwnerChoice(data.negotiateOwnerChoice);
         }
         if (data.history) setHistory(data.history);
         if (data.stats) setStats(data.stats);
@@ -574,11 +577,18 @@ export default function SefrekuensiGame() {
   ]);
 
   const currentCard = deck[round - 1];
+
+  // Penentuan siapa yang memegang kendali di tiap tahap:
+  // - Dilemma & Consequence: Dikendalikan oleh `responderKey` (yang menolak/menerima kartu).
+  // - Negotiate 1 (Pemberian jalan tengah): Dikendalikan oleh PEMILIK KARTU (cardPartner / non-responder) karena kartunya ditolak.
+  // - Negotiate 2 (Konfirmasi penolak): Dikendalikan kembali oleh RESPONDER AWAL (yang menolak di awal).
   const isMyOnlineTurn =
     mode !== "online" ||
     !currentCard ||
-    (gameStage === "negotiate2"
-      ? currentCard.responderKey !== myOnlineRole
+    (gameStage === "negotiate1"
+      ? currentCard.responderKey === myOnlineRole // Pemilik kartu (lawan dari responder) yang memilih kompromi pertama
+      : gameStage === "negotiate2"
+      ? currentCard.responderKey !== myOnlineRole // Penolak awal yang mengonfirmasi pilihan
       : currentCard.responderKey === myOnlineRole);
 
   useEffect(() => {
@@ -883,7 +893,7 @@ export default function SefrekuensiGame() {
                 round: 1,
                 battery: 50,
                 stage: "dilemma",
-                negChoice1: null,
+                negotiateOwnerChoice: null,
                 consecutiveTimeouts: 0,
                 history: [],
                 stats: {
@@ -923,7 +933,7 @@ export default function SefrekuensiGame() {
                 round: 1,
                 battery: 50,
                 stage: "dilemma",
-                negChoice1: null,
+                negotiateOwnerChoice: null,
                 consecutiveTimeouts: 0,
                 history: [],
                 stats: {
@@ -1200,7 +1210,7 @@ export default function SefrekuensiGame() {
         consecutiveTimeouts: nextAfk,
         round: isFinished ? curRound : curRound + 1,
         stage: "dilemma",
-        negChoice1: null,
+        negotiateOwnerChoice: null,
         status: isFinished ? "finished" : "playing",
         endingReason: reason,
         updatedAt: Date.now(),
@@ -1340,16 +1350,17 @@ export default function SefrekuensiGame() {
     }
   };
 
+  // Saat Pengguna 1 (Responder) menolak kartu:
   const chooseRejectCard = async () => {
     sfxFlip();
     setConsecutiveTimeouts(0);
-    setCoupleNegotiationP1Choice(null);
+    setNegotiateOwnerChoice(null);
     if (mode === "online" && inviteCode && isFirebaseReady && db) {
       await setDoc(
         doc(db, "rooms", inviteCode),
         {
-          stage: "negotiate1",
-          negChoice1: null,
+          stage: "negotiate1", // Masuk tahap Pemilik Kartu memilih kompromi
+          negotiateOwnerChoice: null,
           consecutiveTimeouts: 0,
           updatedAt: Date.now(),
         },
@@ -1360,10 +1371,10 @@ export default function SefrekuensiGame() {
     }
   };
 
-  const resolveSoloNegotiation = (playerIdx: number, botIdx: number) => {
+  const resolveSoloNegotiation = (ownerChoiceIdx: number, botResponderIdx: number) => {
     if (!currentCard || !player2) return;
     setTimerRunning(false);
-    const isAgreed = playerIdx === botIdx;
+    const isAgreed = ownerChoiceIdx === botResponderIdx;
 
     if (isAgreed) {
       sfxCharge();
@@ -1373,14 +1384,14 @@ export default function SefrekuensiGame() {
         isWildcard: currentCard.isWildcard,
         problem: currentCard.partnerPrompt,
         outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
-          65 + playerIdx
+          65 + ownerChoiceIdx
         )})`,
         delta: 5,
         type: "neutral",
       };
       showToast(
-        `Sepakat sama ${player2.name} di Opsi ${String.fromCharCode(
-          65 + playerIdx
+        `Sepakat dengan ${player2.name} di Opsi ${String.fromCharCode(
+          65 + ownerChoiceIdx
         )}! Baterai +5%`,
         "success"
       );
@@ -1392,29 +1403,28 @@ export default function SefrekuensiGame() {
         category: currentCard.category,
         isWildcard: currentCard.isWildcard,
         problem: currentCard.partnerPrompt,
-        outcomeLabel: `Tolak → Deadlock (Kamu: ${String.fromCharCode(
-          65 + playerIdx
-        )}, ${player2.name}: ${String.fromCharCode(65 + botIdx)})`,
+        outcomeLabel: `Tolak → Deadlock (Pemilik: ${String.fromCharCode(
+          65 + ownerChoiceIdx
+        )}, Bot: ${String.fromCharCode(65 + botResponderIdx)})`,
         delta: -15,
         type: "bad",
       };
       showToast(
-        `Deadlock! Kamu pilih ${String.fromCharCode(65 + playerIdx)}, ${
-          player2.name
-        } maunya ${String.fromCharCode(65 + botIdx)} (-15%)`,
+        `Deadlock! Pilihan kompromi tidak cocok (-15%)`,
         "error"
       );
       applyLocalRoundOutcome(-15, item, "deadlockOrAfk", 0);
     }
   };
 
-  const submitCoupleNegotiationStep1 = async (choiceIdx: number) => {
+  // TAHAP 1: Pemilik Kartu (yang kartunya ditolak) memilih opsi kompromi pertama
+  const submitNegotiateOwnerChoice = async (choiceIdx: number) => {
     sfxTap();
-    setCoupleNegotiationP1Choice(choiceIdx);
+    setNegotiateOwnerChoice(choiceIdx);
     if (mode === "online" && inviteCode && isFirebaseReady && db) {
       await setDoc(
         doc(db, "rooms", inviteCode),
-        { stage: "negotiate2", negChoice1: choiceIdx, updatedAt: Date.now() },
+        { stage: "negotiate2", negotiateOwnerChoice: choiceIdx, updatedAt: Date.now() },
         { merge: true }
       );
     } else {
@@ -1422,11 +1432,12 @@ export default function SefrekuensiGame() {
     }
   };
 
-  const resolveCoupleNegotiation = async (partnerChoiceIdx: number) => {
-    if (!currentCard || coupleNegotiationP1Choice === null) return;
+  // TAHAP 2: Penolak awal (Responder) mengonfirmasi apakah setuju dengan pilihan jalan tengah pemilik kartu
+  const resolveCoupleNegotiation = async (responderChoiceIdx: number) => {
+    if (!currentCard || negotiateOwnerChoice === null) return;
     setTimerRunning(false);
-    const firstIdx = coupleNegotiationP1Choice;
-    const isAgreed = firstIdx === partnerChoiceIdx;
+    const ownerIdx = negotiateOwnerChoice;
+    const isAgreed = ownerIdx === responderChoiceIdx;
 
     if (isAgreed) {
       sfxCharge();
@@ -1436,14 +1447,14 @@ export default function SefrekuensiGame() {
         isWildcard: currentCard.isWildcard,
         problem: currentCard.partnerPrompt,
         outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
-          65 + firstIdx
+          65 + ownerIdx
         )})`,
         delta: 5,
         type: "neutral",
       };
       showToast(
         `Kalian berdua sepakat di Opsi ${String.fromCharCode(
-          65 + firstIdx
+          65 + ownerIdx
         )}! Baterai +5%`,
         "success"
       );
@@ -1460,15 +1471,15 @@ export default function SefrekuensiGame() {
         isWildcard: currentCard.isWildcard,
         problem: currentCard.partnerPrompt,
         outcomeLabel: `Tolak → Deadlock (${String.fromCharCode(
-          65 + firstIdx
-        )} vs ${String.fromCharCode(65 + partnerChoiceIdx)})`,
+          65 + ownerIdx
+        )} vs ${String.fromCharCode(65 + responderChoiceIdx)})`,
         delta: -15,
         type: "bad",
       };
       showToast(
         `Beda pilihan kompromi (${String.fromCharCode(
-          65 + firstIdx
-        )} vs ${String.fromCharCode(65 + partnerChoiceIdx)})! Deadlock -15%`,
+          65 + ownerIdx
+        )} vs ${String.fromCharCode(65 + responderChoiceIdx)})! Deadlock -15%`,
         "error"
       );
       if (mode === "online") {
@@ -2584,8 +2595,10 @@ export default function SefrekuensiGame() {
                     </span>
                     <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
                       Giliran:{" "}
-                      {gameStage === "negotiate2"
-                        ? cardPartner.name
+                      {gameStage === "negotiate1"
+                        ? cardPartner.name // Pemilik kartu memilih kompromi pertama
+                        : gameStage === "negotiate2"
+                        ? responder.name // Penolak awal mengonfirmasi pilihan
                         : responder.name}
                     </span>
                   </div>
@@ -2610,13 +2623,16 @@ export default function SefrekuensiGame() {
                   <div className="text-4xl mb-3 animate-pulse">⏳</div>
                   <h3 className="text-lg font-extrabold text-white">
                     Menunggu Giliran{" "}
-                    {gameStage === "negotiate2"
+                    {gameStage === "negotiate1"
                       ? cardPartner.name
+                      : gameStage === "negotiate2"
+                      ? responder.name
                       : responder.name}
                   </h3>
                   <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
-                    Pasanganmu sedang membaca kartu &ldquo;{currentCard.category}
-                    &rdquo; dan menentukan pilihan di perangkatnya...
+                    {gameStage === "negotiate1"
+                      ? `${cardPartner.name} sedang diberi tahu bahwa kartunya ditolak & memilih opsi jalan tengah...`
+                      : `${responder.name} sedang meninjau opsi jalan tengah yang diajukan...`}
                   </p>
                 </div>
               ) : (
@@ -2793,7 +2809,7 @@ export default function SefrekuensiGame() {
                     >
                       <div className="flex items-center justify-between mb-3">
                         <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          🤝 DISKUSI JALAN TENGAH
+                          🚨 KARTU DITOLAK — USULKAN KOMPROMI
                         </span>
                         <span className="text-xs text-slate-400">
                           Sepakat:{" "}
@@ -2822,8 +2838,7 @@ export default function SefrekuensiGame() {
                       </div>
 
                       <p className="text-xs font-bold text-slate-300 mb-2.5">
-                        Pilih 1 opsi kompromi yang menurutmu bakal disetujui{" "}
-                        {cardPartner.name}:
+                        Sebagai pemilik kartu, pilih 1 opsi kompromi untuk ditawarkan ke {responder.name}:
                       </p>
 
                       <div className="space-y-2.5">
@@ -2852,6 +2867,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
+                  {/* TAHAP 1 (Online/Couple): Pemberitahuan ke Pemilik Kartu bahwa kartunya ditolak & memilih jalan tengah */}
                   {gameStage === "negotiate1" && mode !== "solo" && (
                     <div
                       key={`neg-c1-${round}`}
@@ -2859,28 +2875,22 @@ export default function SefrekuensiGame() {
                     >
                       <div className="flex items-center justify-between mb-3">
                         <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          🤝 NEGOSIASI PASANGAN (TAHAP 1/2)
+                          🚨 KARTU DITOLAK OLEH {responder.name.toUpperCase()}
                         </span>
                       </div>
 
-                      <p className="text-xs text-slate-300 mb-3">
-                        <strong className="text-rose-400">
-                          {responder.name}
-                        </strong>{" "}
-                        menolak masalah ini! Pilih kompromi diam-diam sebelum
-                        gantian ke{" "}
-                        <strong className="text-emerald-400">
-                          {cardPartner.name}
-                        </strong>
-                        :
-                      </p>
+                      <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          <strong className="text-rose-400">{responder.name}</strong> menolak kartu dek masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}:
+                        </p>
+                      </div>
 
                       <div className="space-y-2.5">
                         {currentCard.compromises.map((opt, idx) => (
                           <button
                             key={idx}
                             type="button"
-                            onClick={() => submitCoupleNegotiationStep1(idx)}
+                            onClick={() => submitNegotiateOwnerChoice(idx)}
                             className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-rose-400 text-left flex items-start gap-3 transition btn-tactile"
                           >
                             <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-rose-400 shrink-0 mt-0.5">
@@ -2895,6 +2905,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
+                  {/* TAHAP 2 (Online/Couple): Penolak awal (Responder) meninjau dan memilih konfirmasi kompromi */}
                   {gameStage === "negotiate2" && mode !== "solo" && (
                     <div
                       key={`neg-c2-${round}`}
@@ -2902,20 +2913,12 @@ export default function SefrekuensiGame() {
                     >
                       <div className="flex items-center justify-between mb-3">
                         <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                          📲 GILIRAN {cardPartner.name.toUpperCase()} (TAHAP
-                          2/2)
+                          📲 GILIRAN {responder.name.toUpperCase()} (KONFIRMASI JALAN TENGAH)
                         </span>
                       </div>
 
                       <p className="text-xs text-slate-300 mb-3">
-                        <strong className="text-rose-400">
-                          {responder.name}
-                        </strong>{" "}
-                        sudah mengunci pilihannya. Sekarang{" "}
-                        <strong className="text-emerald-400">
-                          {cardPartner.name}
-                        </strong>{" "}
-                        pilih jalan tengah yang sama agar sepakat (+5%):
+                        <strong className="text-emerald-400">{cardPartner.name}</strong> sudah mengajukan opsi jalan tengah. Sekarang <strong className="text-rose-400">{responder.name}</strong> pilih opsi yang sama agar sepakat (+5%):
                       </p>
 
                       <div className="space-y-2.5">
