@@ -234,7 +234,6 @@ function buildMatchDeck(
 }
 
 export default function SefrekuensiGame() {
-  // SoundFX Engine
   const [soundEnabled, setSoundEnabled] = useState(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
@@ -299,7 +298,6 @@ export default function SefrekuensiGame() {
     );
   }, [playTone]);
 
-  // Toast Notifications
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const showToast = useCallback(
     (message: string, type: ToastItem["type"] = "info") => {
@@ -339,7 +337,6 @@ export default function SefrekuensiGame() {
     document.body.removeChild(textArea);
   };
 
-  // Screen Navigation
   const [screen, setScreen] = useState<ScreenType>("register");
   const screenRef = useRef<ScreenType>("register");
   const [animKey, setAnimKey] = useState(0);
@@ -353,7 +350,6 @@ export default function SefrekuensiGame() {
     }
   }, []);
 
-  // Screen 1: Registration State
   const [landingTab, setLandingTab] = useState<"new" | "invite">("new");
   const [inputJoinCode, setInputJoinCode] = useState("");
   const [regName, setRegName] = useState("");
@@ -369,7 +365,6 @@ export default function SefrekuensiGame() {
   } | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  // Auto-detect ?code=SEFREK-XXX from Invite Link
   useEffect(() => {
     if (typeof window === "undefined") return;
     const params = new URLSearchParams(window.location.search);
@@ -380,7 +375,6 @@ export default function SefrekuensiGame() {
     }
   }, []);
 
-  // Core Players & Mode State
   const [inviteCode, setInviteCode] = useState("");
   const [roomOnlineStatus, setRoomOnlineStatus] = useState<
     "idle" | "creating" | "connected" | "error"
@@ -395,11 +389,8 @@ export default function SefrekuensiGame() {
     "player1"
   );
   const [quizIndex, setQuizIndex] = useState(0);
-
-  // Screen 3: Mode & Bot Slider State
   const [botAgeSlider, setBotAgeSlider] = useState(25);
 
-  // Screen 3B: Partner Pass-and-Play Join State
   const [partnerNameInput, setPartnerNameInput] = useState("");
   const [partnerGenderInput, setPartnerGenderInput] = useState<
     "Laki-laki" | "Perempuan"
@@ -411,7 +402,6 @@ export default function SefrekuensiGame() {
     key: number;
   } | null>(null);
 
-  // Screen 4: Gameplay State
   const [battery, setBattery] = useState(50);
   const [deltaBadge, setDeltaBadge] = useState<{
     val: number;
@@ -450,7 +440,6 @@ export default function SefrekuensiGame() {
     }
   }, []);
 
-  // Create/Sync Initial Online Room when Player 1 Registers
   const publishOnlineRoom = useCallback(
     async (code: string, hostProfile: PlayerProfile, status: string) => {
       if (!isFirebaseReady || !db) {
@@ -490,7 +479,6 @@ export default function SefrekuensiGame() {
     []
   );
 
-  // Real-time Firestore Listener for 2-Device Online Multiplayer
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     if (mode !== "online") return;
@@ -529,7 +517,6 @@ export default function SefrekuensiGame() {
           setRound(data.round);
         }
 
-        // Track round/stage transitions to reset 60s turn timer cleanly
         const stepSignature = `${data.status}-${data.round}-${data.stage}`;
         if (stepSignature !== syncedStepRef.current) {
           syncedStepRef.current = stepSignature;
@@ -539,7 +526,6 @@ export default function SefrekuensiGame() {
           }
         }
 
-        // Transition both devices into Game Arena once both finished their 20 questions
         if (
           data.status === "playing" &&
           data.player1 &&
@@ -561,7 +547,6 @@ export default function SefrekuensiGame() {
           goScreen("game");
         }
 
-        // Transition both devices to Ending Screen when game finishes
         if (data.status === "finished" && screenRef.current === "game") {
           setTimerRunning(false);
           const finalPct = data.battery ?? 0;
@@ -588,7 +573,6 @@ export default function SefrekuensiGame() {
     triggerBatteryDelta,
   ]);
 
-  // Countdown Timer Effect (Runs only on the active turn device in Online Mode)
   const currentCard = deck[round - 1];
   const isMyOnlineTurn =
     mode !== "online" ||
@@ -617,7 +601,6 @@ export default function SefrekuensiGame() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [screen, timerRunning, round, gameStage, mode, isMyOnlineTurn]);
 
-  // ==================== SCREEN 1 HANDLERS ====================
   const switchLandingTab = (tab: "new" | "invite") => {
     sfxTap();
     setLandingTab(tab);
@@ -692,7 +675,6 @@ export default function SefrekuensiGame() {
     const email = regEmail.trim();
     const age = parseInt(regAge, 10);
 
-    // STRICT 18+ VALIDATION
     if (isNaN(age) || age < 18) {
       showRegisterError(
         "Akses Ditolak! Minimal usia 18 tahun untuk mengurus drama hubungan.",
@@ -713,7 +695,6 @@ export default function SefrekuensiGame() {
         return;
       }
 
-      // Live Online Room via Firebase Firestore
       if (code !== "SEFREK-888") {
         if (!isFirebaseReady || !db) {
           showRegisterError(
@@ -798,7 +779,6 @@ export default function SefrekuensiGame() {
         }
       }
 
-      // Simulated Host Profile for Offline Demo Invite Code SEFREK-888
       const simulatedHost: PlayerProfile = {
         name: "Arkan (Pengundang)",
         email: "arkan@host.id",
@@ -839,7 +819,6 @@ export default function SefrekuensiGame() {
       return;
     }
 
-    // Normal New Player (Host) Registration
     sfxTap();
     setRegisterError(null);
     const newCode = "SEFREK-" + Math.floor(100 + Math.random() * 899);
@@ -860,12 +839,10 @@ export default function SefrekuensiGame() {
     setQuizTarget("player1");
     setQuizIndex(0);
 
-    // Publish room immediately so partner can join anytime
     publishOnlineRoom(newCode, newHostProfile, "p1_quiz");
     goScreen("quiz");
   };
 
-  // ==================== SCREEN 2 HANDLERS ====================
   const activeQuizProfile = quizTarget === "player1" ? player1 : player2;
   const activeQuizQuestion = activeQuizProfile?.questions[quizIndex];
 
@@ -873,7 +850,6 @@ export default function SefrekuensiGame() {
     updatedP1: PlayerProfile | null,
     updatedP2: PlayerProfile | null
   ) => {
-    // Case A: Online 2-Device Mode
     if (mode === "online" && isFirebaseReady && db && inviteCode) {
       setIsBusy(true);
       try {
@@ -995,7 +971,6 @@ export default function SefrekuensiGame() {
       }
     }
 
-    // Case B: Local Pass & Play Couple Mode
     if (quizTarget === "player2" && updatedP1 && updatedP2) {
       showToast(
         `Dek masalah ${updatedP2.name} siap! Memulai permainan pasangan...`,
@@ -1058,7 +1033,6 @@ export default function SefrekuensiGame() {
     await finishQuizPhase(nextP1, nextP2);
   };
 
-  // ==================== SCREEN 3 & 3B HANDLERS ====================
   const startSoloGame = () => {
     if (!player1) return;
     sfxTap();
@@ -1153,7 +1127,6 @@ export default function SefrekuensiGame() {
     goScreen("quiz");
   };
 
-  // ==================== SCREEN 4: GAMEPLAY ENGINE ====================
   const initMatchArena = (
     p1: PlayerProfile,
     p2: PlayerProfile,
@@ -1506,7 +1479,6 @@ export default function SefrekuensiGame() {
     }
   };
 
-  // ==================== ENDING & RESET HELPERS ====================
   const copyInviteShareLink = () => {
     if (typeof window === "undefined") return;
     const baseUrl = window.location.origin + window.location.pathname;
@@ -1565,7 +1537,6 @@ export default function SefrekuensiGame() {
     goScreen("register");
   };
 
-  // ==================== COMPUTED VIEW VALUES ====================
   const botGenderForPreview: "Laki-laki" | "Perempuan" =
     player1?.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
   const botPreview = getBotPersonaConfig(botGenderForPreview, botAgeSlider);
@@ -1623,7 +1594,6 @@ export default function SefrekuensiGame() {
 
   return (
     <>
-      {/* TOP NAVIGATION BAR */}
       <header className="w-full border-b border-slate-800/80 bg-obsidian/80 backdrop-blur-md sticky top-0 z-40">
         <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -1735,7 +1705,6 @@ export default function SefrekuensiGame() {
         </div>
       </header>
 
-      {/* TOAST NOTIFICATION CONTAINER */}
       <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
         {toasts.map((t) => {
           const styles = {
@@ -1762,11 +1731,7 @@ export default function SefrekuensiGame() {
         })}
       </div>
 
-      {/* MAIN APP CONTAINER */}
       <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6 flex flex-col justify-center">
-        {/* =================================================================== */}
-        {/* SCREEN 1: REGISTRASI & VALIDASI 18+                                 */}
-        {/* =================================================================== */}
         {screen === "register" && (
           <section key={animKey} className="animate-card-enter">
             <div className="text-center mb-6">
@@ -1988,9 +1953,6 @@ export default function SefrekuensiGame() {
           </section>
         )}
 
-        {/* =================================================================== */}
-        {/* SCREEN 2: FASE 20 PERTANYAAN KEHIDUPAN                              */}
-        {/* =================================================================== */}
         {screen === "quiz" && activeQuizProfile && activeQuizQuestion && (
           <section key={animKey} className="animate-card-enter">
             <div className="mb-4">
@@ -2123,9 +2085,6 @@ export default function SefrekuensiGame() {
           </section>
         )}
 
-        {/* =================================================================== */}
-        {/* SCREEN 2B: MENUNGGU HOST SELESAI JAWAB 20 PERTANYAAN (ONLINE)       */}
-        {/* =================================================================== */}
         {screen === "waiting-host" && player1 && player2 && (
           <section key={animKey} className="animate-card-enter">
             <div className="bg-cardbg/95 border-2 border-emerald-500/40 rounded-3xl p-7 text-center shadow-2xl">
@@ -2147,9 +2106,6 @@ export default function SefrekuensiGame() {
           </section>
         )}
 
-        {/* =================================================================== */}
-        {/* SCREEN 3: PROFIL BOROK & PEMILIHAN MODE PERMAINAN                   */}
-        {/* =================================================================== */}
         {screen === "mode" && player1 && (
           <section key={animKey} className="animate-card-enter space-y-5">
             <div className="bg-cardbg/95 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl">
@@ -2241,7 +2197,6 @@ export default function SefrekuensiGame() {
               </p>
             </div>
 
-            {/* MODE A: AJAK PASANGAN ONLINE BEDA PERANGKAT (KODE UNDANGAN) */}
             <div className="bg-cardbg/95 border-2 border-emerald-500/50 rounded-3xl p-5 shadow-xl shadow-emerald-500/5 transition">
               <div className="flex items-start justify-between gap-2 mb-3">
                 <div className="flex items-center gap-3">
@@ -2260,7 +2215,6 @@ export default function SefrekuensiGame() {
                 </div>
               </div>
 
-              {/* Live Room Status Indicator */}
               <div className="mb-3">
                 {player2 ? (
                   <div className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-2 text-xs text-emerald-200 font-semibold">
@@ -2329,7 +2283,6 @@ export default function SefrekuensiGame() {
               </button>
             </div>
 
-            {/* MODE B: SOLO (LAWAN BOT AI) */}
             <div className="bg-cardbg/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-5 transition">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3">
@@ -2411,9 +2364,6 @@ export default function SefrekuensiGame() {
           </section>
         )}
 
-        {/* =================================================================== */}
-        {/* SCREEN 3B: PENDAFTARAN PASANGAN (PASS & PLAY 1 HP)                  */}
-        {/* =================================================================== */}
         {screen === "partner-join" && player1 && (
           <section key={animKey} className="animate-card-enter">
             <div className="bg-cardbg/95 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl">
@@ -2534,9 +2484,6 @@ export default function SefrekuensiGame() {
           </section>
         )}
 
-        {/* =================================================================== */}
-        {/* SCREEN 4: ARENA GAMEPLAY UTAMA & BATERAI CINTA                      */}
-        {/* =================================================================== */}
         {screen === "game" &&
           currentCard &&
           player1 &&
@@ -2544,7 +2491,6 @@ export default function SefrekuensiGame() {
           responder &&
           cardPartner && (
             <section className="space-y-4">
-              {/* BATERAI CINTA HUD */}
               <div
                 key={hudShakeKey}
                 className={`bg-cardbg/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 shadow-xl relative overflow-visible ${
@@ -2607,7 +2553,6 @@ export default function SefrekuensiGame() {
                   </span>
                 </div>
 
-                {/* Visual Battery Gauge */}
                 <div className="flex items-center gap-1.5">
                   <div className="flex-1 h-6 bg-slate-950 rounded-xl border-2 border-slate-700 p-1 relative overflow-hidden">
                     <div
@@ -2632,7 +2577,6 @@ export default function SefrekuensiGame() {
                   <div className="w-2 h-3.5 bg-slate-700 rounded-r-md" />
                 </div>
 
-                {/* Round & Timer Bar */}
                 <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800/80 text-xs">
                   <div className="flex items-center gap-2">
                     <span className="font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200">
@@ -2661,7 +2605,6 @@ export default function SefrekuensiGame() {
                 </div>
               </div>
 
-              {/* ONLINE WAITING STATE WHEN IT'S PARTNER'S TURN */}
               {mode === "online" && !isMyOnlineTurn ? (
                 <div className="bg-cardbg/95 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-7 text-center shadow-2xl animate-card-enter">
                   <div className="text-4xl mb-3 animate-pulse">⏳</div>
@@ -2678,7 +2621,6 @@ export default function SefrekuensiGame() {
                 </div>
               ) : (
                 <>
-                  {/* STAGE 1: DILEMMA CARD */}
                   {gameStage === "dilemma" && (
                     <div
                       key={`dilemma-${round}`}
@@ -2770,7 +2712,6 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {/* STAGE 2A: CONSEQUENCE CARD */}
                   {gameStage === "consequence" && (
                     <div
                       key={`conseq-${round}`}
@@ -2845,7 +2786,6 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {/* STAGE 2B: SOLO NEGOTIATION */}
                   {gameStage === "negotiate1" && mode === "solo" && (
                     <div
                       key={`neg-solo-${round}`}
@@ -2912,7 +2852,6 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {/* STAGE 2B: COUPLE / ONLINE NEGOTIATION STEP 1 */}
                   {gameStage === "negotiate1" && mode !== "solo" && (
                     <div
                       key={`neg-c1-${round}`}
@@ -2956,7 +2895,6 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {/* STAGE 2C: COUPLE / ONLINE NEGOTIATION STEP 2 */}
                   {gameStage === "negotiate2" && mode !== "solo" && (
                     <div
                       key={`neg-c2-${round}`}
@@ -3002,7 +2940,6 @@ export default function SefrekuensiGame() {
                 </>
               )}
 
-              {/* Bottom Utility Bar: Simulate Timeout / AFK */}
               <div className="flex items-center justify-between px-2 pt-1">
                 <span className="text-[11px] font-mono text-slate-500">
                   AFK Berturut-turut: {consecutiveTimeouts}/3
@@ -3023,9 +2960,6 @@ export default function SefrekuensiGame() {
             </section>
           )}
 
-        {/* =================================================================== */}
-        {/* SCREEN 5: ENDING & RAPOR KECOCOKAN                                  */}
-        {/* =================================================================== */}
         {screen === "ending" && player1 && player2 && (
           <section key={animKey} className="animate-card-enter space-y-5">
             <div
@@ -3098,7 +3032,6 @@ export default function SefrekuensiGame() {
               </div>
             </div>
 
-            {/* Mini Stats Summary */}
             <div className="grid grid-cols-4 gap-2">
               <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
                 <span className="block font-mono font-extrabold text-lg text-emerald-400">
@@ -3134,7 +3067,6 @@ export default function SefrekuensiGame() {
               </div>
             </div>
 
-            {/* Rapor Kecocokan (Round History) */}
             <div className="bg-cardbg/95 border border-slate-800 rounded-3xl p-5">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-extrabold text-white">
@@ -3192,7 +3124,6 @@ export default function SefrekuensiGame() {
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
               <button
                 type="button"
@@ -3213,7 +3144,6 @@ export default function SefrekuensiGame() {
         )}
       </main>
 
-      {/* FOOTER */}
       <footer className="w-full py-4 text-center text-[11px] text-slate-600">
         SEFREKUENSI • Simulasi Mekanik Game &amp; Red Flag Card Engine
       </footer>
