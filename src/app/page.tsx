@@ -232,7 +232,7 @@ function buildMatchDeck(
   return matchDeck;
 }
 
-export default function BesokKawinGame() {
+export default function SefrekuensiGame() {
   // SoundFX Engine
   const [soundEnabled, setSoundEnabled] = useState(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -432,7 +432,7 @@ export default function BesokKawinGame() {
     }
   }, []);
 
-  // Publish Room to Firestore when Player 1 enters Screen 3 (so Partner can join from another phone)
+  // Publish Room to Firestore when Player 1 enters Screen 3
   useEffect(() => {
     if (
       screen !== "mode" ||
@@ -585,9 +585,9 @@ export default function BesokKawinGame() {
 
   const fillDemoInviteCode = () => {
     sfxTap();
-    setInputJoinCode("KAWIN-888");
+    setInputJoinCode("SEFREK-888");
     showToast(
-      "Kode demo KAWIN-888 terpasang (Pengundang: Laki-laki, 26 thn).",
+      "Kode demo SEFREK-888 terpasang (Pengundang: Laki-laki, 26 thn).",
       "info"
     );
   };
@@ -672,8 +672,8 @@ export default function BesokKawinGame() {
         return;
       }
 
-      // Check Firestore for live room first (unless using offline demo KAWIN-888)
-      if (code !== "KAWIN-888" && isFirebaseReady && db) {
+      // Check Firestore for live room first (unless using offline demo SEFREK-888)
+      if (code !== "SEFREK-888" && isFirebaseReady && db) {
         setIsBusy(true);
         try {
           const snap = await getDoc(doc(db, "rooms", code));
@@ -718,14 +718,14 @@ export default function BesokKawinGame() {
         } catch {
           showRegisterError(
             "Gagal Memeriksa Kode",
-            "Periksa koneksi internetmu atau coba Kode Demo KAWIN-888."
+            "Periksa koneksi internetmu atau coba Kode Demo SEFREK-888."
           );
           setIsBusy(false);
           return;
         }
       }
 
-      // Simulated Host Profile for Demo Invite Code KAWIN-888
+      // Simulated Host Profile for Demo Invite Code SEFREK-888
       const simulatedHost: PlayerProfile = {
         name: "Arkan (Pengundang)",
         email: "arkan@host.id",
@@ -769,7 +769,7 @@ export default function BesokKawinGame() {
     // Normal New Player Registration
     sfxTap();
     setRegisterError(null);
-    const newCode = "KAWIN-" + Math.floor(100 + Math.random() * 899);
+    const newCode = "SEFREK-" + Math.floor(100 + Math.random() * 899);
     setMode("online");
     setMyOnlineRole("player1");
     setInviteCode(newCode);
@@ -927,7 +927,7 @@ export default function BesokKawinGame() {
 
     const botProfile: PlayerProfile = {
       ...persona,
-      email: "bot@besokkawin.id",
+      email: "bot@sefrekuensi.id",
       questions: botQuestions,
       answers: botAnswers,
     };
@@ -1361,12 +1361,12 @@ export default function BesokKawinGame() {
     if (!player1 || !player2) return;
     const title =
       battery >= 80
-        ? "BESOK KAWIN!"
+        ? "SEFREKUENSI!"
         : battery >= 45
         ? "PACARAN DULU AJA"
         : "STOP THE WEDDING";
     const summary = [
-      `=== HASIL BESOK KAWIN? ===`,
+      `=== HASIL SEFREKUENSI ===`,
       `Pasangan: ${player1.name} & ${player2.name}`,
       `Baterai Cinta Akhir: ${battery}% -> ${title}`,
       `Statistik: Terima Mantap (${stats.terimaMantap}), Menyesal (${stats.menyesal}), Sepakat Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
@@ -1381,7 +1381,7 @@ export default function BesokKawinGame() {
     setPlayer2(null);
     setMode("online");
     setMyOnlineRole("player1");
-    setInviteCode("KAWIN-" + Math.floor(100 + Math.random() * 899));
+    setInviteCode("SEFREK-" + Math.floor(100 + Math.random() * 899));
     goScreen("mode");
   };
 
@@ -1480,7 +1480,7 @@ export default function BesokKawinGame() {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="font-extrabold tracking-tight text-base sm:text-lg text-white">
-                  BESOK KAWIN?
+                  SEFREKUENSI
                 </span>
                 <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
                   18+
@@ -1641,7 +1641,7 @@ export default function BesokKawinGame() {
                       type="text"
                       value={inputJoinCode}
                       onChange={(e) => setInputJoinCode(e.target.value)}
-                      placeholder="Contoh: KAWIN-729"
+                      placeholder="Contoh: SEFREK-729"
                       maxLength={12}
                       className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
                     />
@@ -2287,7 +2287,6 @@ export default function BesokKawinGame() {
                     onClick={quickFillPartnerDemo}
                     className="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4"
                   >
-                    ⚡ Isi Cepat Data Pasangan
                   </button>
                 </div>
 
@@ -2355,7 +2354,7 @@ export default function BesokKawinGame() {
                         }`}
                       >
                         {battery >= 80
-                          ? "Siap Besok Kawin!"
+                          ? "100% Sefrekuensi!"
                           : battery >= 45
                           ? "Zona Pacaran Dulu"
                           : "Zona Bahaya!"}
@@ -2394,7 +2393,7 @@ export default function BesokKawinGame() {
                     />
                     <div
                       className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-emerald-400/70"
-                      title="Target Besok Kawin 80%"
+                      title="Target Sefrekuensi 80%"
                     />
                   </div>
                   <div className="w-2 h-3.5 bg-slate-700 rounded-r-md" />
@@ -2837,7 +2836,7 @@ export default function BesokKawinGame() {
                 }`}
               >
                 {battery >= 80
-                  ? "BESOK KAWIN!"
+                  ? "SEFREKUENSI!"
                   : battery >= 45
                   ? "PACARAN DULU AJA"
                   : "STOP THE WEDDING"}
