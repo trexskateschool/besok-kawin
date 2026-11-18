@@ -415,9 +415,6 @@ export default function SefrekuensiGame() {
     "dilemma" | "consequence" | "negotiate1" | "negotiate2"
   >("dilemma");
   
-  // Perbaikan Kunci Negosiasi:
-  // negociate1 = Pemilik Kartu (yang kartunya ditolak) memilih jalan tengah pertama.
-  // negociate2 = Penolak (Responder awal) mengonfirmasi apakah setuju dengan pilihan jalan tengah tersebut.
   const [negotiateOwnerChoice, setNegotiateOwnerChoice] = useState<number | null>(null);
 
   const [timerSeconds, setTimerSeconds] = useState(60);
@@ -578,17 +575,16 @@ export default function SefrekuensiGame() {
 
   const currentCard = deck[round - 1];
 
-  // Penentuan siapa yang memegang kendali di tiap tahap:
-  // - Dilemma & Consequence: Dikendalikan oleh `responderKey` (yang menolak/menerima kartu).
-  // - Negotiate 1 (Pemberian jalan tengah): Dikendalikan oleh PEMILIK KARTU (cardPartner / non-responder) karena kartunya ditolak.
-  // - Negotiate 2 (Konfirmasi penolak): Dikendalikan kembali oleh RESPONDER AWAL (yang menolak di awal).
+  // Penentuan giliran online:
+  // - negotiate1: Dikendalikan oleh PEMILIK KARTU (lawan dari responderKey) karena kartunya ditolak.
+  // - negotiate2: Dikendalikan oleh RESPONDER AWAL (responderKey) yang mengonfirmasi pilihan.
   const isMyOnlineTurn =
     mode !== "online" ||
     !currentCard ||
     (gameStage === "negotiate1"
-      ? currentCard.responderKey === myOnlineRole // Pemilik kartu (lawan dari responder) yang memilih kompromi pertama
+      ? currentCard.responderKey !== myOnlineRole // Pemilik kartu (lawan responder) yang memilih kompromi pertama
       : gameStage === "negotiate2"
-      ? currentCard.responderKey !== myOnlineRole // Penolak awal yang mengonfirmasi pilihan
+      ? currentCard.responderKey === myOnlineRole // Penolak awal yang mengonfirmasi pilihan
       : currentCard.responderKey === myOnlineRole);
 
   useEffect(() => {
@@ -1350,7 +1346,6 @@ export default function SefrekuensiGame() {
     }
   };
 
-  // Saat Pengguna 1 (Responder) menolak kartu:
   const chooseRejectCard = async () => {
     sfxFlip();
     setConsecutiveTimeouts(0);
@@ -1359,7 +1354,7 @@ export default function SefrekuensiGame() {
       await setDoc(
         doc(db, "rooms", inviteCode),
         {
-          stage: "negotiate1", // Masuk tahap Pemilik Kartu memilih kompromi
+          stage: "negotiate1",
           negotiateOwnerChoice: null,
           consecutiveTimeouts: 0,
           updatedAt: Date.now(),
@@ -1417,7 +1412,6 @@ export default function SefrekuensiGame() {
     }
   };
 
-  // TAHAP 1: Pemilik Kartu (yang kartunya ditolak) memilih opsi kompromi pertama
   const submitNegotiateOwnerChoice = async (choiceIdx: number) => {
     sfxTap();
     setNegotiateOwnerChoice(choiceIdx);
@@ -1432,7 +1426,6 @@ export default function SefrekuensiGame() {
     }
   };
 
-  // TAHAP 2: Penolak awal (Responder) mengonfirmasi apakah setuju dengan pilihan jalan tengah pemilik kartu
   const resolveCoupleNegotiation = async (responderChoiceIdx: number) => {
     if (!currentCard || negotiateOwnerChoice === null) return;
     setTimerRunning(false);
@@ -2596,9 +2589,9 @@ export default function SefrekuensiGame() {
                     <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
                       Giliran:{" "}
                       {gameStage === "negotiate1"
-                        ? cardPartner.name // Pemilik kartu memilih kompromi pertama
+                        ? cardPartner.name
                         : gameStage === "negotiate2"
-                        ? responder.name // Penolak awal mengonfirmasi pilihan
+                        ? responder.name
                         : responder.name}
                     </span>
                   </div>
@@ -2867,7 +2860,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {/* TAHAP 1 (Online/Couple): Pemberitahuan ke Pemilik Kartu bahwa kartunya ditolak & memilih jalan tengah */}
+                  {/* TAHAP 1 (Online/Couple): Pemilik kartu (cardPartner) mendapat notif bahwa kartunya ditolak & memilih jalan tengah */}
                   {gameStage === "negotiate1" && mode !== "solo" && (
                     <div
                       key={`neg-c1-${round}`}
@@ -2881,7 +2874,7 @@ export default function SefrekuensiGame() {
 
                       <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
                         <p className="text-xs text-slate-300 leading-relaxed">
-                          <strong className="text-rose-400">{responder.name}</strong> menolak kartu dek masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}:
+                          <strong className="text-rose-400">{responder.name}</strong> menolak kartu dek masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}[span_3](start_span)[span_3](end_span):
                         </p>
                       </div>
 
