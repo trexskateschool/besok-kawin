@@ -18,7 +18,7 @@ export async function GET(
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#090d16",
+          backgroundColor: "#070b14",
         }}
       >
         <svg
@@ -29,217 +29,96 @@ export async function GET(
           xmlns="http://www.w3.org/2000/svg"
         >
           <defs>
-            {/* Latar Glow Rose & Emas */}
-            <radialGradient id="bgRoseGlow" cx="42%" cy="42%" r="58%">
-              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.34" />
-              <stop offset="60%" stopColor="#881337" stopOpacity="0.12" />
-              <stop offset="100%" stopColor="#090d16" stopOpacity="0" />
+            {/* Latar Glow Rose & Emerald (Khas Sefrekuensi & Baterai Cinta) */}
+            <radialGradient id="bgRoseGlow" cx="35%" cy="35%" r="65%">
+              <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.38" />
+              <stop offset="70%" stopColor="#881337" stopOpacity="0.1" />
+              <stop offset="100%" stopColor="#070b14" stopOpacity="0" />
             </radialGradient>
-            <radialGradient id="bgGoldGlow" cx="68%" cy="65%" r="45%">
-              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="#090d16" stopOpacity="0" />
+            <radialGradient id="bgEmeraldGlow" cx="75%" cy="75%" r="55%">
+              <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#070b14" stopOpacity="0" />
             </radialGradient>
 
-            {/* Gradasi Kartu Belakang (Dark Red Flag) */}
-            <linearGradient id="darkCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#1e293b" />
-              <stop offset="100%" stopColor="#0f172a" />
+            {/* Gradasi Kartu Utama */}
+            <linearGradient id="cardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#0f172a" />
+              <stop offset="100%" stopColor="#020617" />
             </linearGradient>
 
-            {/* Gradasi Kartu Depan (Ivory Wedding Card) */}
-            <linearGradient id="lightCardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="65%" stopColor="#fff1f2" />
-              <stop offset="100%" stopColor="#ffe4e6" />
-            </linearGradient>
-
-            {/* Gradasi Emas Cincin Nikah */}
-            <linearGradient id="goldRingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#fef08a" />
-              <stop offset="45%" stopColor="#f59e0b" />
-              <stop offset="100%" stopColor="#b45309" />
-            </linearGradient>
-            <linearGradient id="goldRingGrad2" x1="100%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#fde047" />
-              <stop offset="50%" stopColor="#d97706" />
-              <stop offset="100%" stopColor="#92400e" />
-            </linearGradient>
-
-            {/* Gradasi Berlian */}
-            <linearGradient id="diamondGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="50%" stopColor="#bae6fd" />
-              <stop offset="100%" stopColor="#38bdf8" />
+            {/* Gradasi Gelombang Frekuensi & Hati */}
+            <linearGradient id="waveGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#f43f5e" />
+              <stop offset="50%" stopColor="#fbbf24" />
+              <stop offset="100%" stopColor="#10b981" />
             </linearGradient>
           </defs>
 
           {/* Full-Bleed Background (Aman untuk Maskable Icon Android) */}
-          <rect width="512" height="512" fill="#090d16" />
+          <rect width="512" height="512" fill="#070b14" />
           <rect width="512" height="512" fill="url(#bgRoseGlow)" />
-          <rect width="512" height="512" fill="url(#bgGoldGlow)" />
+          <rect width="512" height="512" fill="url(#bgEmeraldGlow)" />
 
-          {/* KARTU BELAKANG (Miring Kiri - Tema Red Flag) */}
-          <g transform="rotate(-14 215 265)">
-            <rect
-              x="112"
-              y="104"
-              width="202"
-              height="292"
-              rx="26"
-              fill="url(#darkCardGrad)"
-              stroke="#f43f5e"
-              strokeWidth="6"
-            />
-            {/* Ikon Bendera Merah Kecil di Pojok Kiri Atas Kartu Belakang */}
-            <line
-              x1="142"
-              y1="134"
-              x2="142"
-              y2="174"
-              stroke="#fda4af"
-              strokeWidth="4.5"
+          {/* KARTU PERMAINAN (Simbol Card Game SEFREKUENSI) */}
+          <rect
+            x="96"
+            y="80"
+            width="320"
+            height="352"
+            rx="48"
+            fill="url(#cardGrad)"
+            stroke="#f43f5e"
+            strokeOpacity="0.5"
+            strokeWidth="8"
+          />
+
+          {/* Bingkai Dalam Kartu */}
+          <rect
+            x="120"
+            y="104"
+            width="272"
+            height="304"
+            rx="32"
+            fill="none"
+            stroke="#334155"
+            strokeWidth="3"
+          />
+
+          {/* SIMBOL UTAMA: GELOMBANG FREKUENSI YANG MEMBENTUK SILUET HATI */}
+          <g transform="translate(0, 15)">
+            {/* Gelombang / Sine Wave & EKG Stylized menyatu jadi bentuk Hati / Sinyal */}
+            <path
+              d="M 160 240 
+                 Q 200 160, 256 220 
+                 Q 312 160, 352 240 
+                 Q 352 300, 256 360 
+                 Q 160 300, 160 240 Z"
+              fill="url(#waveGrad)"
+              fillOpacity="0.22"
+              stroke="url(#waveGrad)"
+              strokeWidth="12"
               strokeLinecap="round"
+              strokeLinejoin="round"
             />
+
+            {/* Garis Pulsa Denyut Nadi / Frekuensi di Tengah Hati */}
             <path
-              d="M144 136 L172 143 L144 153 Z"
-              fill="#f43f5e"
-            />
-          </g>
-
-          {/* BAYANGAN KARTU DEPAN */}
-          <g transform="rotate(9 288 266)">
-            <rect
-              x="182"
-              y="112"
-              width="212"
-              height="304"
-              rx="28"
-              fill="#020617"
-              opacity="0.6"
-            />
-          </g>
-
-          {/* KARTU DEPAN (Miring Kanan - Kartu Utama Besok Kawin) */}
-          <g transform="rotate(9 288 262)">
-            <rect
-              x="184"
-              y="106"
-              width="212"
-              height="304"
-              rx="28"
-              fill="url(#lightCardGrad)"
-              stroke="url(#goldRingGrad)"
-              strokeWidth="7"
-            />
-            {/* Bingkai Tipis Bagian Dalam Kartu */}
-            <rect
-              x="198"
-              y="120"
-              width="184"
-              height="276"
-              rx="18"
+              d="M 180 256 L 220 256 L 240 210 L 272 300 L 292 240 L 312 270 L 332 256 L 352 256"
               fill="none"
-              stroke="#f43f5e"
-              strokeOpacity="0.25"
-              strokeWidth="2.5"
-            />
-
-            {/* Simbol Hati Pojok Kiri Atas Kartu */}
-            <path
-              d="M224 156 C224 156 210 146 210 137 C210 132 214 128 218.5 128 C221.5 128 223.3 129.8 224 131.5 C224.7 129.8 226.5 128 229.5 128 C234 128 238 132 238 137 C238 146 224 156 224 156 Z"
-              fill="#e11d48"
-            />
-
-            {/* Simbol Hati Terbalik Pojok Kanan Bawah Kartu */}
-            <path
-              d="M356 360 C356 360 342 370 342 379 C342 384 346 388 350.5 388 C353.5 388 355.3 386.2 356 384.5 C356.7 386.2 358.5 388 361.5 388 C366 388 370 384 370 379 C370 370 356 360 356 360 Z"
-              fill="#e11d48"
-            />
-          </g>
-
-          {/* SEPASANG CINCIN NIKAH EMAS SALING MENGUNCI */}
-          <g>
-            {/* Cincin Kiri */}
-            <circle
-              cx="262"
-              cy="274"
-              r="46"
-              stroke="url(#goldRingGrad)"
-              strokeWidth="14"
-              fill="none"
-            />
-            <circle
-              cx="262"
-              cy="274"
-              r="40"
-              stroke="#fef08a"
-              strokeOpacity="0.65"
-              strokeWidth="2"
-              fill="none"
-            />
-
-            {/* Cincin Kanan */}
-            <circle
-              cx="318"
-              cy="274"
-              r="46"
-              stroke="url(#goldRingGrad2)"
-              strokeWidth="14"
-              fill="none"
-            />
-            <circle
-              cx="318"
-              cy="274"
-              r="40"
-              stroke="#fef08a"
-              strokeOpacity="0.65"
-              strokeWidth="2"
-              fill="none"
-            />
-
-            {/* Lengkungan Atas Cincin Kiri (Efek Saling Mengunci) */}
-            <path
-              d="M 273.9 229.6 A 46 46 0 0 1 303.7 254.5"
-              stroke="url(#goldRingGrad)"
-              strokeWidth="14"
+              stroke="#ffffff"
+              strokeWidth="10"
               strokeLinecap="round"
-              fill="none"
-            />
-
-            {/* Dudukan Mahkota Berlian */}
-            <polygon
-              points="309,228 327,228 323,219 313,219"
-              fill="#d97706"
-            />
-
-            {/* Berlian Solitaire */}
-            <polygon
-              points="306,194 330,194 339,204 318,222 297,204"
-              fill="url(#diamondGrad)"
-              stroke="#7dd3fc"
-              strokeWidth="2"
-            />
-            <polygon
-              points="311,194 325,194 328,204 308,204"
-              fill="#ffffff"
-              opacity="0.8"
-            />
-            <polygon
-              points="308,204 328,204 318,222"
-              fill="#38bdf8"
-              opacity="0.4"
-            />
-
-            {/* Kilau Bintang Berlian */}
-            <path
-              d="M350 178 L352.5 184.5 L359 187 L352.5 189.5 L350 196 L347.5 189.5 L341 187 L347.5 184.5 Z"
-              fill="#f59e0b"
-            />
-            <path
-              d="M288 176 L290 181 L295 183 L290 185 L288 190 L286 185 L281 183 L286 181 Z"
-              fill="#38bdf8"
+              strokeLinejoin="round"
             />
           </g>
+
+          {/* TITIK NODAL FREKUENSI (Aksen Teknologi & Koneksi) */}
+          <circle cx="256" cy="256" r="8" fill="#ffffff" />
+          <circle cx="256" cy="256" r="18" stroke="#38bdf8" strokeWidth="4" fill="none" opacity="0.8" />
+
+          {/* Aksen Minimalis Sudut (Khas Kartu) */}
+          <circle cx="152" cy="144" r="8" fill="#f43f5e" />
+          <circle cx="360" cy="368" r="8" fill="#10b981" />
         </svg>
       </div>
     ),
@@ -248,4 +127,4 @@ export async function GET(
       height: size,
     }
   );
-}
+              }
