@@ -24,6 +24,14 @@
   background-color: #111827;
 }
 
+.bg-cardbg\/90 {
+  background-color: rgba(17, 24, 39, 0.9);
+}
+
+.bg-cardbg\/95 {
+  background-color: rgba(17, 24, 39, 0.95);
+}
+
 .bg-grid-pattern {
   background-color: #090d16;
   background-image:
