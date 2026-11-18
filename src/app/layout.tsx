@@ -1,23 +1,23 @@
 import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-sans",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["500", "700", "800"],
+  variable: "--font-mono",
+});
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://kartu-visi.vercel.app"),
-  title: "BESOK KAWIN? — Kuis Visi & Komunikasi Pasangan",
+  title: "SEFREKUENSI — Red Flag Card Game",
   description:
-    "Permainan kartu 20 pertanyaan jujur untuk menguji keselarasan visi, komunikasi, dan kompromi bersama pasangan.",
-  openGraph: {
-    title: "BESOK KAWIN? — Kuis Visi & Komunikasi Pasangan",
-    description:
-      "Uji keselarasan visi dan kompromi bareng pasangan lewat 20 kartu pertanyaan jujur.",
-    type: "website",
-  },
-  twitter: {
-    card: "summary",
-    title: "BESOK KAWIN? — Kuis Visi & Komunikasi Pasangan",
-    description:
-      "Uji keselarasan visi dan kompromi bareng pasangan lewat 20 kartu pertanyaan jujur.",
-  },
+    "Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian sanggup bertahan.",
 };
 
 export const viewport: Viewport = {
@@ -25,7 +25,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#07080c",
+  themeColor: "#090d16",
 };
 
 export default function RootLayout({
@@ -34,8 +34,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id">
-      <body className="bg-[#07080c] text-stone-100 antialiased">{children}</body>
+    <html
+      lang="id"
+      className={`dark ${plusJakarta.variable} ${jetbrainsMono.variable}`}
+    >
+      <body className="bg-grid-pattern min-h-screen flex flex-col justify-between selection:bg-rose-500 selection:text-white antialiased">
+        {children}
+      </body>
     </html>
   );
 }
