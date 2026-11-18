@@ -220,6 +220,25 @@ export default function BesokKawinGame() {
   const [googleUser, setGoogleUser] = useState<User | null>(null);
   const [isLoggingInGoogle, setIsLoggingInGoogle] = useState(false);
 
+  // Hapus Vercel Toolbar yang sedang loading dari DOM
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const purgeVercelToolbar = () => {
+      document
+        .querySelectorAll(
+          'vercel-live-feedback, #__vercel-toolbar, [data-vercel-toolbar], iframe[src*="vercel.live"]'
+        )
+        .forEach((el) => el.remove());
+    };
+    purgeVercelToolbar();
+    const observer = new MutationObserver(() => purgeVercelToolbar());
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+    return () => observer.disconnect();
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const resetRootScroll = () => {
@@ -1951,6 +1970,13 @@ export default function BesokKawinGame() {
     <div className="bg-velvet-luxury fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-[#07080c] text-stone-100 selection:bg-amber-400 selection:text-stone-950">
       <style>{`
         html, body { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
+        /* Sembunyikan Vercel Toolbar / Live Feedback sepenuhnya */
+        vercel-live-feedback, #__vercel-toolbar, [data-vercel-toolbar], iframe[src*="vercel.live"] {
+          display: none !important;
+          visibility: hidden !important;
+          opacity: 0 !important;
+          pointer-events: none !important;
+        }
         .bg-velvet-luxury {
           background-image: 
             radial-gradient(circle at 50% 0%, rgba(229, 193, 123, 0.13), transparent 48%),
@@ -1981,35 +2007,81 @@ export default function BesokKawinGame() {
         .btn-tactile:active { transform: scale(0.97); }
       `}</style>
 
-      {/* EXCLUSIVE TOP HEADER */}
+      {/* EXCLUSIVE TOP HEADER (ANTI-OVERLAP & LOGO EMBLEM) */}
       <header
-        style={{ paddingTop: "max(0.7rem, env(safe-area-inset-top))" }}
-        className="w-full shrink-0 border-b border-amber-500/15 bg-[#07080c]/90 backdrop-blur-xl z-40 pb-2.5"
+        style={{ paddingTop: "max(0.65rem, env(safe-area-inset-top))" }}
+        className="w-full shrink-0 border-b border-amber-500/15 bg-[#07080c]/95 backdrop-blur-xl z-40 pb-2.5"
       >
-        <div className="max-w-xl mx-auto px-4 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-amber-200 via-amber-400 to-rose-500 p-[1.5px] shadow-lg shadow-amber-500/20">
+        <div className="max-w-xl mx-auto px-3.5 sm:px-4 flex items-center justify-between gap-2">
+          {/* Brand Logo + Title */}
+          <button
+            type="button"
+            onClick={() => {
+              if (myPublicProfile) goScreen("bursa");
+            }}
+            className="flex items-center gap-2 min-w-0 text-left"
+          >
+            <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-amber-200 via-amber-400 to-rose-500 p-[1.5px] shadow-md shadow-amber-500/20">
               <div className="w-full h-full rounded-full bg-[#0b0c12] flex items-center justify-center">
-                <span className="text-xs font-serif font-bold text-amber-300">
-                  BK
-                </span>
+                {/* Custom Interlocking Rings & Diamond Crest SVG Logo */}
+                <svg
+                  className="w-4 h-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <defs>
+                    <linearGradient
+                      id="bkGoldGrad"
+                      x1="2"
+                      y1="2"
+                      x2="22"
+                      y2="22"
+                      gradientUnits="userSpaceOnUse"
+                    >
+                      <stop offset="0%" stopColor="#FDE68A" />
+                      <stop offset="55%" stopColor="#F59E0B" />
+                      <stop offset="100%" stopColor="#FB7185" />
+                    </linearGradient>
+                  </defs>
+                  <path
+                    d="M12 3L14.5 6L12 8.5L9.5 6L12 3Z"
+                    fill="url(#bkGoldGrad)"
+                  />
+                  <circle
+                    cx="9.5"
+                    cy="14.5"
+                    r="5.2"
+                    stroke="url(#bkGoldGrad)"
+                    strokeWidth="1.9"
+                  />
+                  <circle
+                    cx="14.5"
+                    cy="14.5"
+                    r="5.2"
+                    stroke="url(#bkGoldGrad)"
+                    strokeWidth="1.9"
+                  />
+                </svg>
               </div>
             </div>
+
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <span className="font-serif font-bold tracking-wider text-xs sm:text-sm text-stone-100 whitespace-nowrap">
+                <span className="font-serif font-bold tracking-wide text-[11px] sm:text-sm text-stone-100 truncate">
                   BESOK KAWIN?
                 </span>
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 shrink-0">
-                  CLUB 18+
+                <span className="hidden sm:inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 shrink-0">
+                  18+
                 </span>
               </div>
               <p className="text-[10px] text-stone-400 tracking-wide truncate hidden sm:block">
-                Private Compatibility & Matchmaking Society
+                Private Matchmaking Club
               </p>
             </div>
-          </div>
+          </button>
 
+          {/* Right Navigation Actions */}
           <div className="flex items-center gap-1.5 shrink-0">
             {googleUser && myPublicProfile && (
               <button
@@ -2017,21 +2089,27 @@ export default function BesokKawinGame() {
                   sfxTap();
                   goScreen(screen === "profile" ? "bursa" : "profile");
                 }}
-                className={`px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1.5 border transition btn-tactile shrink-0 ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1 border transition btn-tactile shrink-0 ${
                   screen === "profile"
                     ? "bg-gradient-to-r from-amber-300 to-amber-500 text-stone-950 border-amber-300"
                     : "bg-stone-900/90 hover:bg-stone-800 text-amber-300 border-amber-500/35"
                 }`}
               >
                 <span>{myPublicProfile.isUpgraded ? "👑" : "💬"}</span>
-                <span>{screen === "profile" ? "Lounge" : "Match & Chat"}</span>
+                <span className="sm:hidden">
+                  {screen === "profile" ? "Lounge" : "Chat"}
+                </span>
+                <span className="hidden sm:inline">
+                  {screen === "profile" ? "Lounge" : "Match & Chat"}
+                </span>
               </button>
             )}
 
             {!isAppInstalled && (
               <button
                 onClick={handleInstallClick}
-                className="px-2.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 border border-white/10 text-[11px] font-semibold flex items-center gap-1 transition btn-tactile shrink-0"
+                title="Pasang Aplikasi"
+                className="w-7 h-7 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 border border-white/10 text-[11px] font-semibold flex items-center justify-center gap-1 transition btn-tactile shrink-0"
               >
                 <span>📲</span>
                 <span className="hidden sm:inline">App</span>
@@ -2041,7 +2119,7 @@ export default function BesokKawinGame() {
             <button
               onClick={() => setSoundEnabled(!soundEnabled)}
               title="Suara Efek"
-              className="w-8 h-8 rounded-full bg-stone-900/90 text-stone-300 border border-white/10 flex items-center justify-center text-xs"
+              className="w-7 h-7 rounded-full bg-stone-900/90 text-stone-300 border border-white/10 flex items-center justify-center text-xs shrink-0"
             >
               {soundEnabled ? "🔊" : "🔈"}
             </button>
@@ -2050,7 +2128,7 @@ export default function BesokKawinGame() {
               (screen === "game" || screen === "mode" || screen === "ending") && (
                 <button
                   onClick={fullResetToLounge}
-                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-300 border border-white/10 whitespace-nowrap"
+                  className="text-[10px] sm:text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-300 border border-white/10 whitespace-nowrap shrink-0"
                 >
                   Lounge
                 </button>
@@ -2061,7 +2139,7 @@ export default function BesokKawinGame() {
                 <button
                   onClick={handleGoogleLogout}
                   title="Keluar Akun Google"
-                  className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900/80 hover:bg-rose-950/50 text-stone-400 hover:text-rose-300 border border-white/10 whitespace-nowrap"
+                  className="text-[10px] sm:text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900/80 hover:bg-rose-950/50 text-stone-400 hover:text-rose-300 border border-white/10 whitespace-nowrap shrink-0"
                 >
                   Keluar
                 </button>
@@ -2176,7 +2254,6 @@ export default function BesokKawinGame() {
           {!authChecking && screen === "gate" && (
             <section className="animate-card-enter py-2">
               <div className="glass-luxury border border-amber-500/25 rounded-[32px] p-6 sm:p-8 shadow-[0_25px_70px_-15px_rgba(0,0,0,0.85)] text-center relative overflow-hidden">
-                {/* Decorative top shimmer */}
                 <div className="absolute inset-x-12 top-0 h-[1px] bg-gradient-to-r from-transparent via-amber-300/60 to-transparent" />
 
                 <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-[10px] font-mono tracking-[0.2em] uppercase bg-amber-500/10 text-amber-300 border border-amber-500/25 mb-5">
@@ -2184,7 +2261,6 @@ export default function BesokKawinGame() {
                   <span>Invitation & Verified Members Only</span>
                 </div>
 
-                {/* Monogram Ring */}
                 <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-gradient-to-tr from-amber-500/20 via-rose-500/20 to-amber-300/30 p-[1px] shadow-2xl shadow-amber-500/10">
                   <div className="w-full h-full rounded-full bg-[#0b0c12] flex flex-col items-center justify-center border border-amber-400/20">
                     <span className="text-2xl">🥂</span>
@@ -2203,7 +2279,6 @@ export default function BesokKawinGame() {
                   20 pengakuan jujurmu di depan sebelum melangkah lebih serius.
                 </p>
 
-                {/* Luxury Feature Pills */}
                 <div className="grid grid-cols-3 gap-2 mb-6 text-left">
                   <div className="p-2.5 rounded-2xl bg-black/40 border border-white/5">
                     <span className="block text-amber-300 text-xs mb-0.5">
@@ -2240,7 +2315,6 @@ export default function BesokKawinGame() {
                   </div>
                 </div>
 
-                {/* SINGLE EXCLUSIVE CTA: GOOGLE SIGN-IN ONLY */}
                 <button
                   type="button"
                   disabled={isLoggingInGoogle}
@@ -3191,7 +3265,7 @@ export default function BesokKawinGame() {
                 onClick={fullResetToLounge}
                 className="w-full py-2.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 font-bold text-xs border border-white/10 btn-tactile"
               >
-                ✦ Kembali ke Exclusive Lounge
+                ✦ Kembali ke Lounge
               </button>
             </section>
           )}
@@ -3208,7 +3282,7 @@ export default function BesokKawinGame() {
         </div>
 
         <footer className="w-full pt-2 pb-1 text-center text-[10px] font-mono tracking-widest uppercase text-stone-600 shrink-0">
-          BESOK KAWIN? • Verified Google Members Only
+          BESOK KAWIN?
         </footer>
       </main>
     </div>
