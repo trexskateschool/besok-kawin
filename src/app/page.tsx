@@ -575,16 +575,13 @@ export default function SefrekuensiGame() {
 
   const currentCard = deck[round - 1];
 
-  // Penentuan giliran online:
-  // - negotiate1: Dikendalikan oleh PEMILIK KARTU (lawan dari responderKey) karena kartunya ditolak.
-  // - negotiate2: Dikendalikan oleh RESPONDER AWAL (responderKey) yang mengonfirmasi pilihan.
   const isMyOnlineTurn =
     mode !== "online" ||
     !currentCard ||
     (gameStage === "negotiate1"
-      ? currentCard.responderKey !== myOnlineRole // Pemilik kartu (lawan responder) yang memilih kompromi pertama
+      ? currentCard.responderKey !== myOnlineRole 
       : gameStage === "negotiate2"
-      ? currentCard.responderKey === myOnlineRole // Penolak awal yang mengonfirmasi pilihan
+      ? currentCard.responderKey === myOnlineRole 
       : currentCard.responderKey === myOnlineRole);
 
   useEffect(() => {
@@ -2811,6 +2808,16 @@ export default function SefrekuensiGame() {
                         </span>
                       </div>
 
+                      {/* Kotak Menampilkan Kartu yang Ditolak */}
+                      <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
+                        <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
+                          📌 KARTU BOROK YANG DITOLAK OLEH {responder?.name.toUpperCase()}:
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                          &ldquo;{currentCard.partnerPrompt}&rdquo;
+                        </p>
+                      </div>
+
                       <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="text-base">{cardPartner.emoji}</span>
@@ -2860,7 +2867,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {/* TAHAP 1 (Online/Couple): Pemilik kartu (cardPartner) mendapat notif bahwa kartunya ditolak & memilih jalan tengah */}
+                  {/* TAHAP 1 (Online/Couple): Pemilik kartu (cardPartner) mendapat notif bahwa kartunya ditolak & memilih opsi jalan tengah disertai kartu yang ditolak */}
                   {gameStage === "negotiate1" && mode !== "solo" && (
                     <div
                       key={`neg-c1-${round}`}
@@ -2872,9 +2879,19 @@ export default function SefrekuensiGame() {
                         </span>
                       </div>
 
+                      {/* Kotak Menampilkan Kartu yang Ditolak */}
+                      <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
+                        <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
+                          📌 KARTU BOROK YANG DITOLAK OLEH {responder.name.toUpperCase()}:
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                          &ldquo;{currentCard.partnerPrompt}&rdquo;
+                        </p>
+                      </div>
+
                       <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
                         <p className="text-xs text-slate-300 leading-relaxed">
-                          <strong className="text-rose-400">{responder.name}</strong> menolak kartu dek masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}[span_3](start_span)[span_3](end_span):
+                          <strong className="text-rose-400">{responder.name}</strong> menolak kartu dek masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}:
                         </p>
                       </div>
 
@@ -2910,6 +2927,16 @@ export default function SefrekuensiGame() {
                         </span>
                       </div>
 
+                      {/* Kotak Menampilkan Kartu yang Ditolak Sebelumnya */}
+                      <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 mb-4">
+                        <span className="block text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold mb-1">
+                          📌 KARTU YANG KAMU TOLAK SEBELUMNYA:
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
+                          &ldquo;{currentCard.partnerPrompt}&rdquo;
+                        </p>
+                      </div>
+
                       <p className="text-xs text-slate-300 mb-3">
                         <strong className="text-emerald-400">{cardPartner.name}</strong> sudah mengajukan opsi jalan tengah. Sekarang <strong className="text-rose-400">{responder.name}</strong> pilih opsi yang sama agar sepakat (+5%):
                       </p>
@@ -2925,7 +2952,7 @@ export default function SefrekuensiGame() {
                             <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-emerald-400 shrink-0 mt-0.5">
                               {String.fromCharCode(65 + idx)}
                             </span>
-                            <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                            <span className="text-xs sm:text-sm font-semibold text-slate-250 leading-snug">
                               {opt}
                             </span>
                           </button>
