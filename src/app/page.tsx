@@ -2026,7 +2026,7 @@ export default function SefrekuensiGame() {
                     🔥 Iya lagi
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Setuju banget — masuk ke Dek Masalah Utama
+                    Setuju banget
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
@@ -2045,7 +2045,7 @@ export default function SefrekuensiGame() {
                     🤔 Kayanya sih
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
+                    Ragu-ragu
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
@@ -2064,7 +2064,7 @@ export default function SefrekuensiGame() {
                     🛡️ Engga
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Bukan gua banget — dibuang dari dek permainan
+                    Bukan gue banget
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
@@ -2080,8 +2080,6 @@ export default function SefrekuensiGame() {
                 onClick={autoCompleteQuizDemo}
                 className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50"
               >
-                ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
-              </button>
             </div>
           </section>
         )}
@@ -2811,7 +2809,7 @@ export default function SefrekuensiGame() {
                       {/* Kotak Menampilkan Kartu yang Ditolak */}
                       <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
                         <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
-                          📌 KARTU BOROK YANG DITOLAK OLEH {responder?.name.toUpperCase()}:
+                          📌 KARTU MASALAH YANG DITOLAK OLEH {responder?.name.toUpperCase()}:
                         </span>
                         <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
                           &ldquo;{currentCard.partnerPrompt}&rdquo;
@@ -2838,7 +2836,7 @@ export default function SefrekuensiGame() {
                       </div>
 
                       <p className="text-xs font-bold text-slate-300 mb-2.5">
-                        Sebagai pemilik kartu, pilih 1 opsi kompromi untuk ditawarkan ke {responder.name}:
+                        Sebagai pemilik masalah, pilih 1 opsi kompromi untuk ditawarkan ke {responder.name}:
                       </p>
 
                       <div className="space-y-2.5">
@@ -2882,7 +2880,7 @@ export default function SefrekuensiGame() {
                       {/* Kotak Menampilkan Kartu yang Ditolak */}
                       <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
                         <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
-                          📌 KARTU BOROK YANG DITOLAK OLEH {responder.name.toUpperCase()}:
+                          📌 MASALAH YANG DITOLAK OLEH {responder.name.toUpperCase()}:
                         </span>
                         <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
                           &ldquo;{currentCard.partnerPrompt}&rdquo;
@@ -2891,7 +2889,7 @@ export default function SefrekuensiGame() {
 
                       <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
                         <p className="text-xs text-slate-300 leading-relaxed">
-                          <strong className="text-rose-400">{responder.name}</strong> menolak kartu dek masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}:
+                          <strong className="text-rose-400">{responder.name}</strong> menolak masalahmu. Sebagai pemilik kartu (<strong className="text-emerald-400">{cardPartner.name}</strong>), pilih 1 opsi jalan tengah / kompromi untuk ditawarkan kembali ke {responder.name}:
                         </p>
                       </div>
 
@@ -2930,7 +2928,7 @@ export default function SefrekuensiGame() {
                       {/* Kotak Menampilkan Kartu yang Ditolak Sebelumnya */}
                       <div className="p-4 rounded-2xl bg-amber-950/30 border border-amber-500/40 mb-4">
                         <span className="block text-[10px] font-mono uppercase tracking-wider text-amber-400 font-bold mb-1">
-                          📌 KARTU YANG KAMU TOLAK SEBELUMNYA:
+                          📌 MASALAH YANG KAMU TOLAK SEBELUMNYA:
                         </span>
                         <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
                           &ldquo;{currentCard.partnerPrompt}&rdquo;
@@ -3168,7 +3166,7 @@ export default function SefrekuensiGame() {
       </main>
 
       <footer className="w-full py-4 text-center text-[11px] text-slate-600">
-        SEFREKUENSI • Simulasi Mekanik Game &amp; Red Flag Card Engine
+        SEFREKUENSI • Krisna Oktaria
       </footer>
     </>
   );
