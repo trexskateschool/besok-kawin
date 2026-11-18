@@ -1014,7 +1014,7 @@ export default function BesokKawinGame() {
       setIsSavingRoom(false);
       sfxWin();
       showToast(
-        "✨ Profil terverifikasi! Selamat datang di Exclusive Lounge.",
+        "✨ Profil terverifikasi! Selamat datang di Lounge.",
         "success"
       );
       goScreen("bursa");
@@ -2483,7 +2483,7 @@ export default function BesokKawinGame() {
 
                   <div>
                     <label className="block text-[11px] font-semibold text-stone-300 mb-1">
-                      Headline / Bio Singkat (Tanpa Kontak IG/WA)
+                      Headline / Bio Singkat
                     </label>
                     <input
                       type="text"
@@ -2540,7 +2540,7 @@ export default function BesokKawinGame() {
 
                 {isSavingRoom ? (
                   <div className="p-4 rounded-2xl glass-luxury border border-amber-500/25 text-center text-xs font-bold text-amber-300">
-                    ✦ Menyimpan profil ke Exclusive Lounge...
+                    ✦ Menyimpan profil ke Lounge...
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 gap-2">
@@ -3283,14 +3283,14 @@ export default function BesokKawinGame() {
                 onClick={downloadStoryCardPNG}
                 className="w-full py-3 rounded-full bg-stone-100 hover:bg-white text-stone-950 font-extrabold text-xs sm:text-sm shadow-lg btn-tactile"
               >
-                📸 Unduh Kartu Hasil IG Story (PNG)
+                📸 Unduh Kartu Hasil IG Story
               </button>
 
               <button
                 onClick={fullResetToLounge}
                 className="w-full py-2.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 font-bold text-xs border border-white/10 btn-tactile"
               >
-                ✦ Kembali ke Exclusive Lounge
+                ✦ Kembali ke Lounge
               </button>
             </section>
           )}
@@ -3307,7 +3307,7 @@ export default function BesokKawinGame() {
         </div>
 
         <footer className="w-full pt-2 pb-1 text-center text-[10px] font-mono tracking-widest uppercase text-stone-600 shrink-0">
-          BESOK KAWIN? • Verified Google Members Only
+          BESOK KAWIN?
         </footer>
       </main>
     </div>
