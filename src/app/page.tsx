@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { QuestionItem, build20QuestionsForProfile } from "./questions";
+import {
+  DeckTheme,
+  DECK_THEME_META,
+  QuestionItem,
+  SUDDEN_DEATH_QUESTIONS,
+  build20QuestionsForProfile,
+} from "./questions";
 import { db, isFirebaseReady } from "@/lib/firebase";
 import {
   doc,
@@ -43,6 +49,14 @@ interface HistoryItem {
   type: "good" | "neutral" | "bad";
 }
 
+interface AuditAlert {
+  id: number;
+  title: string;
+  detail: string;
+  delta: number;
+  isCaught: boolean;
+}
+
 interface ToastItem {
   id: number;
   message: string;
@@ -57,6 +71,13 @@ type ScreenType =
   | "partner-join"
   | "game"
   | "ending";
+
+const STAKE_PRESETS = [
+  "Kalah wajib traktir makan / kopi",
+  "Skor < 80% wajib jawab 1 pertanyaan jujur tanpa marah",
+  "Yang paling sering deadlock wajib post rapor ini di Threads",
+  "Kalah wajib nurutin 1 permintaan pasangan seharian",
+];
 
 function formatRejectedProblemForOwner(
   rejectorName: string,
@@ -85,6 +106,36 @@ function formatRejectedProblemForOwner(
   }
 
   return `${rejectorName} menolak masalahmu soal ${text}.`;
+}
+
+function findContradictoryConfession(
+  responder: PlayerProfile,
+  currentCard: DeckCard
+): QuestionItem | null {
+  const iyaList = responder.questions.filter(
+    (q) => responder.answers[q.id] === "iya" && q.id !== currentCard.id
+  );
+  if (iyaList.length > 0) {
+    const sameCat = iyaList.find((q) => q.category === currentCard.category);
+    return sameCat || iyaList[Math.floor(Math.random() * iyaList.length)];
+  }
+
+  const kayanyaList = responder.questions.filter(
+    (q) => responder.answers[q.id] === "kayanya" && q.id !== currentCard.id
+  );
+  if (kayanyaList.length > 0) {
+    return kayanyaList[Math.floor(Math.random() * kayanyaList.length)];
+  }
+
+  return null;
+}
+
+function getSuddenDeathForMatch(seedStr: string) {
+  let hash = 0;
+  for (let i = 0; i < seedStr.length; i++) {
+    hash = (hash * 31 + seedStr.charCodeAt(i)) >>> 0;
+  }
+  return SUDDEN_DEATH_QUESTIONS[hash % SUDDEN_DEATH_QUESTIONS.length];
 }
 
 function glitterBurst(ev?: React.MouseEvent<HTMLElement>) {
@@ -440,6 +491,8 @@ export default function SefrekuensiGame() {
     "Laki-laki"
   );
   const [regAge, setRegAge] = useState("");
+  const [deckTheme, setDeckTheme] = useState<DeckTheme>("standar");
+  const [customStake, setCustomStake] = useState(STAKE_PRESETS[0]);
   const [registerError, setRegisterError] = useState<{
     title: string;
     text: string;
@@ -495,12 +548,22 @@ export default function SefrekuensiGame() {
   const maxRounds = 8;
   const [deck, setDeck] = useState<DeckCard[]>([]);
   const [gameStage, setGameStage] = useState<
-    "dilemma" | "consequence" | "negotiate1" | "negotiate2"
+    "dilemma" | "consequence" | "negotiate1" | "negotiate2" | "suddendeath"
   >("dilemma");
 
   const [negotiateOwnerChoice, setNegotiateOwnerChoice] = useState<
     number | null
   >(null);
+
+  const [vetoUsed, setVetoUsed] = useState<{
+    player1: boolean;
+    player2: boolean;
+  }>({ player1: false, player2: false });
+
+  const [p1SyncChoice, setP1SyncChoice] = useState<number | null>(null);
+  const [p2SyncChoice, setP2SyncChoice] = useState<number | null>(null);
+
+  const [lastAuditAlert, setLastAuditAlert] = useState<AuditAlert | null>(null);
 
   const [timerSeconds, setTimerSeconds] = useState(60);
   const [timerRunning, setTimerRunning] = useState(false);
@@ -508,7 +571,7 @@ export default function SefrekuensiGame() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [stats, setStats] = useState({
     terimaMantap: 0,
-    menyesal: 0,
+    pencitraanTerbongkar: 0,
     kompromiSepakat: 0,
     deadlockOrAfk: 0,
   });
@@ -516,6 +579,7 @@ export default function SefrekuensiGame() {
 
   const prevBatteryRef = useRef(50);
   const syncedStepRef = useRef("");
+  const lastAuditIdRef = useRef<number | null>(null);
 
   const triggerBatteryDelta = useCallback((delta: number) => {
     if (delta === 0) return;
@@ -526,7 +590,13 @@ export default function SefrekuensiGame() {
   }, []);
 
   const publishOnlineRoom = useCallback(
-    async (code: string, hostProfile: PlayerProfile, status: string) => {
+    async (
+      code: string,
+      hostProfile: PlayerProfile,
+      status: string,
+      theme: DeckTheme,
+      stakeText: string
+    ) => {
       if (!isFirebaseReady || !db) {
         setRoomOnlineStatus("error");
         return;
@@ -537,6 +607,8 @@ export default function SefrekuensiGame() {
           doc(db, "rooms", code),
           {
             code,
+            deckTheme: theme,
+            stake: stakeText,
             player1: hostProfile,
             player2: null,
             status,
@@ -544,11 +616,15 @@ export default function SefrekuensiGame() {
             battery: 50,
             stage: "dilemma",
             negotiateOwnerChoice: null,
+            vetoUsed: { player1: false, player2: false },
+            p1SyncChoice: null,
+            p2SyncChoice: null,
+            lastAuditAlert: null,
             consecutiveTimeouts: 0,
             history: [],
             stats: {
               terimaMantap: 0,
-              menyesal: 0,
+              pencitraanTerbongkar: 0,
               kompromiSepakat: 0,
               deadlockOrAfk: 0,
             },
@@ -564,6 +640,19 @@ export default function SefrekuensiGame() {
     []
   );
 
+  const handleStakeChange = async (newStake: string) => {
+    setCustomStake(newStake);
+    if (mode === "online" && inviteCode && isFirebaseReady && db) {
+      try {
+        await setDoc(
+          doc(db, "rooms", inviteCode),
+          { stake: newStake, updatedAt: Date.now() },
+          { merge: true }
+        );
+      } catch {}
+    }
+  };
+
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     if (mode !== "online") return;
@@ -575,10 +664,25 @@ export default function SefrekuensiGame() {
         if (!snap.exists()) return;
         const data = snap.data();
 
+        if (data.deckTheme) setDeckTheme(data.deckTheme as DeckTheme);
+        if (typeof data.stake === "string") setCustomStake(data.stake);
         if (data.player1) setPlayer1(data.player1);
         if (data.player2) setPlayer2(data.player2);
         if (data.deck) setDeck(data.deck);
         if (data.stage) setGameStage(data.stage);
+        if (data.vetoUsed) setVetoUsed(data.vetoUsed);
+        if (
+          typeof data.p1SyncChoice === "number" ||
+          data.p1SyncChoice === null
+        ) {
+          setP1SyncChoice(data.p1SyncChoice);
+        }
+        if (
+          typeof data.p2SyncChoice === "number" ||
+          data.p2SyncChoice === null
+        ) {
+          setP2SyncChoice(data.p2SyncChoice);
+        }
         if (
           typeof data.negotiateOwnerChoice === "number" ||
           data.negotiateOwnerChoice === null
@@ -591,6 +695,14 @@ export default function SefrekuensiGame() {
           setConsecutiveTimeouts(data.consecutiveTimeouts);
         }
         setEndingCustomReason(data.endingReason || "");
+
+        if (
+          data.lastAuditAlert &&
+          data.lastAuditAlert.id !== lastAuditIdRef.current
+        ) {
+          lastAuditIdRef.current = data.lastAuditAlert.id;
+          setLastAuditAlert(data.lastAuditAlert as AuditAlert);
+        }
 
         if (typeof data.battery === "number") {
           const diff = data.battery - prevBatteryRef.current;
@@ -697,8 +809,11 @@ export default function SefrekuensiGame() {
 
   const isMyOnlineTurn =
     mode !== "online" ||
+    gameStage === "suddendeath" ||
     !currentCard ||
-    (gameStage === "negotiate1"
+    (gameStage === "consequence"
+      ? currentCard.responderKey !== myOnlineRole
+      : gameStage === "negotiate1"
       ? currentCard.responderKey !== myOnlineRole
       : gameStage === "negotiate2"
       ? currentCard.responderKey === myOnlineRole
@@ -706,6 +821,7 @@ export default function SefrekuensiGame() {
 
   useEffect(() => {
     if (screen !== "game" || !timerRunning) return;
+    if (gameStage === "suddendeath") return;
     if (mode === "online" && !isMyOnlineTurn) return;
 
     const interval = setInterval(() => {
@@ -782,6 +898,8 @@ export default function SefrekuensiGame() {
 
         const roomData = snap.data();
         const hostProfile: PlayerProfile = roomData.player1;
+        const roomTheme: DeckTheme =
+          (roomData.deckTheme as DeckTheme) || "standar";
 
         if (roomData.player2 && roomData.player2.email !== email) {
           showRegisterError(
@@ -806,7 +924,7 @@ export default function SefrekuensiGame() {
           email,
           gender: regGender,
           age,
-          questions: build20QuestionsForProfile(regGender, age),
+          questions: build20QuestionsForProfile(regGender, age, roomTheme),
           answers: {},
         };
 
@@ -820,6 +938,8 @@ export default function SefrekuensiGame() {
         );
 
         setRegisterError(null);
+        setDeckTheme(roomTheme);
+        if (typeof roomData.stake === "string") setCustomStake(roomData.stake);
         setInviteCode(code);
         setMode("online");
         setMyOnlineRole("player2");
@@ -829,7 +949,10 @@ export default function SefrekuensiGame() {
         setQuizIndex(0);
         setIsBusy(false);
         sfxTap();
-        showToast(`Terhubung ke room ${hostProfile.name}!`, "success");
+        showToast(
+          `Terhubung ke room ${hostProfile.name} (${DECK_THEME_META[roomTheme].label})!`,
+          "success"
+        );
         goScreen("quiz");
         return;
       } catch {
@@ -850,7 +973,7 @@ export default function SefrekuensiGame() {
       email,
       gender: regGender,
       age,
-      questions: build20QuestionsForProfile(regGender, age),
+      questions: build20QuestionsForProfile(regGender, age, deckTheme),
       answers: {},
     };
 
@@ -862,7 +985,13 @@ export default function SefrekuensiGame() {
     setQuizTarget("player1");
     setQuizIndex(0);
 
-    publishOnlineRoom(newCode, newHostProfile, "p1_quiz");
+    publishOnlineRoom(
+      newCode,
+      newHostProfile,
+      "p1_quiz",
+      deckTheme,
+      customStake
+    );
     goScreen("quiz");
   };
 
@@ -907,11 +1036,15 @@ export default function SefrekuensiGame() {
                 battery: 50,
                 stage: "dilemma",
                 negotiateOwnerChoice: null,
+                vetoUsed: { player1: false, player2: false },
+                p1SyncChoice: null,
+                p2SyncChoice: null,
+                lastAuditAlert: null,
                 consecutiveTimeouts: 0,
                 history: [],
                 stats: {
                   terimaMantap: 0,
-                  menyesal: 0,
+                  pencitraanTerbongkar: 0,
                   kompromiSepakat: 0,
                   deadlockOrAfk: 0,
                 },
@@ -947,11 +1080,15 @@ export default function SefrekuensiGame() {
                 battery: 50,
                 stage: "dilemma",
                 negotiateOwnerChoice: null,
+                vetoUsed: { player1: false, player2: false },
+                p1SyncChoice: null,
+                p2SyncChoice: null,
+                lastAuditAlert: null,
                 consecutiveTimeouts: 0,
                 history: [],
                 stats: {
                   terimaMantap: 0,
-                  menyesal: 0,
+                  pencitraanTerbongkar: 0,
                   kompromiSepakat: 0,
                   deadlockOrAfk: 0,
                 },
@@ -1033,7 +1170,11 @@ export default function SefrekuensiGame() {
     const botGender =
       player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
     const persona = getBotPersonaConfig(botGender, botAgeSlider);
-    const botQuestions = build20QuestionsForProfile(botGender, botAgeSlider);
+    const botQuestions = build20QuestionsForProfile(
+      botGender,
+      botAgeSlider,
+      deckTheme
+    );
 
     const botAnswers: PlayerProfile["answers"] = {};
     botQuestions.forEach((q, i) => {
@@ -1102,7 +1243,11 @@ export default function SefrekuensiGame() {
       email: "pasangan@invite.id",
       gender: partnerGenderInput,
       age: pAge,
-      questions: build20QuestionsForProfile(partnerGenderInput, pAge),
+      questions: build20QuestionsForProfile(
+        partnerGenderInput,
+        pAge,
+        deckTheme
+      ),
       answers: {},
     });
     setQuizTarget("player2");
@@ -1120,11 +1265,15 @@ export default function SefrekuensiGame() {
     prevBatteryRef.current = 50;
     setDeltaBadge(null);
     setRound(1);
+    setVetoUsed({ player1: false, player2: false });
+    setP1SyncChoice(null);
+    setP2SyncChoice(null);
+    setLastAuditAlert(null);
     setConsecutiveTimeouts(0);
     setHistory([]);
     setStats({
       terimaMantap: 0,
-      menyesal: 0,
+      pencitraanTerbongkar: 0,
       kompromiSepakat: 0,
       deadlockOrAfk: 0,
     });
@@ -1140,7 +1289,11 @@ export default function SefrekuensiGame() {
     delta: number,
     newHistoryItem: HistoryItem,
     statKey: keyof typeof stats,
-    isTimeout = false
+    options?: {
+      isTimeout?: boolean;
+      updatedVeto?: { player1: boolean; player2: boolean };
+      auditAlert?: AuditAlert | null;
+    }
   ) => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     const roomRef = doc(db, "rooms", inviteCode);
@@ -1151,12 +1304,12 @@ export default function SefrekuensiGame() {
       const curBattery = (data.battery as number) ?? 50;
       const curRound = (data.round as number) ?? 1;
       const curAfk = (data.consecutiveTimeouts as number) ?? 0;
-      const nextAfk = isTimeout ? curAfk + 1 : 0;
+      const nextAfk = options?.isTimeout ? curAfk + 1 : 0;
       const nextBattery = Math.max(0, Math.min(100, curBattery + delta));
       const prevHist = (data.history as HistoryItem[]) || [];
       const prevStats = (data.stats as typeof stats) || {
         terimaMantap: 0,
-        menyesal: 0,
+        pencitraanTerbongkar: 0,
         kompromiSepakat: 0,
         deadlockOrAfk: 0,
       };
@@ -1169,6 +1322,9 @@ export default function SefrekuensiGame() {
       const isBatteryZero = nextBattery <= 0;
       const isRoundsDone = curRound >= maxRounds;
       const isFinished = isAfkEnd || isBatteryZero || isRoundsDone;
+      const nextRound = isFinished ? curRound : curRound + 1;
+      const nextStage =
+        !isFinished && nextRound === maxRounds ? "suddendeath" : "dilemma";
 
       const reason = isAfkEnd
         ? "3x Timeout / Pasangan Ghosting Berturut-turut!"
@@ -1181,9 +1337,19 @@ export default function SefrekuensiGame() {
         history: [...prevHist, newHistoryItem],
         stats: updatedStats,
         consecutiveTimeouts: nextAfk,
-        round: isFinished ? curRound : curRound + 1,
-        stage: "dilemma",
+        round: nextRound,
+        stage: nextStage,
         negotiateOwnerChoice: null,
+        p1SyncChoice: null,
+        p2SyncChoice: null,
+        vetoUsed: options?.updatedVeto ?? data.vetoUsed ?? {
+          player1: false,
+          player2: false,
+        },
+        lastAuditAlert:
+          options?.auditAlert !== undefined
+            ? options.auditAlert
+            : data.lastAuditAlert ?? null,
         status: isFinished ? "finished" : "playing",
         endingReason: reason,
         updatedAt: Date.now(),
@@ -1230,8 +1396,11 @@ export default function SefrekuensiGame() {
         goScreen("ending");
         return;
       }
-      setRound((r) => r + 1);
-      setGameStage("dilemma");
+      const nextR = round + 1;
+      setRound(nextR);
+      setGameStage(nextR === maxRounds ? "suddendeath" : "dilemma");
+      setP1SyncChoice(null);
+      setP2SyncChoice(null);
       setTimerSeconds(60);
       setTimerRunning(true);
     }, 850);
@@ -1259,9 +1428,127 @@ export default function SefrekuensiGame() {
     );
 
     if (mode === "online") {
-      await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", true);
+      await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", {
+        isTimeout: true,
+      });
     } else {
       applyLocalRoundOutcome(-15, item, "deadlockOrAfk", nextAfk);
+    }
+  };
+
+  const useVetoCard = async () => {
+    if (!currentCard || !player1 || !player2) return;
+    const rKey = currentCard.responderKey;
+    if (vetoUsed[rKey]) return;
+
+    sfxFlip();
+    setTimerRunning(false);
+    const responder = rKey === "player1" ? player1 : player2;
+    const nextVeto = { ...vetoUsed, [rKey]: true };
+    setVetoUsed(nextVeto);
+
+    const item: HistoryItem = {
+      round,
+      category: currentCard.category,
+      isWildcard: currentCard.isWildcard,
+      problem: currentCard.partnerPrompt,
+      outcomeLabel: `${responder.name}: Pakai Kartu Veto (Skip Tanpa Debat)`,
+      delta: -5,
+      type: "neutral",
+    };
+
+    showToast(
+      `🛡️ ${responder.name} memakai 1x Kartu Veto! Kartu dilewati (-5%).`,
+      "warning"
+    );
+
+    if (mode === "online") {
+      await syncOnlineRoundOutcome(-5, item, "kompromiSepakat", {
+        updatedVeto: nextVeto,
+      });
+    } else {
+      applyLocalRoundOutcome(-5, item, "kompromiSepakat", 0);
+    }
+  };
+
+  const runPencitraanAudit = async (
+    responder: PlayerProfile,
+    cardPartner: PlayerProfile,
+    card: DeckCard,
+    accuserIsBot = false
+  ) => {
+    const contradiction = findContradictoryConfession(responder, card);
+
+    if (contradiction) {
+      sfxPenalty();
+      const alertObj: AuditAlert = {
+        id: Date.now() + Math.random(),
+        title: `🚨 DETEKTOR PENCITRAAN TERBUKTI! (${responder.name})`,
+        detail: `${
+          accuserIsBot ? `${cardPartner.name} (Bot AI)` : cardPartner.name
+        } menuduh pencitraan dan terbukti! Di awal ${
+          responder.name
+        } mengaku: "${contradiction.statement}"`,
+        delta: -15,
+        isCaught: true,
+      };
+      setLastAuditAlert(alertObj);
+
+      const item: HistoryItem = {
+        round,
+        category: card.category,
+        isWildcard: card.isWildcard,
+        problem: card.partnerPrompt,
+        outcomeLabel: `${responder.name}: Terbukti Pencitraan! (-15%)`,
+        delta: -15,
+        type: "bad",
+      };
+
+      showToast(
+        `🚨 Pencitraan terbongkar! Pengakuan awal ${responder.name} bertentangan (-15%).`,
+        "error"
+      );
+
+      if (mode === "online") {
+        await syncOnlineRoundOutcome(-15, item, "pencitraanTerbongkar", {
+          auditAlert: alertObj,
+        });
+      } else {
+        applyLocalRoundOutcome(-15, item, "pencitraanTerbongkar", 0);
+      }
+    } else {
+      sfxCharge();
+      const alertObj: AuditAlert = {
+        id: Date.now() + Math.random(),
+        title: `✅ TUDUHAN PENCITRAAN MELESET!`,
+        detail: `${cardPartner.name} menuduh pencitraan, tapi ${responder.name} terbukti konsisten dengan 20 pengakuan awalnya!`,
+        delta: 10,
+        isCaught: false,
+      };
+      setLastAuditAlert(alertObj);
+
+      const item: HistoryItem = {
+        round,
+        category: card.category,
+        isWildcard: card.isWildcard,
+        problem: card.partnerPrompt,
+        outcomeLabel: `${responder.name}: Lolos Detektor Pencitraan (+10%)`,
+        delta: 10,
+        type: "good",
+      };
+
+      showToast(
+        `✅ Tuduhan meleset! ${responder.name} terbukti jujur (+10%).`,
+        "success"
+      );
+
+      if (mode === "online") {
+        await syncOnlineRoundOutcome(10, item, "terimaMantap", {
+          auditAlert: alertObj,
+        });
+      } else {
+        applyLocalRoundOutcome(10, item, "terimaMantap", 0);
+      }
     }
   };
 
@@ -1269,6 +1556,36 @@ export default function SefrekuensiGame() {
     glitterBurst(ev);
     sfxFlip();
     setConsecutiveTimeouts(0);
+
+    if (mode === "solo" && currentCard && player1 && player2) {
+      setTimerRunning(false);
+      const contradiction = findContradictoryConfession(player1, currentCard);
+      const botAudits =
+        Boolean(contradiction) &&
+        (player2.tier !== "young" || Math.random() < 0.7);
+
+      if (botAudits) {
+        await runPencitraanAudit(player1, player2, currentCard, true);
+      } else {
+        sfxCharge();
+        const item: HistoryItem = {
+          round,
+          category: currentCard.category,
+          isWildcard: currentCard.isWildcard,
+          problem: currentCard.partnerPrompt,
+          outcomeLabel: `${player1.name}: Komitmen Dipercaya ${player2.name}`,
+          delta: 10,
+          type: "good",
+        };
+        showToast(
+          `${player2.name} percaya komitmenmu! Baterai Cinta +10%`,
+          "success"
+        );
+        applyLocalRoundOutcome(10, item, "terimaMantap", 0);
+      }
+      return;
+    }
+
     if (mode === "online" && inviteCode && isFirebaseReady && db) {
       await setDoc(
         doc(db, "rooms", inviteCode),
@@ -1280,46 +1597,33 @@ export default function SefrekuensiGame() {
     }
   };
 
-  const resolveConsequence = async (isFirm: boolean) => {
+  const resolveConsequenceAudit = async (trustCommitment: boolean) => {
     if (!currentCard || !player1 || !player2) return;
     setTimerRunning(false);
     const responder =
       currentCard.responderKey === "player1" ? player1 : player2;
+    const cardPartner =
+      currentCard.responderKey === "player1" ? player2 : player1;
 
-    if (isFirm) {
+    if (trustCommitment) {
       sfxCharge();
       const item: HistoryItem = {
         round,
         category: currentCard.category,
         isWildcard: currentCard.isWildcard,
         problem: currentCard.partnerPrompt,
-        outcomeLabel: `${responder.name}: Terima Konsekuensi Mantap`,
+        outcomeLabel: `${cardPartner.name} Percaya Komitmen ${responder.name}`,
         delta: 10,
         type: "good",
       };
-      showToast("Komitmen penuh! Baterai Cinta +10%", "success");
+      showToast("Komitmen dipercaya! Baterai Cinta +10%", "success");
       if (mode === "online") {
-        await syncOnlineRoundOutcome(10, item, "terimaMantap", false);
+        await syncOnlineRoundOutcome(10, item, "terimaMantap");
       } else {
         applyLocalRoundOutcome(10, item, "terimaMantap", 0);
       }
     } else {
-      sfxPenalty();
-      const item: HistoryItem = {
-        round,
-        category: currentCard.category,
-        isWildcard: currentCard.isWildcard,
-        problem: currentCard.partnerPrompt,
-        outcomeLabel: `${responder.name}: Menyesal Pilih Terima`,
-        delta: -12,
-        type: "bad",
-      };
-      showToast("Asal mengiyakan lalu menyesal! Penalti berat -12%", "error");
-      if (mode === "online") {
-        await syncOnlineRoundOutcome(-12, item, "menyesal", false);
-      } else {
-        applyLocalRoundOutcome(-12, item, "menyesal", 0);
-      }
+      await runPencitraanAudit(responder, cardPartner, currentCard, false);
     }
   };
 
@@ -1441,7 +1745,7 @@ export default function SefrekuensiGame() {
         "success"
       );
       if (mode === "online") {
-        await syncOnlineRoundOutcome(5, item, "kompromiSepakat", false);
+        await syncOnlineRoundOutcome(5, item, "kompromiSepakat");
       } else {
         applyLocalRoundOutcome(5, item, "kompromiSepakat", 0);
       }
@@ -1465,9 +1769,187 @@ export default function SefrekuensiGame() {
         "error"
       );
       if (mode === "online") {
-        await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", false);
+        await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk");
       } else {
         applyLocalRoundOutcome(-15, item, "deadlockOrAfk", 0);
+      }
+    }
+  };
+
+  const suddenDeathItem = getSuddenDeathForMatch(
+    inviteCode || `${player1?.name || "p1"}-${player2?.name || "p2"}`
+  );
+
+  const handleSuddenDeathChoice = async (
+    choiceIdx: number,
+    ev?: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    if (!player1 || !player2) return;
+    sfxTap();
+
+    if (mode === "solo") {
+      setTimerRunning(false);
+      const botChoice = suddenDeathItem.botPref[player2.tier || "mid"] ?? 0;
+      const isSync = choiceIdx === botChoice;
+      const delta = isSync ? 15 : -15;
+      if (isSync && ev) glitterBurst(ev);
+
+      const item: HistoryItem = {
+        round: maxRounds,
+        category: "Sinkronisasi Otak",
+        isWildcard: false,
+        problem: suddenDeathItem.scenario,
+        outcomeLabel: isSync
+          ? `Sinkronisasi Otak Cocok! (Opsi ${String.fromCharCode(
+              65 + choiceIdx
+            )})`
+          : `Beda Frekuensi (${String.fromCharCode(
+              65 + choiceIdx
+            )} vs Bot ${String.fromCharCode(65 + botChoice)})`,
+        delta,
+        type: isSync ? "good" : "bad",
+      };
+
+      showToast(
+        isSync
+          ? "⚡ SINKRONISASI OTAK BERHASIL! Bonus Clutch +15%!"
+          : "💥 Beda frekuensi di ronde penentu! -15%.",
+        isSync ? "success" : "error"
+      );
+
+      applyLocalRoundOutcome(
+        delta,
+        item,
+        isSync ? "kompromiSepakat" : "deadlockOrAfk",
+        0
+      );
+      return;
+    }
+
+    if (mode === "couple") {
+      if (p1SyncChoice === null) {
+        setP1SyncChoice(choiceIdx);
+        showToast(
+          `Jawaban ${player1.name} dikunci! Serahkan HP ke ${player2.name}.`,
+          "info"
+        );
+        return;
+      }
+
+      setTimerRunning(false);
+      const c1 = p1SyncChoice;
+      const c2 = choiceIdx;
+      setP2SyncChoice(c2);
+      const isSync = c1 === c2;
+      const delta = isSync ? 15 : -15;
+      if (isSync && ev) glitterBurst(ev);
+
+      const item: HistoryItem = {
+        round: maxRounds,
+        category: "Sinkronisasi Otak",
+        isWildcard: false,
+        problem: suddenDeathItem.scenario,
+        outcomeLabel: isSync
+          ? `Sinkronisasi Otak Cocok! (Opsi ${String.fromCharCode(65 + c1)})`
+          : `Beda Frekuensi (${String.fromCharCode(
+              65 + c1
+            )} vs ${String.fromCharCode(65 + c2)})`,
+        delta,
+        type: isSync ? "good" : "bad",
+      };
+
+      showToast(
+        isSync
+          ? "⚡ SINKRONISASI OTAK BERHASIL! Bonus Clutch +15%!"
+          : "💥 Beda frekuensi di ronde penentu! -15%.",
+        isSync ? "success" : "error"
+      );
+
+      applyLocalRoundOutcome(
+        delta,
+        item,
+        isSync ? "kompromiSepakat" : "deadlockOrAfk",
+        0
+      );
+      return;
+    }
+
+    if (mode === "online" && inviteCode && isFirebaseReady && db) {
+      setIsBusy(true);
+      try {
+        const roomRef = doc(db, "rooms", inviteCode);
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(roomRef);
+          if (!snap.exists()) return;
+          const data = snap.data();
+
+          const curC1 =
+            myOnlineRole === "player1"
+              ? choiceIdx
+              : typeof data.p1SyncChoice === "number"
+              ? data.p1SyncChoice
+              : null;
+          const curC2 =
+            myOnlineRole === "player2"
+              ? choiceIdx
+              : typeof data.p2SyncChoice === "number"
+              ? data.p2SyncChoice
+              : null;
+
+          if (curC1 !== null && curC2 !== null) {
+            const isSync = curC1 === curC2;
+            const delta = isSync ? 15 : -15;
+            const curBattery = (data.battery as number) ?? 50;
+            const nextBattery = Math.max(0, Math.min(100, curBattery + delta));
+            const prevHist = (data.history as HistoryItem[]) || [];
+            const prevStats = (data.stats as typeof stats) || {
+              terimaMantap: 0,
+              pencitraanTerbongkar: 0,
+              kompromiSepakat: 0,
+              deadlockOrAfk: 0,
+            };
+
+            const statKey = isSync ? "kompromiSepakat" : "deadlockOrAfk";
+            const item: HistoryItem = {
+              round: maxRounds,
+              category: "Sinkronisasi Otak",
+              isWildcard: false,
+              problem: suddenDeathItem.scenario,
+              outcomeLabel: isSync
+                ? `Sinkronisasi Otak Cocok! (Opsi ${String.fromCharCode(
+                    65 + curC1
+                  )})`
+                : `Beda Frekuensi (${String.fromCharCode(
+                    65 + curC1
+                  )} vs ${String.fromCharCode(65 + curC2)})`,
+              delta,
+              type: isSync ? "good" : "bad",
+            };
+
+            tx.update(roomRef, {
+              p1SyncChoice: curC1,
+              p2SyncChoice: curC2,
+              battery: nextBattery,
+              history: [...prevHist, item],
+              stats: {
+                ...prevStats,
+                [statKey]: (prevStats[statKey] || 0) + 1,
+              },
+              status: "finished",
+              updatedAt: Date.now(),
+            });
+          } else {
+            tx.update(roomRef, {
+              p1SyncChoice: curC1,
+              p2SyncChoice: curC2,
+              updatedAt: Date.now(),
+            });
+          }
+        });
+      } catch {
+        showToast("Gagal mengirim jawaban Sinkronisasi Otak.", "error");
+      } finally {
+        setIsBusy(false);
       }
     }
   };
@@ -1491,12 +1973,16 @@ export default function SefrekuensiGame() {
         : battery >= 45
         ? "PACARAN DULU AJA"
         : "STOP THE WEDDING";
+    const stakeStatus =
+      battery >= 80
+        ? "BEBAS TARUHAN (Tantangan Lulus >= 80%)"
+        : `TARUHAN BERLAKU: ${customStake}`;
     const summary = [
-      `=== HASIL SEFREKUENSI ===`,
+      `=== HASIL SEFREKUENSI (${DECK_THEME_META[deckTheme].label}) ===`,
       `Pasangan: ${player1.name} & ${player2.name}`,
       `Baterai Cinta Akhir: ${battery}% -> ${title}`,
-      `Statistik: Terima Mantap (${stats.terimaMantap}), Menyesal (${stats.menyesal}), Sepakat Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
-      `Mainkan sekarang untuk uji red flag hubunganmu!`,
+      `${stakeStatus}`,
+      `Statistik: Terima (${stats.terimaMantap}), Pencitraan (${stats.pencitraanTerbongkar}), Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
     ].join("\n");
     copyTextSafe(summary, "Rapor kecocokan berhasil disalin!");
   };
@@ -1508,7 +1994,7 @@ export default function SefrekuensiGame() {
 
     try {
       const W = 1080;
-      const H = 1680;
+      const H = 1780;
       const canvas = document.createElement("canvas");
       canvas.width = W;
       canvas.height = H;
@@ -1548,7 +2034,7 @@ export default function SefrekuensiGame() {
         ? "Rasa sayang memang ada, tetapi masih banyak kompromi yang menggantung dan ego yang belum selesai. Jangan buru-buru DP gedung."
         : endingCustomReason
         ? `${endingCustomReason} Terlalu banyak deadlock dan penyesalan untuk dilanjutkan.`
-        : "Terlalu banyak penyesalan, deadlock ego, dan tabrakan kebiasaan buruk. Evaluasi ulang sebelum melangkah lebih jauh.";
+        : "Terlalu banyak pencitraan, deadlock ego, dan tabrakan kebiasaan buruk. Evaluasi ulang sebelum melangkah lebih jauh.";
 
       const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
       bgGrad.addColorStop(0, "#070b14");
@@ -1580,16 +2066,22 @@ export default function SefrekuensiGame() {
       ctx.textAlign = "center";
       ctx.fillStyle = "#f43f5e";
       ctx.font = "800 24px sans-serif";
-      ctx.fillText("SEFREKUENSI", W / 2, 74);
+      ctx.fillText("SEFREKUENSI", W / 2, 70);
 
       ctx.fillStyle = "#64748b";
       ctx.font = "600 17px sans-serif";
-      ctx.fillText("RELATIONSHIP & RED FLAG COMPATIBILITY REPORT", W / 2, 102);
+      ctx.fillText(
+        `COMPATIBILITY REPORT  •  ${DECK_THEME_META[
+          deckTheme
+        ].label.toUpperCase()}`,
+        W / 2,
+        98
+      );
 
       const cardX = 56;
-      const cardY = 132;
+      const cardY = 124;
       const cardW = W - 112;
-      const cardH = 510;
+      const cardH = 490;
 
       drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 36);
       ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
@@ -1603,7 +2095,7 @@ export default function SefrekuensiGame() {
       const pillW = ctx.measureText(pillText).width + 56;
       const pillH = 44;
       const pillX = (W - pillW) / 2;
-      const pillY = cardY + 38;
+      const pillY = cardY + 34;
 
       drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 22);
       ctx.fillStyle = accentBgSoft;
@@ -1617,9 +2109,9 @@ export default function SefrekuensiGame() {
       ctx.fillText(pillText, W / 2, pillY + 29);
 
       const barW = 680;
-      const barH = 34;
+      const barH = 32;
       const barX = (W - barW) / 2;
-      const barY = pillY + 66;
+      const barY = pillY + 62;
 
       drawRoundedRect(ctx, barX, barY, barW, barH, 14);
       ctx.fillStyle = "#020617";
@@ -1641,19 +2133,19 @@ export default function SefrekuensiGame() {
       ctx.fillRect(barX + barW * 0.8, barY + 2, 2, barH - 4);
 
       ctx.fillStyle = accentPrimary;
-      ctx.font = "900 62px sans-serif";
+      ctx.font = "900 60px sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(verdictTitle, W / 2, barY + 114);
+      ctx.fillText(verdictTitle, W / 2, barY + 108);
 
       const matchupText = `${player1.name} (${player1.age} thn)   ×   ${player2.name} (${player2.age} thn)`;
-      ctx.font = "700 24px sans-serif";
+      ctx.font = "700 23px sans-serif";
       const matchW = Math.min(
         cardW - 80,
         ctx.measureText(matchupText).width + 64
       );
-      const matchH = 48;
+      const matchH = 46;
       const matchX = (W - matchW) / 2;
-      const matchY = barY + 138;
+      const matchY = barY + 130;
 
       drawRoundedRect(ctx, matchX, matchY, matchW, matchH, 16);
       ctx.fillStyle = "#090f1d";
@@ -1666,34 +2158,67 @@ export default function SefrekuensiGame() {
       ctx.fillText(
         truncateCanvasText(ctx, matchupText, matchW - 36),
         W / 2,
-        matchY + 32
+        matchY + 31
       );
 
       ctx.fillStyle = "#cbd5e1";
-      ctx.font = "500 22px sans-serif";
+      ctx.font = "500 21px sans-serif";
       const descLines = wrapCanvasText(ctx, verdictDesc, cardW - 110);
       descLines.slice(0, 3).forEach((line, i) => {
-        ctx.fillText(line, W / 2, matchY + 92 + i * 32);
+        ctx.fillText(line, W / 2, matchY + 88 + i * 31);
       });
 
-      const statY = cardY + cardH + 24;
-      const statH = 126;
+      // Custom Stake Box inside PNG
+      const stakeBoxY = cardY + cardH + 20;
+      const stakeBoxH = 104;
+      drawRoundedRect(ctx, cardX, stakeBoxY, cardW, stakeBoxH, 24);
+      ctx.fillStyle = isHigh
+        ? "rgba(16, 185, 129, 0.12)"
+        : "rgba(245, 158, 11, 0.12)";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = isHigh
+        ? "rgba(52, 211, 153, 0.45)"
+        : "rgba(251, 191, 36, 0.45)";
+      ctx.stroke();
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = isHigh ? "#34d399" : "#fbbf24";
+      ctx.font = "800 16px monospace";
+      ctx.fillText(
+        isHigh
+          ? "🎯 TARUHAN NYATA  •  LULUS TANTANGAN (>= 80%)"
+          : "🎯 TARUHAN NYATA  •  WAJIB DILAKSANAKAN (< 80%)",
+        cardX + 28,
+        stakeBoxY + 36
+      );
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.font = "700 21px sans-serif";
+      ctx.fillText(
+        truncateCanvasText(ctx, customStake || STAKE_PRESETS[0], cardW - 56),
+        cardX + 28,
+        stakeBoxY + 74
+      );
+
+      const statY = stakeBoxY + stakeBoxH + 20;
+      const statH = 122;
       const gap = 16;
       const statW = (cardW - gap * 3) / 4;
 
       const statCards = [
         {
           val: String(stats.terimaMantap),
-          label: "TERIMA MANTAP",
+          label: "DIPERCAYA",
           sub: "+10% / ronde",
           color: "#34d399",
           border: "rgba(52, 211, 153, 0.35)",
           bg: "rgba(16, 185, 129, 0.10)",
         },
         {
-          val: String(stats.menyesal),
-          label: "MENYESAL",
-          sub: "-12% / ronde",
+          val: String(stats.pencitraanTerbongkar),
+          label: "PENCITRAAN",
+          sub: "-15% / ronde",
           color: "#fb7185",
           border: "rgba(251, 113, 133, 0.35)",
           bg: "rgba(244, 63, 94, 0.10)",
@@ -1701,7 +2226,7 @@ export default function SefrekuensiGame() {
         {
           val: String(stats.kompromiSepakat),
           label: "KOMPROMI",
-          sub: "+5% / ronde",
+          sub: "+5% / +15%",
           color: "#fbbf24",
           border: "rgba(251, 191, 36, 0.35)",
           bg: "rgba(245, 158, 11, 0.10)",
@@ -1727,19 +2252,19 @@ export default function SefrekuensiGame() {
 
         ctx.textAlign = "center";
         ctx.fillStyle = sc.color;
-        ctx.font = "900 40px monospace";
-        ctx.fillText(sc.val, sx + statW / 2, statY + 54);
+        ctx.font = "900 38px monospace";
+        ctx.fillText(sc.val, sx + statW / 2, statY + 52);
 
         ctx.fillStyle = "#e2e8f0";
         ctx.font = "800 15px sans-serif";
-        ctx.fillText(sc.label, sx + statW / 2, statY + 84);
+        ctx.fillText(sc.label, sx + statW / 2, statY + 82);
 
         ctx.fillStyle = "#94a3b8";
         ctx.font = "600 13px monospace";
-        ctx.fillText(sc.sub, sx + statW / 2, statY + 106);
+        ctx.fillText(sc.sub, sx + statW / 2, statY + 104);
       });
 
-      const logBoxY = statY + statH + 24;
+      const logBoxY = statY + statH + 20;
       const logBoxH = 804;
 
       drawRoundedRect(ctx, cardX, logBoxY, cardW, logBoxH, 32);
@@ -1834,9 +2359,9 @@ export default function SefrekuensiGame() {
       ctx.fillStyle = "#64748b";
       ctx.font = "600 18px sans-serif";
       ctx.fillText(
-        "SEFREKUENSI  •  by Krisna Oktaria",
+        "SEFREKUENSI  •  oleh Krisna Oktaria",
         W / 2,
-        H - 36
+        H - 32
       );
 
       const safeP1 =
@@ -1896,11 +2421,15 @@ export default function SefrekuensiGame() {
             battery: 50,
             stage: "dilemma",
             negotiateOwnerChoice: null,
+            vetoUsed: { player1: false, player2: false },
+            p1SyncChoice: null,
+            p2SyncChoice: null,
+            lastAuditAlert: null,
             consecutiveTimeouts: 0,
             history: [],
             stats: {
               terimaMantap: 0,
-              menyesal: 0,
+              pencitraanTerbongkar: 0,
               kompromiSepakat: 0,
               deadlockOrAfk: 0,
             },
@@ -1934,6 +2463,7 @@ export default function SefrekuensiGame() {
     setPlayer1(null);
     setPlayer2(null);
     setHistory([]);
+    setLastAuditAlert(null);
     setRegName("");
     setRegEmail("");
     setRegAge("");
@@ -1980,23 +2510,17 @@ export default function SefrekuensiGame() {
         : player1
       : null;
 
-  const responderConfessions =
-    responder?.questions.filter(
-      (q) =>
-        responder.answers[q.id] === "iya" ||
-        responder.answers[q.id] === "kayanya"
-    ) || [];
-  const personalTrap =
-    responderConfessions.length > 0
-      ? responderConfessions[round % responderConfessions.length]
-      : responder?.questions[0];
-
   const cluePhrases: Record<"young" | "mid" | "mature", string> = {
     young: "Aku maunya yang tetep ngejaga perasaan & perhatian kita sih...",
     mid: "Menurutku kita butuh aturan yang realistis dan adil buat masing-masing.",
     mature:
       "Pilih opsi yang paling praktis, terukur, dan minim drama ke depannya.",
   };
+
+  const mySyncChoiceOnline =
+    myOnlineRole === "player1" ? p1SyncChoice : p2SyncChoice;
+  const partnerSyncChoiceOnline =
+    myOnlineRole === "player1" ? p2SyncChoice : p1SyncChoice;
 
   return (
     <>
@@ -2198,8 +2722,8 @@ export default function SefrekuensiGame() {
                     className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
                   />
                   <p className="text-[11px] text-slate-400 mt-1.5">
-                    *Sistem otomatis memblokir jika jenis kelaminmu sama dengan
-                    pengirim kode.
+                    *Tema dek otomatis mengikuti room pasangan &amp; memblokir
+                    jenis kelamin yang sama.
                   </p>
                 </div>
               )}
@@ -2312,6 +2836,45 @@ export default function SefrekuensiGame() {
                   </div>
                 </div>
 
+                {landingTab === "new" && (
+                  <div className="pt-1">
+                    <label className="block text-xs font-semibold text-slate-300 mb-2">
+                      Pilih Paket Tema Dek
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(Object.keys(DECK_THEME_META) as DeckTheme[]).map(
+                        (themeKey) => {
+                          const meta = DECK_THEME_META[themeKey];
+                          const isSelected = deckTheme === themeKey;
+                          return (
+                            <button
+                              key={themeKey}
+                              type="button"
+                              onClick={() => {
+                                sfxTap();
+                                setDeckTheme(themeKey);
+                              }}
+                              className={`p-3 rounded-2xl border text-left transition ${
+                                isSelected
+                                  ? "border-rose-500 bg-rose-500/15 text-white"
+                                  : "border-slate-800 bg-slate-950/80 text-slate-400 hover:border-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-center gap-1.5 font-extrabold text-xs text-white">
+                                <span>{meta.emoji}</span>
+                                <span className="truncate">{meta.label}</span>
+                              </div>
+                              <p className="text-[10px] text-slate-400 mt-1 line-clamp-2 leading-snug">
+                                {meta.desc}
+                              </p>
+                            </button>
+                          );
+                        }
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <button
                   type="submit"
                   disabled={isBusy}
@@ -2354,7 +2917,8 @@ export default function SefrekuensiGame() {
                     {activeQuizProfile.age} thn)
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    {activeQuizQuestion.segmentLabel}
+                    {DECK_THEME_META[deckTheme].emoji}{" "}
+                    {DECK_THEME_META[deckTheme].label}
                   </span>
                 </div>
                 <span className="font-mono font-extrabold text-rose-400 text-sm">
@@ -2377,15 +2941,7 @@ export default function SefrekuensiGame() {
             >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-5">
-                  <span
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide border ${
-                      activeQuizQuestion.category === "Ketakutan Hidup"
-                        ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
-                        : activeQuizQuestion.category === "Kebiasaan Buruk"
-                        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
-                        : "bg-rose-500/15 text-rose-400 border-rose-500/30"
-                    }`}
-                  >
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide border bg-rose-500/15 text-rose-400 border-rose-500/30">
                     {activeQuizQuestion.category}
                   </span>
                   <span className="text-[11px] font-mono text-slate-500">
@@ -2399,7 +2955,9 @@ export default function SefrekuensiGame() {
               </div>
 
               <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-                <span>Jawab jujur — ini bakal jadi dek kartu pasanganmu!</span>
+                <span>
+                  Jawab jujur — juga jadi bahan audit Detektor Pencitraan!
+                </span>
               </div>
             </div>
 
@@ -2481,6 +3039,9 @@ export default function SefrekuensiGame() {
                 menyelesaikan 20 pengakuan hidupnya. Begitu selesai, permainan
                 otomatis dimulai di kedua perangkat!
               </p>
+              <div className="mt-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+                🎯 Taruhan Aktif: <strong>{customStake}</strong>
+              </div>
             </div>
           </section>
         )}
@@ -2491,7 +3052,7 @@ export default function SefrekuensiGame() {
               <div className="flex items-center justify-between mb-3">
                 <div>
                   <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
-                    Hasil Profiling Jujur
+                    Hasil Profiling Jujur • {DECK_THEME_META[deckTheme].label}
                   </span>
                   <h2 className="text-lg sm:text-xl font-extrabold text-white">
                     Profil Borok &amp; Red Flag{" "}
@@ -2565,14 +3126,49 @@ export default function SefrekuensiGame() {
               </div>
             </div>
 
+            <div className="bg-cardbg/95 border border-amber-500/40 rounded-3xl p-5 shadow-xl">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
+                  🎯 Taruhan Nyata (Tercetak di Rapor PNG)
+                </span>
+              </div>
+              <input
+                type="text"
+                maxLength={80}
+                value={customStake}
+                onChange={(e) => handleStakeChange(e.target.value)}
+                placeholder="Tulis taruhan dunia nyata kalian..."
+                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-white focus:outline-none mb-2.5"
+              />
+              <div className="flex flex-wrap gap-1.5">
+                {STAKE_PRESETS.map((preset, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => {
+                      sfxTap();
+                      handleStakeChange(preset);
+                    }}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg border transition text-left ${
+                      customStake === preset
+                        ? "bg-amber-500/20 border-amber-400 text-amber-200 font-bold"
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="text-center">
               <h3 className="text-base font-extrabold text-white">
                 Pilih Lawan Main Uji Kecocokan
               </h3>
               <p className="text-xs text-slate-400">
                 Baterai Cinta dimulai dari{" "}
-                <span className="text-amber-400 font-bold">50%</span>. Sanggup
-                tembus 80%?
+                <span className="text-amber-400 font-bold">50%</span>. Masing-masing punya{" "}
+                <span className="text-sky-400 font-bold">1x Kartu Veto</span>!
               </p>
             </div>
 
@@ -2951,44 +3547,170 @@ export default function SefrekuensiGame() {
                     <span className="font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200">
                       Ronde <span className="text-rose-400">{round}</span>/8
                     </span>
-                    <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
-                      Giliran:{" "}
-                      {gameStage === "negotiate1"
-                        ? cardPartner.name
-                        : gameStage === "negotiate2"
-                        ? responder.name
-                        : responder.name}
+                    <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[155px] sm:max-w-[220px]">
+                      {gameStage === "suddendeath"
+                        ? "⚡ Sinkronisasi Otak (Serentak)"
+                        : `Giliran: ${
+                            gameStage === "consequence" ||
+                            gameStage === "negotiate1"
+                              ? cardPartner.name
+                              : responder.name
+                          }`}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div
-                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold ${
-                        timerSeconds <= 10
-                          ? "bg-red-500/20 border-red-500/60 text-red-400 animate-pulse"
-                          : "bg-slate-950 border-slate-700 text-slate-200"
-                      }`}
-                    >
-                      <span>⏱️</span>
-                      <span>{timerSeconds}s</span>
+                  {gameStage !== "suddendeath" && (
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold ${
+                          timerSeconds <= 10
+                            ? "bg-red-500/20 border-red-500/60 text-red-400 animate-pulse"
+                            : "bg-slate-950 border-slate-700 text-slate-200"
+                        }`}
+                      >
+                        <span>⏱️</span>
+                        <span>{timerSeconds}s</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                  <span className="truncate">
+                    🎯 Taruhan: <strong className="text-slate-200">{customStake}</strong>
+                  </span>
+                  <span className="shrink-0 font-mono">
+                    Veto: {player1.name} ({vetoUsed.player1 ? "0" : "1"}) •{" "}
+                    {player2.name} ({vetoUsed.player2 ? "0" : "1"})
+                  </span>
                 </div>
               </div>
 
-              {mode === "online" && !isMyOnlineTurn ? (
+              {lastAuditAlert && (
+                <div
+                  className={`p-4 rounded-2xl border flex items-start justify-between gap-3 animate-card-enter ${
+                    lastAuditAlert.isCaught
+                      ? "bg-red-950/90 border-red-500/60 text-red-100"
+                      : "bg-emerald-950/90 border-emerald-500/60 text-emerald-100"
+                  }`}
+                >
+                  <div>
+                    <p className="text-xs font-extrabold">
+                      {lastAuditAlert.title}
+                    </p>
+                    <p className="text-[11px] opacity-90 mt-1 leading-relaxed">
+                      {lastAuditAlert.detail}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLastAuditAlert(null)}
+                    className="text-xs font-bold px-2 py-1 rounded-lg bg-black/30 hover:bg-black/50 shrink-0"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {gameStage === "suddendeath" ? (
+                <div
+                  key="suddendeath-round"
+                  className="bg-cardbg/95 backdrop-blur-xl border-2 border-purple-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-enter"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                      ⚡ RONDE 8 • SINKRONISASI OTAK
+                    </span>
+                    <span className="text-xs text-slate-400">
+                      Sama: <strong className="text-emerald-400">+15%</strong> |
+                      Beda: <strong className="text-red-400">-15%</strong>
+                    </span>
+                  </div>
+
+                  <div className="p-4 rounded-2xl bg-slate-950 border border-purple-500/30 mb-4">
+                    <p className="text-base sm:text-lg font-extrabold text-white leading-relaxed">
+                      &ldquo;{suddenDeathItem.scenario}&rdquo;
+                    </p>
+                  </div>
+
+                  {mode === "online" && mySyncChoiceOnline !== null ? (
+                    <div className="p-5 rounded-2xl bg-purple-950/30 border border-purple-500/40 text-center">
+                      <div className="text-3xl mb-2 animate-pulse">🔒</div>
+                      <p className="text-sm font-extrabold text-white">
+                        Jawabanmu (Opsi{" "}
+                        {String.fromCharCode(65 + mySyncChoiceOnline)}) Sudah
+                        Dikunci!
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        {partnerSyncChoiceOnline === null
+                          ? `Menunggu pasanganmu mengunci jawabannya secara rahasia...`
+                          : "Membuka hasil sinkronisasi..."}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="text-xs font-bold text-slate-300 mb-3">
+                        {mode === "couple" ? (
+                          p1SyncChoice === null ? (
+                            <>
+                              👉 Giliran Rahasia{" "}
+                              <span className="text-rose-400">
+                                {player1.name}
+                              </span>{" "}
+                              (Jangan sampai {player2.name} mengintip!):
+                            </>
+                          ) : (
+                            <>
+                              👉 Sekarang Giliran Rahasia{" "}
+                              <span className="text-emerald-400">
+                                {player2.name}
+                              </span>{" "}
+                              (Jawaban {player1.name} sudah terkunci!):
+                            </>
+                          )
+                        ) : (
+                          <>
+                            👉 Pilih jawaban paling jujur tanpa diskusi (jika
+                            sama persis dengan pasangan, dapat{" "}
+                            <span className="text-emerald-400">+15%</span>!):
+                          </>
+                        )}
+                      </p>
+
+                      <div className="space-y-2.5">
+                        {suddenDeathItem.options.map((opt, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            disabled={isBusy}
+                            onClick={(e) => handleSuddenDeathChoice(idx, e)}
+                            className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-purple-400 text-left flex items-start gap-3 transition btn-tactile disabled:opacity-50"
+                          >
+                            <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-purple-300 shrink-0 mt-0.5">
+                              {String.fromCharCode(65 + idx)}
+                            </span>
+                            <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                              {opt}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ) : mode === "online" && !isMyOnlineTurn ? (
                 <div className="bg-cardbg/95 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-7 text-center shadow-2xl animate-card-enter">
                   <div className="text-4xl mb-3 animate-pulse">⏳</div>
                   <h3 className="text-lg font-extrabold text-white">
                     Menunggu Giliran{" "}
-                    {gameStage === "negotiate1"
+                    {gameStage === "consequence" || gameStage === "negotiate1"
                       ? cardPartner.name
-                      : gameStage === "negotiate2"
-                      ? responder.name
                       : responder.name}
                   </h3>
                   <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
-                    {gameStage === "negotiate1"
+                    {gameStage === "consequence"
+                      ? `${cardPartner.name} sedang mengaudit apakah kamu beneran berkomitmen atau cuma pencitraan...`
+                      : gameStage === "negotiate1"
                       ? `${cardPartner.name} sedang diberi tahu bahwa kartunya ditolak & memilih opsi jalan tengah...`
                       : `${responder.name} sedang meninjau opsi jalan tengah yang diajukan...`}
                   </p>
@@ -3066,7 +3788,7 @@ export default function SefrekuensiGame() {
                             💚 TERIMA
                           </span>
                           <span className="block text-[10px] text-slate-400 mt-0.5">
-                            Uji Konsekuensi (+10% / -12%)
+                            Uji Pencitraan (+10% / -15%)
                           </span>
                         </button>
 
@@ -3083,52 +3805,47 @@ export default function SefrekuensiGame() {
                           </span>
                         </button>
                       </div>
+
+                      {!vetoUsed[currentCard.responderKey] && (
+                        <button
+                          type="button"
+                          onClick={useVetoCard}
+                          className="w-full mt-3 py-2.5 px-4 rounded-2xl bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/40 text-sky-300 font-bold text-xs flex items-center justify-center gap-2 transition btn-tactile"
+                        >
+                          <span>
+                            🛡️ Pakai 1x Kartu Veto (Skip Tanpa Debat • -5%)
+                          </span>
+                        </button>
+                      )}
                     </div>
                   )}
 
-                  {gameStage === "consequence" && (
+                  {gameStage === "consequence" && mode !== "solo" && (
                     <div
                       key={`conseq-${round}`}
                       className="bg-cardbg/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
                     >
                       <div className="flex items-center justify-between mb-3">
                         <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                          ⚠️ KARTU KONSEKUENSI TERBUKA
-                        </span>
-                        <span className="text-xs font-bold text-slate-400">
-                          {responder.name}
+                          🕵️ DETEKTOR PENCITRAAN • GILIRAN{" "}
+                          {cardPartner.name.toUpperCase()}
                         </span>
                       </div>
 
-                      {mode === "solo" && cardPartner.reactAccept && (
-                        <div className="mb-4 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-200">
-                          <span className="font-bold text-indigo-300">
-                            {cardPartner.name} ({cardPartner.age} thn):
-                          </span>{" "}
-                          &ldquo;{cardPartner.reactAccept}&rdquo;
-                        </div>
-                      )}
-
                       <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 mb-4">
+                        <p className="text-xs text-amber-300 font-bold mb-1">
+                          {responder.name} menekan TERIMA untuk masalahmu:
+                        </p>
                         <p className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
                           &ldquo;{currentCard.consequenceQuestion}&rdquo;
                         </p>
-                        {personalTrap && (
-                          <div className="mt-3 pt-3 border-t border-slate-800/90">
-                            <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
-                              🪞 Cermin Pengakuanmu Sendiri di Awal:
-                            </span>
-                            <p className="text-xs text-slate-300 italic">
-                              Padahal di awal {responder.name} sendiri ngaku:
-                              &ldquo;{personalTrap.statement}&rdquo;
-                            </p>
-                          </div>
-                        )}
                       </div>
 
-                      <p className="text-xs text-slate-400 mb-4 text-center">
-                        Setelah sadar tabrakan sifat ini, kamu beneran sanggup
-                        atau mulai nyesel?
+                      <p className="text-xs text-slate-300 mb-4 leading-relaxed">
+                        Menurut <strong className="text-emerald-400">{cardPartner.name}</strong>, apakah{" "}
+                        <strong className="text-rose-400">{responder.name}</strong>{" "}
+                        beneran siap menerima konsekuensi ini atau cuma{" "}
+                        <strong>pencitraan di awal</strong>?
                       </p>
 
                       <div className="space-y-2.5">
@@ -3136,11 +3853,11 @@ export default function SefrekuensiGame() {
                           type="button"
                           onClick={(e) => {
                             glitterBurst(e);
-                            resolveConsequence(true);
+                            resolveConsequenceAudit(true);
                           }}
                           className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-between btn-tactile"
                         >
-                          <span>💪 Tetap Terima Konsekuensinya</span>
+                          <span>🤝 Percaya Komitmennya</span>
                           <span className="font-mono bg-black/25 px-2.5 py-1 rounded-lg text-emerald-200">
                             +10%
                           </span>
@@ -3148,12 +3865,14 @@ export default function SefrekuensiGame() {
 
                         <button
                           type="button"
-                          onClick={() => resolveConsequence(false)}
+                          onClick={() => resolveConsequenceAudit(false)}
                           className="w-full py-3.5 px-4 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border-2 border-red-500/60 text-red-300 font-extrabold text-xs sm:text-sm flex items-center justify-between btn-tactile"
                         >
-                          <span>😰 Ragu / Menyesal Pilih Terima</span>
+                          <span>
+                            🕵️ Tuduh Pencitraan! (Audit 20 Jawaban Awal)
+                          </span>
                           <span className="font-mono bg-red-500/20 px-2.5 py-1 rounded-lg text-red-300">
-                            -12%
+                            -15% / +10%
                           </span>
                         </button>
                       </div>
@@ -3206,8 +3925,8 @@ export default function SefrekuensiGame() {
                       </div>
 
                       <p className="text-xs font-bold text-slate-300 mb-2.5">
-                        Sebagai pemilik masalah, pilih 1 opsi kompromi untuk
-                        ditawarkan ke {responder.name}:
+                        Pilih 1 opsi kompromi untuk ditawarkan ke{" "}
+                        {cardPartner.name}:
                       </p>
 
                       <div className="space-y-2.5">
@@ -3355,6 +4074,10 @@ export default function SefrekuensiGame() {
                 <span className="text-[11px] font-mono text-slate-500">
                   AFK Berturut-turut: {consecutiveTimeouts}/3
                 </span>
+                <span className="text-[11px] text-slate-500">
+                  {DECK_THEME_META[deckTheme].emoji}{" "}
+                  {DECK_THEME_META[deckTheme].label}
+                </span>
               </div>
             </section>
           )}
@@ -3417,7 +4140,7 @@ export default function SefrekuensiGame() {
                   ? "Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Jangan buru-buru DP gedung — pacaran dulu aja sambil benerin komunikasi!"
                   : endingCustomReason
                   ? `${endingCustomReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama di pengadilan agama!`
-                  : "Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!"}
+                  : "Terlalu banyak pencitraan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!"}
               </p>
 
               <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
@@ -3431,21 +4154,44 @@ export default function SefrekuensiGame() {
               </div>
             </div>
 
+            <div
+              className={`p-4 rounded-3xl border ${
+                battery >= 80
+                  ? "bg-emerald-500/10 border-emerald-500/40"
+                  : "bg-amber-500/10 border-amber-500/40"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span
+                  className={`text-[11px] font-mono font-extrabold uppercase tracking-wider ${
+                    battery >= 80 ? "text-emerald-400" : "text-amber-400"
+                  }`}
+                >
+                  {battery >= 80
+                    ? "🎯 TARUHAN NYATA • LULUS TANTANGAN (>= 80%)"
+                    : "🎯 TARUHAN NYATA • WAJIB DILAKSANAKAN (< 80%)"}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-bold text-white">
+                {customStake || STAKE_PRESETS[0]}
+              </p>
+            </div>
+
             <div className="grid grid-cols-4 gap-2">
               <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
                 <span className="block font-mono font-extrabold text-lg text-emerald-400">
                   {stats.terimaMantap}
                 </span>
                 <span className="text-[10px] text-slate-400 leading-tight block">
-                  Terima (+10%)
+                  Dipercaya (+10%)
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
                 <span className="block font-mono font-extrabold text-lg text-rose-400">
-                  {stats.menyesal}
+                  {stats.pencitraanTerbongkar}
                 </span>
                 <span className="text-[10px] text-slate-400 leading-tight block">
-                  Nyesel (-12%)
+                  Pencitraan (-15%)
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
@@ -3453,7 +4199,7 @@ export default function SefrekuensiGame() {
                   {stats.kompromiSepakat}
                 </span>
                 <span className="text-[10px] text-slate-400 leading-tight block">
-                  Sepakat (+5%)
+                  Kompromi (+5%/15%)
                 </span>
               </div>
               <div className="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/25 text-center">
@@ -3533,7 +4279,7 @@ export default function SefrekuensiGame() {
                 <span>
                   {isDownloadingImage
                     ? "Menyiapkan Gambar Rapor..."
-                    : "📸 Download Gambar Rapor"}
+                    : "📸 Download Gambar Rapor (.PNG)"}
                 </span>
               </button>
 
