@@ -1,22 +1,31 @@
-import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
-  variable: "--font-jakarta",
-});
-
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
-  weight: ["500", "700", "800"],
-  variable: "--font-mono",
-});
-
 export const metadata: Metadata = {
-  title: "BESOK KAWIN? — Dating & Red Flag Card Game",
-  description: "Uji nyali sebelum DP gedung. Buka borokmu di depan, biar nggak nyesel di KUA.",
+  metadataBase: new URL("https://kartu-visi.vercel.app"),
+  title: "BESOK KAWIN? — Kuis Visi & Komunikasi Pasangan",
+  description:
+    "Permainan kartu 20 pertanyaan jujur untuk menguji keselarasan visi, komunikasi, dan kompromi bersama pasangan.",
+  openGraph: {
+    title: "BESOK KAWIN? — Kuis Visi & Komunikasi Pasangan",
+    description:
+      "Uji keselarasan visi dan kompromi bareng pasangan lewat 20 kartu pertanyaan jujur.",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "BESOK KAWIN? — Kuis Visi & Komunikasi Pasangan",
+    description:
+      "Uji keselarasan visi dan kompromi bareng pasangan lewat 20 kartu pertanyaan jujur.",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#07080c",
 };
 
 export default function RootLayout({
@@ -25,12 +34,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="id" className="dark">
-      <body
-        className={`${jakarta.variable} ${jetbrains.variable} font-sans bg-grid-pattern min-h-screen flex flex-col justify-between selection:bg-rose-500 selection:text-white`}
-      >
-        {children}
-      </body>
+    <html lang="id">
+      <body className="bg-[#07080c] text-stone-100 antialiased">{children}</body>
     </html>
   );
 }
