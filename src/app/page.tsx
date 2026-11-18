@@ -52,6 +52,7 @@ interface ToastItem {
 type ScreenType =
   | "register"
   | "quiz"
+  | "waiting-host"
   | "mode"
   | "partner-join"
   | "game"
@@ -340,9 +341,11 @@ export default function SefrekuensiGame() {
 
   // Screen Navigation
   const [screen, setScreen] = useState<ScreenType>("register");
+  const screenRef = useRef<ScreenType>("register");
   const [animKey, setAnimKey] = useState(0);
 
   const goScreen = useCallback((next: ScreenType) => {
+    screenRef.current = next;
     setScreen(next);
     setAnimKey((k) => k + 1);
     if (typeof window !== "undefined") {
@@ -366,14 +369,28 @@ export default function SefrekuensiGame() {
   } | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
+  // Auto-detect ?code=SEFREK-XXX from Invite Link
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const urlCode = params.get("code");
+    if (urlCode && urlCode.trim().length >= 4) {
+      setLandingTab("invite");
+      setInputJoinCode(urlCode.trim().toUpperCase());
+    }
+  }, []);
+
   // Core Players & Mode State
   const [inviteCode, setInviteCode] = useState("");
+  const [roomOnlineStatus, setRoomOnlineStatus] = useState<
+    "idle" | "creating" | "connected" | "error"
+  >("idle");
   const [myOnlineRole, setMyOnlineRole] = useState<"player1" | "player2">(
     "player1"
   );
   const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
   const [player2, setPlayer2] = useState<PlayerProfile | null>(null);
-  const [mode, setMode] = useState<"solo" | "couple" | "online">("solo");
+  const [mode, setMode] = useState<"solo" | "couple" | "online">("online");
   const [quizTarget, setQuizTarget] = useState<"player1" | "player2">(
     "player1"
   );
@@ -423,6 +440,7 @@ export default function SefrekuensiGame() {
   const [endingCustomReason, setEndingCustomReason] = useState("");
 
   const prevBatteryRef = useRef(50);
+  const syncedStepRef = useRef("");
 
   const triggerBatteryDelta = useCallback((delta: number) => {
     if (delta === 0) return;
@@ -432,113 +450,132 @@ export default function SefrekuensiGame() {
     }
   }, []);
 
-  // Publish Room to Firestore when Player 1 enters Screen 3
-  useEffect(() => {
-    if (
-      screen !== "mode" ||
-      !player1 ||
-      !inviteCode ||
-      !isFirebaseReady ||
-      !db
-    ) {
-      return;
-    }
-    const roomRef = doc(db, "rooms", inviteCode);
-    setDoc(
-      roomRef,
-      {
-        code: inviteCode,
-        player1,
-        player2: null,
-        status: "waiting",
-        round: 1,
-        battery: 50,
-        stage: "dilemma",
-        negChoice1: null,
-        history: [],
-        stats: {
-          terimaMantap: 0,
-          menyesal: 0,
-          kompromiSepakat: 0,
-          deadlockOrAfk: 0,
-        },
-        updatedAt: Date.now(),
-      },
-      { merge: true }
-    ).catch(() => {});
-  }, [screen, player1, inviteCode]);
+  // Create/Sync Initial Online Room when Player 1 Registers
+  const publishOnlineRoom = useCallback(
+    async (code: string, hostProfile: PlayerProfile, status: string) => {
+      if (!isFirebaseReady || !db) {
+        setRoomOnlineStatus("error");
+        return;
+      }
+      setRoomOnlineStatus("creating");
+      try {
+        await setDoc(
+          doc(db, "rooms", code),
+          {
+            code,
+            player1: hostProfile,
+            player2: null,
+            status,
+            round: 1,
+            battery: 50,
+            stage: "dilemma",
+            negChoice1: null,
+            consecutiveTimeouts: 0,
+            history: [],
+            stats: {
+              terimaMantap: 0,
+              menyesal: 0,
+              kompromiSepakat: 0,
+              deadlockOrAfk: 0,
+            },
+            updatedAt: Date.now(),
+          },
+          { merge: true }
+        );
+        setRoomOnlineStatus("connected");
+      } catch {
+        setRoomOnlineStatus("error");
+      }
+    },
+    []
+  );
 
-  // Listen to Firestore Room for Online 2-Device Multiplayer
+  // Real-time Firestore Listener for 2-Device Online Multiplayer
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
-    if (mode === "solo" || mode === "couple") return;
+    if (mode !== "online") return;
 
     const roomRef = doc(db, "rooms", inviteCode);
-    const unsubscribe = onSnapshot(roomRef, (snap) => {
-      if (!snap.exists()) return;
-      const data = snap.data();
+    const unsubscribe = onSnapshot(
+      roomRef,
+      (snap) => {
+        if (!snap.exists()) return;
+        const data = snap.data();
 
-      if (data.player1) setPlayer1(data.player1);
-      if (data.player2) setPlayer2(data.player2);
-      if (data.deck) setDeck(data.deck);
-      if (data.stage) setGameStage(data.stage);
-      if (typeof data.negChoice1 === "number" || data.negChoice1 === null) {
-        setCoupleNegotiationP1Choice(data.negChoice1);
-      }
-      if (data.history) setHistory(data.history);
-      if (data.stats) setStats(data.stats);
-      if (typeof data.consecutiveTimeouts === "number") {
-        setConsecutiveTimeouts(data.consecutiveTimeouts);
-      }
-      if (data.endingReason) setEndingCustomReason(data.endingReason);
-
-      if (typeof data.battery === "number") {
-        const diff = data.battery - prevBatteryRef.current;
-        if (diff !== 0) {
-          triggerBatteryDelta(diff);
-          prevBatteryRef.current = data.battery;
+        if (data.player1) setPlayer1(data.player1);
+        if (data.player2) setPlayer2(data.player2);
+        if (data.deck) setDeck(data.deck);
+        if (data.stage) setGameStage(data.stage);
+        if (typeof data.negChoice1 === "number" || data.negChoice1 === null) {
+          setCoupleNegotiationP1Choice(data.negChoice1);
         }
-        setBattery(data.battery);
-      }
+        if (data.history) setHistory(data.history);
+        if (data.stats) setStats(data.stats);
+        if (typeof data.consecutiveTimeouts === "number") {
+          setConsecutiveTimeouts(data.consecutiveTimeouts);
+        }
+        if (data.endingReason) setEndingCustomReason(data.endingReason);
 
-      if (typeof data.round === "number") {
-        setRound(data.round);
-      }
+        if (typeof data.battery === "number") {
+          const diff = data.battery - prevBatteryRef.current;
+          if (diff !== 0) {
+            triggerBatteryDelta(diff);
+            prevBatteryRef.current = data.battery;
+          }
+          setBattery(data.battery);
+        }
 
-      if (
-        data.status === "playing" &&
-        data.player1 &&
-        data.player2 &&
-        screen === "mode"
-      ) {
-        setMode("online");
-        setMyOnlineRole("player1");
-        prevBatteryRef.current = data.battery ?? 50;
-        setTimerSeconds(60);
-        setTimerRunning(true);
-        sfxCharge();
-        showToast(
-          `${data.player2.name} bergabung lewat kode undangan!`,
-          "success"
-        );
-        goScreen("game");
-      }
+        if (typeof data.round === "number") {
+          setRound(data.round);
+        }
 
-      if (data.status === "finished" && screen === "game") {
-        setTimerRunning(false);
-        const finalPct = data.battery ?? 0;
-        if (finalPct >= 80) sfxWin();
-        else if (finalPct >= 45) sfxCharge();
-        else sfxPenalty();
-        goScreen("ending");
+        // Track round/stage transitions to reset 60s turn timer cleanly
+        const stepSignature = `${data.status}-${data.round}-${data.stage}`;
+        if (stepSignature !== syncedStepRef.current) {
+          syncedStepRef.current = stepSignature;
+          if (data.status === "playing") {
+            setTimerSeconds(60);
+            setTimerRunning(true);
+          }
+        }
+
+        // Transition both devices into Game Arena once both finished their 20 questions
+        if (
+          data.status === "playing" &&
+          data.player1 &&
+          data.player2 &&
+          (screenRef.current === "mode" || screenRef.current === "waiting-host")
+        ) {
+          prevBatteryRef.current = data.battery ?? 50;
+          setTimerSeconds(60);
+          setTimerRunning(true);
+          sfxCharge();
+          showToast(
+            `${data.player1.name} & ${data.player2.name} siap! Memulai permainan...`,
+            "success"
+          );
+          goScreen("game");
+        }
+
+        // Transition both devices to Ending Screen when game finishes
+        if (data.status === "finished" && screenRef.current === "game") {
+          setTimerRunning(false);
+          const finalPct = data.battery ?? 0;
+          if (finalPct >= 80) sfxWin();
+          else if (finalPct >= 45) sfxCharge();
+          else sfxPenalty();
+          goScreen("ending");
+        }
+      },
+      () => {
+        setRoomOnlineStatus("error");
       }
-    });
+    );
 
     return () => unsubscribe();
   }, [
     inviteCode,
     mode,
-    screen,
     goScreen,
     showToast,
     sfxCharge,
@@ -547,7 +584,7 @@ export default function SefrekuensiGame() {
     triggerBatteryDelta,
   ]);
 
-  // Countdown Timer Effect
+  // Countdown Timer Effect (Runs only on the active turn device in Online Mode)
   const currentCard = deck[round - 1];
   const isMyOnlineTurn =
     mode !== "online" ||
@@ -672,21 +709,41 @@ export default function SefrekuensiGame() {
         return;
       }
 
-      // Check Firestore for live room first (unless using offline demo SEFREK-888)
-      if (code !== "SEFREK-888" && isFirebaseReady && db) {
+      // Live Online Room via Firebase Firestore
+      if (code !== "SEFREK-888") {
+        if (!isFirebaseReady || !db) {
+          showRegisterError(
+            "Server Online Belum Dikonfigurasi",
+            "Environment variables Firebase belum terpasang di server. Gunakan Kode Demo SEFREK-888 atau mainkan Mode Solo / 1 HP."
+          );
+          return;
+        }
+
         setIsBusy(true);
         try {
-          const snap = await getDoc(doc(db, "rooms", code));
+          const roomRef = doc(db, "rooms", code);
+          const snap = await getDoc(roomRef);
           if (!snap.exists()) {
             showRegisterError(
               "Kode Undangan Tidak Ditemukan!",
-              `Room dengan kode ${code} tidak ditemukan atau sudah berakhir.`
+              `Room dengan kode ${code} tidak ditemukan atau sudah berakhir. Pastikan pasanganmu sudah mendaftar dan membuat kode.`
             );
             setIsBusy(false);
             return;
           }
+
           const roomData = snap.data();
           const hostProfile: PlayerProfile = roomData.player1;
+
+          if (roomData.player2 && roomData.player2.email !== email) {
+            showRegisterError(
+              "Room Sudah Penuh!",
+              `Kode ${code} sudah dipakai oleh pasangan lain.`
+            );
+            setIsBusy(false);
+            return;
+          }
+
           if (regGender === hostProfile.gender) {
             showRegisterError(
               "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
@@ -696,36 +753,48 @@ export default function SefrekuensiGame() {
             return;
           }
 
-          setRegisterError(null);
-          setInviteCode(code);
-          setMode("online");
-          setMyOnlineRole("player2");
-          setPlayer1(hostProfile);
-          setPlayer2({
+          const p2Profile: PlayerProfile = {
             name,
             email,
             gender: regGender,
             age,
             questions: build20QuestionsForProfile(regGender, age),
             answers: {},
-          });
+          };
+
+          await setDoc(
+            roomRef,
+            {
+              player2: p2Profile,
+              updatedAt: Date.now(),
+            },
+            { merge: true }
+          );
+
+          setRegisterError(null);
+          setInviteCode(code);
+          setMode("online");
+          setMyOnlineRole("player2");
+          setPlayer1(hostProfile);
+          setPlayer2(p2Profile);
           setQuizTarget("player2");
           setQuizIndex(0);
           setIsBusy(false);
           sfxTap();
+          showToast(`Terhubung ke room ${hostProfile.name}!`, "success");
           goScreen("quiz");
           return;
         } catch {
           showRegisterError(
             "Gagal Memeriksa Kode",
-            "Periksa koneksi internetmu atau coba Kode Demo SEFREK-888."
+            "Periksa koneksi internet atau Rules Firestore kamu."
           );
           setIsBusy(false);
           return;
         }
       }
 
-      // Simulated Host Profile for Demo Invite Code SEFREK-888
+      // Simulated Host Profile for Offline Demo Invite Code SEFREK-888
       const simulatedHost: PlayerProfile = {
         name: "Arkan (Pengundang)",
         email: "arkan@host.id",
@@ -766,24 +835,29 @@ export default function SefrekuensiGame() {
       return;
     }
 
-    // Normal New Player Registration
+    // Normal New Player (Host) Registration
     sfxTap();
     setRegisterError(null);
     const newCode = "SEFREK-" + Math.floor(100 + Math.random() * 899);
-    setMode("online");
-    setMyOnlineRole("player1");
-    setInviteCode(newCode);
-    setPlayer1({
+    const newHostProfile: PlayerProfile = {
       name,
       email,
       gender: regGender,
       age,
       questions: build20QuestionsForProfile(regGender, age),
       answers: {},
-    });
+    };
+
+    setMode("online");
+    setMyOnlineRole("player1");
+    setInviteCode(newCode);
+    setPlayer1(newHostProfile);
     setPlayer2(null);
     setQuizTarget("player1");
     setQuizIndex(0);
+
+    // Publish room immediately so partner can join anytime
+    publishOnlineRoom(newCode, newHostProfile, "p1_quiz");
     goScreen("quiz");
   };
 
@@ -795,59 +869,125 @@ export default function SefrekuensiGame() {
     updatedP1: PlayerProfile | null,
     updatedP2: PlayerProfile | null
   ) => {
-    if (quizTarget === "player2" && updatedP1 && updatedP2) {
-      if (mode === "online" && isFirebaseReady && db && inviteCode) {
-        setIsBusy(true);
-        try {
-          const generatedDeck = buildMatchDeck(
-            updatedP1,
-            updatedP2,
-            "online",
-            maxRounds
-          );
-          const roomRef = doc(db, "rooms", inviteCode);
-          await runTransaction(db, async (tx) => {
-            const snap = await tx.get(roomRef);
-            if (!snap.exists()) return;
-            tx.update(roomRef, {
-              player2: updatedP2,
-              deck: generatedDeck,
-              status: "playing",
-              round: 1,
-              battery: 50,
-              stage: "dilemma",
-              negChoice1: null,
-              consecutiveTimeouts: 0,
-              history: [],
-              stats: {
-                terimaMantap: 0,
-                menyesal: 0,
-                kompromiSepakat: 0,
-                deadlockOrAfk: 0,
-              },
-              updatedAt: Date.now(),
-            });
-          });
-          setDeck(generatedDeck);
-          setBattery(50);
-          prevBatteryRef.current = 50;
-          setRound(1);
-          setGameStage("dilemma");
-          setTimerSeconds(60);
-          setTimerRunning(true);
-          showToast(
-            `Dek masalah ${updatedP2.name} siap! Memulai permainan...`,
-            "success"
-          );
-          goScreen("game");
-        } catch {
-          showToast("Gagal memulai sesi online.", "error");
-        } finally {
-          setIsBusy(false);
+    // Case A: Online 2-Device Mode
+    if (mode === "online" && isFirebaseReady && db && inviteCode) {
+      setIsBusy(true);
+      try {
+        const roomRef = doc(db, "rooms", inviteCode);
+        let shouldStartGame = false;
+        let waitingForHost = false;
+
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(roomRef);
+          if (!snap.exists()) return;
+          const data = snap.data();
+
+          if (myOnlineRole === "player1" && updatedP1) {
+            const p2Data = data.player2 as PlayerProfile | null;
+            const p2Done =
+              p2Data &&
+              Object.keys(p2Data.answers || {}).length >=
+                p2Data.questions.length;
+
+            if (p2Done && p2Data) {
+              const generatedDeck = buildMatchDeck(
+                updatedP1,
+                p2Data,
+                "online",
+                maxRounds
+              );
+              tx.update(roomRef, {
+                player1: updatedP1,
+                deck: generatedDeck,
+                status: "playing",
+                round: 1,
+                battery: 50,
+                stage: "dilemma",
+                negChoice1: null,
+                consecutiveTimeouts: 0,
+                history: [],
+                stats: {
+                  terimaMantap: 0,
+                  menyesal: 0,
+                  kompromiSepakat: 0,
+                  deadlockOrAfk: 0,
+                },
+                updatedAt: Date.now(),
+              });
+              shouldStartGame = true;
+            } else {
+              tx.update(roomRef, {
+                player1: updatedP1,
+                status: "waiting",
+                updatedAt: Date.now(),
+              });
+            }
+          } else if (myOnlineRole === "player2" && updatedP2) {
+            const p1Data = data.player1 as PlayerProfile | null;
+            const p1Done =
+              p1Data &&
+              Object.keys(p1Data.answers || {}).length >=
+                p1Data.questions.length;
+
+            if (p1Done && p1Data) {
+              const generatedDeck = buildMatchDeck(
+                p1Data,
+                updatedP2,
+                "online",
+                maxRounds
+              );
+              tx.update(roomRef, {
+                player2: updatedP2,
+                deck: generatedDeck,
+                status: "playing",
+                round: 1,
+                battery: 50,
+                stage: "dilemma",
+                negChoice1: null,
+                consecutiveTimeouts: 0,
+                history: [],
+                stats: {
+                  terimaMantap: 0,
+                  menyesal: 0,
+                  kompromiSepakat: 0,
+                  deadlockOrAfk: 0,
+                },
+                updatedAt: Date.now(),
+              });
+              shouldStartGame = true;
+            } else {
+              tx.update(roomRef, {
+                player2: updatedP2,
+                status: "p2_ready",
+                updatedAt: Date.now(),
+              });
+              waitingForHost = true;
+            }
+          }
+        });
+
+        setIsBusy(false);
+
+        if (shouldStartGame) {
+          // onSnapshot will immediately transition both devices to "game"
+          return;
         }
+        if (waitingForHost) {
+          goScreen("waiting-host");
+          return;
+        }
+        goScreen("mode");
+        return;
+      } catch {
+        setIsBusy(false);
+        showToast("Gagal menyimpan jawaban ke server online.", "error");
+        if (myOnlineRole === "player1") goScreen("mode");
         return;
       }
+    }
 
+    // Case B: Local Pass & Play Couple Mode
+    if (quizTarget === "player2" && updatedP1 && updatedP2) {
       showToast(
         `Dek masalah ${updatedP2.name} siap! Memulai permainan pasangan...`,
         "success"
@@ -905,7 +1045,7 @@ export default function SefrekuensiGame() {
     if (quizTarget === "player1") setPlayer1(updatedProfile);
     else setPlayer2(updatedProfile);
 
-    showToast("Sisa pertanyaan otomatis terisi untuk simulasi!", "success");
+    showToast("Sisa pertanyaan otomatis terisi!", "success");
     await finishQuizPhase(nextP1, nextP2);
   };
 
@@ -1288,7 +1428,6 @@ export default function SefrekuensiGame() {
     sfxTap();
     setCoupleNegotiationP1Choice(choiceIdx);
     if (mode === "online" && inviteCode && isFirebaseReady && db) {
-      setTimerSeconds(60);
       await setDoc(
         doc(db, "rooms", inviteCode),
         { stage: "negotiate2", negChoice1: choiceIdx, updatedAt: Date.now() },
@@ -1357,6 +1496,17 @@ export default function SefrekuensiGame() {
   };
 
   // ==================== ENDING & RESET HELPERS ====================
+  const copyInviteShareLink = () => {
+    if (typeof window === "undefined") return;
+    const baseUrl = window.location.origin + window.location.pathname;
+    const shareUrl = `${baseUrl}?code=${inviteCode}`;
+    const shareMsg = `Uji kecocokan & buka borok kita di SEFREKUENSI!\nLink: ${shareUrl}\nAtau masukkan Kode Undangan: ${inviteCode}`;
+    copyTextSafe(
+      shareMsg,
+      `Link & kode undangan ${inviteCode} disalin! Kirim ke WhatsApp pasanganmu.`
+    );
+  };
+
   const copyMatchReport = () => {
     if (!player1 || !player2) return;
     const title =
@@ -1379,9 +1529,13 @@ export default function SefrekuensiGame() {
     sfxTap();
     setTimerRunning(false);
     setPlayer2(null);
+    const nextCode = "SEFREK-" + Math.floor(100 + Math.random() * 899);
     setMode("online");
     setMyOnlineRole("player1");
-    setInviteCode("SEFREK-" + Math.floor(100 + Math.random() * 899));
+    setInviteCode(nextCode);
+    if (player1) {
+      publishOnlineRoom(nextCode, player1, "waiting");
+    }
     goScreen("mode");
   };
 
@@ -1493,6 +1647,13 @@ export default function SefrekuensiGame() {
           </div>
 
           <div className="flex items-center gap-2">
+            {mode === "online" && inviteCode && screen !== "register" && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                {inviteCode}
+              </span>
+            )}
+
             <button
               type="button"
               onClick={() => {
@@ -1782,7 +1943,7 @@ export default function SefrekuensiGame() {
                 >
                   <span>
                     {isBusy
-                      ? "Memeriksa Kode..."
+                      ? "Menghubungkan Room..."
                       : landingTab === "new"
                       ? "Lanjut ke 20 Pengakuan Hidup"
                       : "Gabung Kode & Isi 20 Pengakuan"}
@@ -1881,7 +2042,7 @@ export default function SefrekuensiGame() {
                     🔥 Iya lagi
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Setuju banget — masuk ke Dek Masalah Utama
+                    Setuju banget
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
@@ -1900,7 +2061,7 @@ export default function SefrekuensiGame() {
                     🤔 Kayanya sih
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
+                    Ragu-ragu
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
@@ -1919,7 +2080,7 @@ export default function SefrekuensiGame() {
                     🛡️ Engga
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Bukan gua banget — dibuang dari dek permainan
+                    Bukan gua banget
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
@@ -1935,8 +2096,30 @@ export default function SefrekuensiGame() {
                 onClick={autoCompleteQuizDemo}
                 className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50"
               >
-                ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
-              </button>
+                
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* SCREEN 2B: MENUNGGU HOST SELESAI JAWAB 20 PERTANYAAN (ONLINE)       */}
+        {/* =================================================================== */}
+        {screen === "waiting-host" && player1 && player2 && (
+          <section key={animKey} className="animate-card-enter">
+            <div className="bg-cardbg/95 border-2 border-emerald-500/40 rounded-3xl p-7 text-center shadow-2xl">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-3xl mb-4 animate-bounce">
+                ⏳
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                Room: {inviteCode}
+              </span>
+              <h2 className="text-xl font-extrabold text-white mt-3">
+                20 Pengakuanmu Sudah Terkunci!
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-sm mx-auto leading-relaxed">
+                Menunggu <strong className="text-rose-400">{player1.name}</strong>{" "}
+                menyelesaikan 20 pengakuan hidupnya. Begitu selesai, permainan
+                otomatis dimulai di kedua perangkat!
+              </p>
             </div>
           </section>
         )}
@@ -2035,7 +2218,87 @@ export default function SefrekuensiGame() {
               </p>
             </div>
 
-            {/* MODE A: SOLO (LAWAN BOT AI) */}
+            {/* MODE A: AJAK PASANGAN ONLINE BEDA PERANGKAT (KODE UNDANGAN) */}
+            <div className="bg-cardbg/95 border-2 border-emerald-500/50 rounded-3xl p-5 shadow-xl shadow-emerald-500/5 transition">
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-lg shrink-0">
+                    💌
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-white text-base">
+                      Main Online Beda Perangkat
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Kirim kode/link ke HP pasangan lawan jenis. Layar otomatis
+                      mulai saat dia bergabung!
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Room Status Indicator */}
+              <div className="mb-3">
+                {roomOnlineStatus === "connected" ? (
+                  <div className="px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <span>
+                      Room Online Aktif — Menunggu pasangan masukkan kode...
+                    </span>
+                  </div>
+                ) : roomOnlineStatus === "creating" ? (
+                  <div className="px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 font-semibold">
+                    ⏳ Menyiapkan room online...
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 font-semibold">
+                    ⚠️ Firebase belum terhubung (cek env var / rules Firestore).
+                  </div>
+                )}
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                    Kode Undangan Kamu
+                  </span>
+                  <span className="font-mono font-extrabold text-xl text-emerald-400 tracking-wider">
+                    {inviteCode}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      copyTextSafe(
+                        inviteCode,
+                        `Kode undangan ${inviteCode} disalin!`
+                      )
+                    }
+                    className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-bold btn-tactile"
+                  >
+                    Salin Kode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={copyInviteShareLink}
+                    className="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-emerald-500/20 btn-tactile"
+                  >
+                    <span>🔗 Salin Link Undangan</span>
+                  </button>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={openPartnerSimulatorModal}
+                className="w-full py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile"
+              >
+                📲 Atau Main Berdua Gantian di 1 HP Ini
+              </button>
+            </div>
+
+            {/* MODE B: SOLO (LAWAN BOT AI) */}
             <div className="bg-cardbg/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-5 transition">
               <div className="flex items-start justify-between gap-3 mb-4">
                 <div className="flex items-center gap-3">
@@ -2114,80 +2377,18 @@ export default function SefrekuensiGame() {
                 Mulai Main Lawan Bot AI →
               </button>
             </div>
-
-            {/* MODE B: AJAK PASANGAN (KODE UNDANGAN) */}
-            <div className="bg-cardbg/95 border-2 border-slate-800 hover:border-emerald-500/50 rounded-3xl p-5 transition">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-lg">
-                  💌
-                </div>
-                <div>
-                  <h4 className="font-extrabold text-white text-base">
-                    Mode Ajak Pasangan (Kode Undangan)
-                  </h4>
-                  <p className="text-xs text-slate-400">
-                    Kirim kode ke pasangan lawan jenis (bisa beda HP secara
-                    online atau gantian di HP ini).
-                  </p>
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 mb-3">
-                <div>
-                  <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">
-                    Kode Undangan Kamu
-                  </span>
-                  <span className="font-mono font-extrabold text-lg text-emerald-400 tracking-wider">
-                    {inviteCode}
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    copyTextSafe(
-                      inviteCode,
-                      `Kode undangan ${inviteCode} disalin! Kirim ke pasangan lawan jenismu.`
-                    )
-                  }
-                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 btn-tactile"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                    />
-                  </svg>
-                  Salin Kode
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={openPartnerSimulatorModal}
-                className="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile"
-              >
-                📲 Main Berdua di Perangkat Ini / Simulasi Pasangan
-              </button>
-            </div>
           </section>
         )}
 
         {/* =================================================================== */}
-        {/* SCREEN 3B: PENDAFTARAN PASANGAN (PASS & PLAY / SIMULASI)            */}
+        {/* SCREEN 3B: PENDAFTARAN PASANGAN (PASS & PLAY 1 HP)                  */}
         {/* =================================================================== */}
         {screen === "partner-join" && player1 && (
           <section key={animKey} className="animate-card-enter">
             <div className="bg-cardbg/95 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl">
               <div className="flex items-center justify-between mb-4">
                 <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  Kode: <span>{inviteCode}</span>
+                  Mode 1 Perangkat
                 </span>
                 <button
                   type="button"
@@ -2287,6 +2488,7 @@ export default function SefrekuensiGame() {
                     onClick={quickFillPartnerDemo}
                     className="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4"
                   >
+                    ⚡ Isi Cepat Data Pasangan
                   </button>
                 </div>
 
@@ -2431,16 +2633,16 @@ export default function SefrekuensiGame() {
               {/* ONLINE WAITING STATE WHEN IT'S PARTNER'S TURN */}
               {mode === "online" && !isMyOnlineTurn ? (
                 <div className="bg-cardbg/95 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-7 text-center shadow-2xl animate-card-enter">
-                  <div className="text-4xl mb-3">⏳</div>
+                  <div className="text-4xl mb-3 animate-pulse">⏳</div>
                   <h3 className="text-lg font-extrabold text-white">
                     Menunggu Giliran{" "}
                     {gameStage === "negotiate2"
                       ? cardPartner.name
                       : responder.name}
                   </h3>
-                  <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto">
-                    Pasanganmu sedang membaca kartu dan menentukan pilihan di
-                    perangkatnya...
+                  <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto leading-relaxed">
+                    Pasanganmu sedang membaca kartu &ldquo;{currentCard.category}
+                    &rdquo; dan menentukan pilihan di perangkatnya...
                   </p>
                 </div>
               ) : (
@@ -2774,16 +2976,18 @@ export default function SefrekuensiGame() {
                 <span className="text-[11px] font-mono text-slate-500">
                   AFK Berturut-turut: {consecutiveTimeouts}/3
                 </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTimerRunning(false);
-                    handleTimeoutPenalty();
-                  }}
-                  className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
-                >
-                  💤 Simulasi Timeout / Pasangan AFK (-15%)
-                </button>
+                {isMyOnlineTurn && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimerRunning(false);
+                      handleTimeoutPenalty();
+                    }}
+                    className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
+                  >
+                    💤 Simulasi Timeout / Pasangan AFK (-15%)
+                  </button>
+                )}
               </div>
             </section>
           )}
@@ -2964,7 +3168,7 @@ export default function SefrekuensiGame() {
                 onClick={replaySameProfile}
                 className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile"
               >
-                🔄 Ganti Pasangan
+                🔄 Ganti Pasangan / Buat Kode Baru
               </button>
               <button
                 type="button"
