@@ -544,7 +544,11 @@ export default function SefrekuensiGame() {
           data.status === "playing" &&
           data.player1 &&
           data.player2 &&
-          (screenRef.current === "mode" || screenRef.current === "waiting-host")
+          Array.isArray(data.deck) &&
+          data.deck.length > 0 &&
+          (screenRef.current === "mode" ||
+            screenRef.current === "waiting-host" ||
+            screenRef.current === "quiz")
         ) {
           prevBatteryRef.current = data.battery ?? 50;
           setTimerSeconds(60);
@@ -969,7 +973,12 @@ export default function SefrekuensiGame() {
         setIsBusy(false);
 
         if (shouldStartGame) {
-          // onSnapshot will immediately transition both devices to "game"
+          if (screenRef.current !== "game") {
+            prevBatteryRef.current = 50;
+            setTimerSeconds(60);
+            setTimerRunning(true);
+            goScreen("game");
+          }
           return;
         }
         if (waitingForHost) {
@@ -1175,7 +1184,7 @@ export default function SefrekuensiGame() {
     delta: number,
     newHistoryItem: HistoryItem,
     statKey: keyof typeof stats,
-    nextConsecutiveTimeouts: number
+    isTimeout = false
   ) => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     const roomRef = doc(db, "rooms", inviteCode);
@@ -1185,6 +1194,8 @@ export default function SefrekuensiGame() {
       const data = snap.data();
       const curBattery = (data.battery as number) ?? 50;
       const curRound = (data.round as number) ?? 1;
+      const curAfk = (data.consecutiveTimeouts as number) ?? 0;
+      const nextAfk = isTimeout ? curAfk + 1 : 0;
       const nextBattery = Math.max(0, Math.min(100, curBattery + delta));
       const prevHist = (data.history as HistoryItem[]) || [];
       const prevStats = (data.stats as typeof stats) || {
@@ -1198,7 +1209,7 @@ export default function SefrekuensiGame() {
         [statKey]: (prevStats[statKey] || 0) + 1,
       };
 
-      const isAfkEnd = nextConsecutiveTimeouts >= 3;
+      const isAfkEnd = nextAfk >= 3;
       const isBatteryZero = nextBattery <= 0;
       const isRoundsDone = curRound >= maxRounds;
       const isFinished = isAfkEnd || isBatteryZero || isRoundsDone;
@@ -1213,7 +1224,7 @@ export default function SefrekuensiGame() {
         battery: nextBattery,
         history: [...prevHist, newHistoryItem],
         stats: updatedStats,
-        consecutiveTimeouts: nextConsecutiveTimeouts,
+        consecutiveTimeouts: nextAfk,
         round: isFinished ? curRound : curRound + 1,
         stage: "dilemma",
         negChoice1: null,
@@ -1292,7 +1303,7 @@ export default function SefrekuensiGame() {
     );
 
     if (mode === "online") {
-      await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", nextAfk);
+      await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", true);
     } else {
       applyLocalRoundOutcome(-15, item, "deadlockOrAfk", nextAfk);
     }
@@ -1332,7 +1343,7 @@ export default function SefrekuensiGame() {
       };
       showToast("Komitmen penuh! Baterai Cinta +10%", "success");
       if (mode === "online") {
-        await syncOnlineRoundOutcome(10, item, "terimaMantap", 0);
+        await syncOnlineRoundOutcome(10, item, "terimaMantap", false);
       } else {
         applyLocalRoundOutcome(10, item, "terimaMantap", 0);
       }
@@ -1349,7 +1360,7 @@ export default function SefrekuensiGame() {
       };
       showToast("Asal mengiyakan lalu menyesal! Penalti berat -12%", "error");
       if (mode === "online") {
-        await syncOnlineRoundOutcome(-12, item, "menyesal", 0);
+        await syncOnlineRoundOutcome(-12, item, "menyesal", false);
       } else {
         applyLocalRoundOutcome(-12, item, "menyesal", 0);
       }
@@ -1464,7 +1475,7 @@ export default function SefrekuensiGame() {
         "success"
       );
       if (mode === "online") {
-        await syncOnlineRoundOutcome(5, item, "kompromiSepakat", 0);
+        await syncOnlineRoundOutcome(5, item, "kompromiSepakat", false);
       } else {
         applyLocalRoundOutcome(5, item, "kompromiSepakat", 0);
       }
@@ -1488,7 +1499,7 @@ export default function SefrekuensiGame() {
         "error"
       );
       if (mode === "online") {
-        await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", 0);
+        await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", false);
       } else {
         applyLocalRoundOutcome(-15, item, "deadlockOrAfk", 0);
       }
@@ -1648,10 +1659,20 @@ export default function SefrekuensiGame() {
 
           <div className="flex items-center gap-2">
             {mode === "online" && inviteCode && screen !== "register" && (
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400">
+              <button
+                type="button"
+                onClick={() =>
+                  copyTextSafe(
+                    inviteCode,
+                    `Kode undangan ${inviteCode} disalin!`
+                  )
+                }
+                title="Klik untuk salin kode room"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-400 transition"
+              >
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 {inviteCode}
-              </span>
+              </button>
             )}
 
             <button
@@ -2042,7 +2063,7 @@ export default function SefrekuensiGame() {
                     🔥 Iya lagi
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Setuju banget
+                    Setuju banget — masuk ke Dek Masalah Utama
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
@@ -2061,7 +2082,7 @@ export default function SefrekuensiGame() {
                     🤔 Kayanya sih
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Ragu-ragu
+                    Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
@@ -2080,7 +2101,7 @@ export default function SefrekuensiGame() {
                     🛡️ Engga
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Bukan gua banget
+                    Bukan gua banget — dibuang dari dek permainan
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
@@ -2096,7 +2117,9 @@ export default function SefrekuensiGame() {
                 onClick={autoCompleteQuizDemo}
                 className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50"
               >
-                
+                ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
+              </button>
+            </div>
           </section>
         )}
 
@@ -2231,7 +2254,7 @@ export default function SefrekuensiGame() {
                     </h4>
                     <p className="text-xs text-slate-400">
                       Kirim kode/link ke HP pasangan lawan jenis. Layar otomatis
-                      mulai saat dia bergabung!
+                      mulai saat dia selesai menjawab!
                     </p>
                   </div>
                 </div>
@@ -2239,7 +2262,15 @@ export default function SefrekuensiGame() {
 
               {/* Live Room Status Indicator */}
               <div className="mb-3">
-                {roomOnlineStatus === "connected" ? (
+                {player2 ? (
+                  <div className="px-3 py-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 flex items-center gap-2 text-xs text-emerald-200 font-semibold">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
+                    <span>
+                      {player2.name} ({player2.gender}, {player2.age} thn) sudah
+                      masuk room &amp; sedang menjawab 20 pengakuan...
+                    </span>
+                  </div>
+                ) : roomOnlineStatus === "connected" ? (
                   <div className="px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300 font-semibold">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping shrink-0" />
                     <span>
@@ -3184,7 +3215,7 @@ export default function SefrekuensiGame() {
 
       {/* FOOTER */}
       <footer className="w-full py-4 text-center text-[11px] text-slate-600">
-        SEFREKUENSI
+        SEFREKUENSI • Simulasi Mekanik Game &amp; Red Flag Card Engine
       </footer>
     </>
   );
