@@ -129,6 +129,59 @@ function glitterBurst(ev?: React.MouseEvent<HTMLElement>) {
   requestAnimationFrame(step);
 }
 
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  const radius = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + w, y, x + w, y + h, radius);
+  ctx.arcTo(x + w, y + h, x, y + h, radius);
+  ctx.arcTo(x, y + h, x, y, radius);
+  ctx.arcTo(x, y, x + w, y, radius);
+  ctx.closePath();
+}
+
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string[] {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const testLine = currentLine ? `${currentLine} ${word}` : word;
+    if (ctx.measureText(testLine).width <= maxWidth) {
+      currentLine = testLine;
+    } else {
+      if (currentLine) lines.push(currentLine);
+      currentLine = word;
+    }
+  }
+  if (currentLine) lines.push(currentLine);
+  return lines;
+}
+
+function truncateCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number
+): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let trimmed = text;
+  while (trimmed.length > 0 && ctx.measureText(`${trimmed}...`).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return `${trimmed}...`;
+}
+
 function getBotPersonaConfig(
   botGender: "Laki-laki" | "Perempuan",
   botAge: number
@@ -364,6 +417,7 @@ export default function SefrekuensiGame() {
     key: number;
   } | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1382,6 +1436,385 @@ export default function SefrekuensiGame() {
       `Mainkan sekarang untuk uji red flag hubunganmu!`,
     ].join("\n");
     copyTextSafe(summary, "Rapor kecocokan berhasil disalin!");
+  };
+
+  const downloadReportImage = () => {
+    if (!player1 || !player2 || typeof document === "undefined") return;
+    sfxTap();
+    setIsDownloadingImage(true);
+
+    try {
+      const W = 1080;
+      const H = 1680;
+      const canvas = document.createElement("canvas");
+      canvas.width = W;
+      canvas.height = H;
+      const ctx = canvas.getContext("2d");
+
+      if (!ctx) {
+        setIsDownloadingImage(false);
+        showToast("Browser tidak mendukung pembuatan gambar.", "error");
+        return;
+      }
+
+      const isHigh = battery >= 80;
+      const isMid = battery >= 45 && battery < 80;
+
+      const accentPrimary = isHigh ? "#10b981" : isMid ? "#f59e0b" : "#f43f5e";
+      const accentLight = isHigh ? "#6ee7b7" : isMid ? "#fcd34d" : "#fda4af";
+      const accentBgSoft = isHigh
+        ? "rgba(16, 185, 129, 0.14)"
+        : isMid
+        ? "rgba(245, 158, 11, 0.14)"
+        : "rgba(244, 63, 94, 0.14)";
+      const accentBorder = isHigh
+        ? "rgba(16, 185, 129, 0.45)"
+        : isMid
+        ? "rgba(245, 158, 11, 0.45)"
+        : "rgba(244, 63, 94, 0.45)";
+
+      const verdictTitle = isHigh
+        ? "SEFREKUENSI!"
+        : isMid
+        ? "PACARAN DULU AJA"
+        : "STOP THE WEDDING";
+
+      const verdictDesc = isHigh
+        ? "Red flag kalian saling mengunci seperti puzzle! Kesiapan mental dan kompromi kalian sudah matang untuk melangkah ke jenjang serius."
+        : isMid
+        ? "Rasa sayang memang ada, tetapi masih banyak kompromi yang menggantung dan ego yang belum selesai. Jangan buru-buru DP gedung."
+        : endingCustomReason
+        ? `${endingCustomReason} Terlalu banyak deadlock dan penyesalan untuk dilanjutkan.`
+        : "Terlalu banyak penyesalan, deadlock ego, dan tabrakan kebiasaan buruk. Evaluasi ulang sebelum melangkah lebih jauh.";
+
+      // 1. Background
+      const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+      bgGrad.addColorStop(0, "#070b14");
+      bgGrad.addColorStop(0.5, "#0d1322");
+      bgGrad.addColorStop(1, "#070b14");
+      ctx.fillStyle = bgGrad;
+      ctx.fillRect(0, 0, W, H);
+
+      // Subtle radial glow at top
+      const radialGlow = ctx.createRadialGradient(W / 2, 220, 40, W / 2, 220, 560);
+      radialGlow.addColorStop(
+        0,
+        isHigh
+          ? "rgba(16, 185, 129, 0.22)"
+          : isMid
+          ? "rgba(245, 158, 11, 0.20)"
+          : "rgba(244, 63, 94, 0.22)"
+      );
+      radialGlow.addColorStop(1, "rgba(7, 11, 20, 0)");
+      ctx.fillStyle = radialGlow;
+      ctx.fillRect(0, 0, W, 780);
+
+      // 2. Top Brand Header
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#f43f5e";
+      ctx.font = "800 24px sans-serif";
+      ctx.fillText("SEFREKUENSI", W / 2, 74);
+
+      ctx.fillStyle = "#64748b";
+      ctx.font = "600 17px sans-serif";
+      ctx.fillText("RELATIONSHIP & RED FLAG COMPATIBILITY REPORT", W / 2, 102);
+
+      // 3. Main Verdict Card
+      const cardX = 56;
+      const cardY = 132;
+      const cardW = W - 112;
+      const cardH = 510;
+
+      drawRoundedRect(ctx, cardX, cardY, cardW, cardH, 36);
+      ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
+      ctx.fill();
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = accentBorder;
+      ctx.stroke();
+
+      // Battery Pill Badge
+      const pillText = `BATERAI CINTA AKHIR: ${battery}%`;
+      ctx.font = "800 20px monospace";
+      const pillW = ctx.measureText(pillText).width + 56;
+      const pillH = 44;
+      const pillX = (W - pillW) / 2;
+      const pillY = cardY + 38;
+
+      drawRoundedRect(ctx, pillX, pillY, pillW, pillH, 22);
+      ctx.fillStyle = accentBgSoft;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = accentBorder;
+      ctx.stroke();
+
+      ctx.fillStyle = accentLight;
+      ctx.textAlign = "center";
+      ctx.fillText(pillText, W / 2, pillY + 29);
+
+      // Visual Battery Progress Bar
+      const barW = 680;
+      const barH = 34;
+      const barX = (W - barW) / 2;
+      const barY = pillY + 66;
+
+      drawRoundedRect(ctx, barX, barY, barW, barH, 14);
+      ctx.fillStyle = "#020617";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#334155";
+      ctx.stroke();
+
+      if (battery > 0) {
+        const fillW = Math.max(24, ((barW - 10) * battery) / 100);
+        drawRoundedRect(ctx, barX + 5, barY + 5, fillW, barH - 10, 10);
+        ctx.fillStyle = accentPrimary;
+        ctx.fill();
+      }
+
+      // 45% and 80% markers
+      ctx.fillStyle = "rgba(148, 163, 184, 0.65)";
+      ctx.fillRect(barX + barW * 0.45, barY + 2, 2, barH - 4);
+      ctx.fillStyle = "rgba(52, 211, 153, 0.75)";
+      ctx.fillRect(barX + barW * 0.8, barY + 2, 2, barH - 4);
+
+      // Main Verdict Headline
+      ctx.fillStyle = accentPrimary;
+      ctx.font = "900 62px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(verdictTitle, W / 2, barY + 114);
+
+      // Player Matchup Pill
+      const matchupText = `${player1.name} (${player1.age} thn)   ×   ${player2.name} (${player2.age} thn)`;
+      ctx.font = "700 24px sans-serif";
+      const matchW = Math.min(cardW - 80, ctx.measureText(matchupText).width + 64);
+      const matchH = 48;
+      const matchX = (W - matchW) / 2;
+      const matchY = barY + 138;
+
+      drawRoundedRect(ctx, matchX, matchY, matchW, matchH, 16);
+      ctx.fillStyle = "#090f1d";
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = "#1e293b";
+      ctx.stroke();
+
+      ctx.fillStyle = "#f8fafc";
+      ctx.fillText(
+        truncateCanvasText(ctx, matchupText, matchW - 36),
+        W / 2,
+        matchY + 32
+      );
+
+      // Verdict Summary Paragraph
+      ctx.fillStyle = "#cbd5e1";
+      ctx.font = "500 22px sans-serif";
+      const descLines = wrapCanvasText(ctx, verdictDesc, cardW - 110);
+      descLines.slice(0, 3).forEach((line, i) => {
+        ctx.fillText(line, W / 2, matchY + 92 + i * 32);
+      });
+
+      // 4. Stats 4-Column Row
+      const statY = cardY + cardH + 24;
+      const statH = 126;
+      const gap = 16;
+      const statW = (cardW - gap * 3) / 4;
+
+      const statCards = [
+        {
+          val: String(stats.terimaMantap),
+          label: "TERIMA MANTAP",
+          sub: "+10% / ronde",
+          color: "#34d399",
+          border: "rgba(52, 211, 153, 0.35)",
+          bg: "rgba(16, 185, 129, 0.10)",
+        },
+        {
+          val: String(stats.menyesal),
+          label: "MENYESAL",
+          sub: "-12% / ronde",
+          color: "#fb7185",
+          border: "rgba(251, 113, 133, 0.35)",
+          bg: "rgba(244, 63, 94, 0.10)",
+        },
+        {
+          val: String(stats.kompromiSepakat),
+          label: "KOMPROMI",
+          sub: "+5% / ronde",
+          color: "#fbbf24",
+          border: "rgba(251, 191, 36, 0.35)",
+          bg: "rgba(245, 158, 11, 0.10)",
+        },
+        {
+          val: String(stats.deadlockOrAfk),
+          label: "DEADLOCK / AFK",
+          sub: "-15% / ronde",
+          color: "#f87171",
+          border: "rgba(248, 113, 113, 0.35)",
+          bg: "rgba(239, 68, 68, 0.10)",
+        },
+      ];
+
+      statCards.forEach((sc, idx) => {
+        const sx = cardX + idx * (statW + gap);
+        drawRoundedRect(ctx, sx, statY, statW, statH, 24);
+        ctx.fillStyle = sc.bg;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = sc.border;
+        ctx.stroke();
+
+        ctx.textAlign = "center";
+        ctx.fillStyle = sc.color;
+        ctx.font = "900 40px monospace";
+        ctx.fillText(sc.val, sx + statW / 2, statY + 54);
+
+        ctx.fillStyle = "#e2e8f0";
+        ctx.font = "800 15px sans-serif";
+        ctx.fillText(sc.label, sx + statW / 2, statY + 84);
+
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "600 13px monospace";
+        ctx.fillText(sc.sub, sx + statW / 2, statY + 106);
+      });
+
+      // 5. Rapor Singkat Kecocokan Tiap Ronde
+      const logBoxY = statY + statH + 24;
+      const logBoxH = 804;
+
+      drawRoundedRect(ctx, cardX, logBoxY, cardW, logBoxH, 32);
+      ctx.fillStyle = "rgba(15, 23, 42, 0.94)";
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#1e293b";
+      ctx.stroke();
+
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "800 24px sans-serif";
+      ctx.fillText("RAPOR SINGKAT KECOCOKAN", cardX + 32, logBoxY + 46);
+
+      ctx.textAlign = "right";
+      ctx.fillStyle = "#94a3b8";
+      ctx.font = "700 18px monospace";
+      ctx.fillText(`${history.length} RONDE TERCATAT`, cardX + cardW - 32, logBoxY + 45);
+
+      // Divider line
+      ctx.fillStyle = "#1e293b";
+      ctx.fillRect(cardX + 32, logBoxY + 64, cardW - 64, 2);
+
+      const itemsToRender = history.slice(0, 8);
+      itemsToRender.forEach((item, idx) => {
+        const rowY = logBoxY + 82 + idx * 88;
+        const rowH = 76;
+        const rowX = cardX + 28;
+        const rowW = cardW - 56;
+
+        drawRoundedRect(ctx, rowX, rowY, rowW, rowH, 18);
+        ctx.fillStyle = "#070c18";
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#1e293b";
+        ctx.stroke();
+
+        // Round badge
+        drawRoundedRect(ctx, rowX + 14, rowY + 14, 48, 48, 12);
+        ctx.fillStyle = "#1e293b";
+        ctx.fill();
+
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#f8fafc";
+        ctx.font = "800 18px monospace";
+        ctx.fillText(`R${item.round}`, rowX + 38, rowY + 44);
+
+        // Category + Wildcard tag
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#94a3b8";
+        ctx.font = "700 15px sans-serif";
+        const metaText = item.isWildcard
+          ? `${item.category.toUpperCase()}  •  WILDCARD`
+          : item.category.toUpperCase();
+        ctx.fillText(metaText, rowX + 76, rowY + 31);
+
+        // Outcome summary line
+        ctx.fillStyle = "#f1f5f9";
+        ctx.font = "600 18px sans-serif";
+        const maxTextWidth = rowW - 210;
+        ctx.fillText(
+          truncateCanvasText(ctx, item.outcomeLabel, maxTextWidth),
+          rowX + 76,
+          rowY + 57
+        );
+
+        // Delta pill on right
+        const deltaStr = item.delta > 0 ? `+${item.delta}%` : `${item.delta}%`;
+        const isPositive = item.delta > 0;
+        const dPillW = 92;
+        const dPillH = 42;
+        const dPillX = rowX + rowW - dPillW - 16;
+        const dPillY = rowY + (rowH - dPillH) / 2;
+
+        drawRoundedRect(ctx, dPillX, dPillY, dPillW, dPillH, 12);
+        ctx.fillStyle = isPositive
+          ? "rgba(16, 185, 129, 0.16)"
+          : "rgba(244, 63, 94, 0.16)";
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isPositive
+          ? "rgba(52, 211, 153, 0.45)"
+          : "rgba(251, 113, 133, 0.45)";
+        ctx.stroke();
+
+        ctx.textAlign = "center";
+        ctx.fillStyle = isPositive ? "#34d399" : "#fb7185";
+        ctx.font = "800 20px monospace";
+        ctx.fillText(deltaStr, dPillX + dPillW / 2, dPillY + 28);
+      });
+
+      // 6. Footer Branding
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#64748b";
+      ctx.font = "600 18px sans-serif";
+      ctx.fillText(
+        "SEFREKUENSI  •  Buka Borokmu di Depan, Biar Nggak Nyesel di KUA",
+        W / 2,
+        H - 36
+      );
+
+      const safeP1 = player1.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "p1";
+      const safeP2 = player2.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "p2";
+      const fileName = `rapor-sefrekuensi-${safeP1}-${safeP2}.png`;
+
+      const triggerDownloadUrl = (url: string, revokeAfter: boolean) => {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        if (revokeAfter) {
+          setTimeout(() => URL.revokeObjectURL(url), 4000);
+        }
+        sfxCharge();
+        showToast("Gambar rapor kecocokan berhasil didownload!", "success");
+        setIsDownloadingImage(false);
+      };
+
+      if (canvas.toBlob) {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            triggerDownloadUrl(url, true);
+          } else {
+            triggerDownloadUrl(canvas.toDataURL("image/png"), false);
+          }
+        }, "image/png");
+      } else {
+        triggerDownloadUrl(canvas.toDataURL("image/png"), false);
+      }
+    } catch {
+      setIsDownloadingImage(false);
+      showToast("Gagal membuat gambar rapor. Silakan coba lagi.", "error");
+    }
   };
 
   const handleSecondChance = async () => {
@@ -3023,22 +3456,37 @@ export default function SefrekuensiGame() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
+            <div className="space-y-3 pb-6">
               <button
                 type="button"
-                disabled={isBusy}
-                onClick={handleSecondChance}
-                className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile disabled:opacity-50"
+                disabled={isDownloadingImage}
+                onClick={downloadReportImage}
+                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/25 btn-tactile flex items-center justify-center gap-2 disabled:opacity-50"
               >
-                {isBusy ? "Memulai Ulang..." : "🔄 Kesempatan Kedua"}
+                <span>
+                  {isDownloadingImage
+                    ? "Menyiapkan Gambar Rapor..."
+                    : "📸 Download Gambar Rapor (.PNG)"}
+                </span>
               </button>
-              <button
-                type="button"
-                onClick={fullResetGame}
-                className="py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
-              >
-                ✨ Main Ulang Dari Awal
-              </button>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  disabled={isBusy}
+                  onClick={handleSecondChance}
+                  className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile disabled:opacity-50"
+                >
+                  {isBusy ? "Memulai Ulang..." : "🔄 Kesempatan Kedua"}
+                </button>
+                <button
+                  type="button"
+                  onClick={fullResetGame}
+                  className="py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
+                >
+                  ✨ Main Ulang Dari Awal
+                </button>
+              </div>
             </div>
           </section>
         )}
