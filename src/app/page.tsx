@@ -538,8 +538,7 @@ export default function SefrekuensiGame() {
       code: string,
       hostProfile: PlayerProfile,
       status: string,
-      theme: DeckTheme,
-      stakeText: string
+      theme: DeckTheme
     ) => {
       if (!isFirebaseReady || !db) {
         setRoomOnlineStatus("error");
@@ -552,7 +551,6 @@ export default function SefrekuensiGame() {
           {
             code,
             deckTheme: theme,
-            stake: stakeText,
             player1: hostProfile,
             player2: null,
             status,
@@ -584,18 +582,6 @@ export default function SefrekuensiGame() {
     []
   );
 
-    setCustomStake(newStake);
-    if (mode === "online" && inviteCode && isFirebaseReady && db) {
-      try {
-        await setDoc(
-          doc(db, "rooms", inviteCode),
-          { stake: newStake, updatedAt: Date.now() },
-          { merge: true }
-        );
-      } catch {}
-    }
-  };
-
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
     if (mode !== "online") return;
@@ -608,7 +594,6 @@ export default function SefrekuensiGame() {
         const data = snap.data();
 
         if (data.deckTheme) setDeckTheme(data.deckTheme as DeckTheme);
-        if (typeof data.stake === "string") setCustomStake(data.stake);
         if (data.player1) setPlayer1(data.player1);
         if (data.player2) setPlayer2(data.player2);
         if (data.deck) setDeck(data.deck);
@@ -882,7 +867,6 @@ export default function SefrekuensiGame() {
 
         setRegisterError(null);
         setDeckTheme(roomTheme);
-        if (typeof roomData.stake === "string") setCustomStake(roomData.stake);
         setInviteCode(code);
         setMode("online");
         setMyOnlineRole("player2");
@@ -932,8 +916,7 @@ export default function SefrekuensiGame() {
       newCode,
       newHostProfile,
       "p1_quiz",
-      deckTheme,
-      customStake
+      deckTheme
     );
     goScreen("quiz");
   };
@@ -1760,15 +1743,10 @@ export default function SefrekuensiGame() {
         : battery >= 45
         ? "PACARAN DULU AJA"
         : "STOP THE WEDDING";
-    const stakeStatus =
-      battery >= 80
-        ? "BEBAS TARUHAN (Tantangan Lulus >= 80%)"
-        : `TARUHAN BERLAKU: ${customStake}`;
     const summary = [
       `=== HASIL SEFREKUENSI (${DECK_THEME_META[deckTheme].label}) ===`,
       `Pasangan: ${player1.name} & ${player2.name}`,
       `Baterai Cinta Akhir: ${battery}% -> ${title}`,
-      `${stakeStatus}`,
       `Statistik: Terima (${stats.terimaMantap}), Pencitraan (${stats.pencitraanTerbongkar}), Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
     ].join("\n");
     copyTextSafe(summary, "Rapor kecocokan berhasil disalin!");
@@ -1781,7 +1759,7 @@ export default function SefrekuensiGame() {
 
     try {
       const W = 1080;
-      const H = 1780;
+      const H = 1660;
       const canvas = document.createElement("canvas");
       canvas.width = W;
       canvas.height = H;
@@ -1955,39 +1933,7 @@ export default function SefrekuensiGame() {
         ctx.fillText(line, W / 2, matchY + 88 + i * 31);
       });
 
-      const stakeBoxY = cardY + cardH + 20;
-      const stakeBoxH = 104;
-      drawRoundedRect(ctx, cardX, stakeBoxY, cardW, stakeBoxH, 24);
-      ctx.fillStyle = isHigh
-        ? "rgba(16, 185, 129, 0.12)"
-        : "rgba(245, 158, 11, 0.12)";
-      ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = isHigh
-        ? "rgba(52, 211, 153, 0.45)"
-        : "rgba(251, 191, 36, 0.45)";
-      ctx.stroke();
-
-      ctx.textAlign = "left";
-      ctx.fillStyle = isHigh ? "#34d399" : "#fbbf24";
-      ctx.font = "800 16px monospace";
-      ctx.fillText(
-        isHigh
-          ? "🎯 TARUHAN NYATA  •  LULUS TANTANGAN (>= 80%)"
-          : "🎯 TARUHAN NYATA  •  WAJIB DILAKSANAKAN (< 80%)",
-        cardX + 28,
-        stakeBoxY + 36
-      );
-
-      ctx.fillStyle = "#f8fafc";
-      ctx.font = "700 21px sans-serif";
-      ctx.fillText(
-        truncateCanvasText(ctx, customStake || STAKE_PRESETS[0], cardW - 56),
-        cardX + 28,
-        stakeBoxY + 74
-      );
-
-      const statY = stakeBoxY + stakeBoxH + 20;
+      const statY = cardY + cardH + 20;
       const statH = 122;
       const gap = 16;
       const statW = (cardW - gap * 3) / 4;
@@ -2814,9 +2760,6 @@ export default function SefrekuensiGame() {
                 menyelesaikan 20 pengakuan hidupnya. Begitu selesai, permainan
                 otomatis dimulai di kedua perangkat!
               </p>
-              <div className="mt-4 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
-                🎯 Taruhan Aktif: <strong>{customStake}</strong>
-              </div>
             </div>
           </section>
         )}
@@ -2898,41 +2841,6 @@ export default function SefrekuensiGame() {
                     ))}
                   </ul>
                 )}
-              </div>
-            </div>
-
-            <div className="bg-cardbg/95 border border-amber-500/40 rounded-3xl p-5 shadow-xl">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                  🎯 Taruhan Nyata
-                </span>
-              </div>
-              <input
-                type="text"
-                maxLength={80}
-                value={customStake}
-                onChange={(e) => handleStakeChange(e.target.value)}
-                placeholder="Tulis taruhan dunia nyata kalian..."
-                className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm font-bold text-white focus:outline-none mb-2.5"
-              />
-              <div className="flex flex-wrap gap-1.5">
-                {STAKE_PRESETS.map((preset, i) => (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => {
-                      sfxTap();
-                      handleStakeChange(preset);
-                    }}
-                    className={`text-[11px] px-2.5 py-1 rounded-lg border transition text-left ${
-                      customStake === preset
-                        ? "bg-amber-500/20 border-amber-400 text-amber-200 font-bold"
-                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-200"
-                    }`}
-                  >
-                    {preset}
-                  </button>
-                ))}
               </div>
             </div>
 
@@ -3271,10 +3179,7 @@ export default function SefrekuensiGame() {
                   )}
                 </div>
 
-                <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-between gap-2 text-[10px] text-slate-400">
-                  <span className="truncate">
-                    🎯 Taruhan: <strong className="text-slate-200">{customStake}</strong>
-                  </span>
+                <div className="mt-2 pt-2 border-t border-slate-800/60 flex items-center justify-end gap-2 text-[10px] text-slate-400">
                   <span className="shrink-0 font-mono">
                     Veto: {player1.name} ({vetoUsed.player1 ? "0" : "1"}) •{" "}
                     {player2.name} ({vetoUsed.player2 ? "0" : "1"})
@@ -3773,29 +3678,6 @@ export default function SefrekuensiGame() {
                   {player2.name} ({player2.age})
                 </span>
               </div>
-            </div>
-
-            <div
-              className={`p-4 rounded-3xl border ${
-                battery >= 80
-                  ? "bg-emerald-500/10 border-emerald-500/40"
-                  : "bg-amber-500/10 border-amber-500/40"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span
-                  className={`text-[11px] font-mono font-extrabold uppercase tracking-wider ${
-                    battery >= 80 ? "text-emerald-400" : "text-amber-400"
-                  }`}
-                >
-                  {battery >= 80
-                    ? "🎯 TARUHAN NYATA • LULUS TANTANGAN (>= 80%)"
-                    : "🎯 TARUHAN NYATA • WAJIB DILAKSANAKAN (< 80%)"}
-                </span>
-              </div>
-              <p className="text-xs sm:text-sm font-bold text-white">
-                {customStake || STAKE_PRESETS[0]}
-              </p>
             </div>
 
             <div className="grid grid-cols-4 gap-2">
