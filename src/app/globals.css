@@ -1,16 +1,30 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-body {
+@layer base {
+  body {
+    background-color: #090d16;
+    color: #f8fafc;
+    font-family: var(--font-sans), "Plus Jakarta Sans", sans-serif;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .font-mono {
+    font-family: var(--font-mono), "JetBrains Mono", monospace;
+  }
+}
+
+.bg-obsidian {
   background-color: #090d16;
-  color: #f8fafc;
-  overflow-x: hidden;
-  -webkit-tap-highlight-color: transparent;
+}
+
+.bg-cardbg {
+  background-color: #111827;
 }
 
 .bg-grid-pattern {
-  background-image: 
+  background-color: #090d16;
+  background-image:
     radial-gradient(circle at 15% 15%, rgba(244, 63, 94, 0.12), transparent 35%),
     radial-gradient(circle at 85% 80%, rgba(16, 185, 129, 0.08), transparent 40%),
     linear-gradient(to right, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
@@ -59,6 +73,11 @@ body {
   }
 }
 
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 .animate-card-enter {
   animation: cardEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
@@ -73,11 +92,6 @@ body {
 
 .animate-delta {
   animation: floatUpFade 1.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
 }
 
 .battery-shimmer::after {
@@ -97,11 +111,13 @@ input[type="range"] {
   background: transparent;
   cursor: pointer;
 }
+
 input[type="range"]::-webkit-slider-runnable-track {
   height: 8px;
   border-radius: 999px;
   background: #1f2937;
 }
+
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -117,6 +133,20 @@ input[type="range"]::-webkit-slider-thumb {
 .btn-tactile {
   transition: transform 0.12s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
+
 .btn-tactile:active {
   transform: scale(0.97);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 999px;
 }
