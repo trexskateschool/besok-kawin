@@ -4,11 +4,11 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "SEFREKUENSI — Relationship & Red Flag Card Game",
     short_name: "Sefrekuensi",
-    description: "Uji nyali dan buka red flag bareng pasangan sebelum ke KUA.",
+    description: "Uji nyali, selaraskan gelombang frekuensi hati, dan buka red flag bareng pasangan sebelum ke KUA.",
     start_url: "/",
     display: "standalone",
-    background_color: "#090d16",
-    theme_color: "#090d16",
+    background_color: "#070b14",
+    theme_color: "#070b14",
     orientation: "portrait",
     icons: [
       {
