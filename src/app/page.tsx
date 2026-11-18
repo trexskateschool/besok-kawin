@@ -896,7 +896,7 @@ export default function BesokKawinGame() {
     if (isNaN(ageNum) || ageNum < 18) {
       sfxPenalty();
       setRegError({
-        title: "Verifikasi Usia Gagal (18+)",
+        title: "Verifikasi Gagal",
         text: "Keanggotaan BESOK KAWIN? hanya terbuka untuk usia minimal 18 tahun.",
         key: Date.now(),
       });
@@ -1836,7 +1836,7 @@ export default function BesokKawinGame() {
     ctx.fillStyle = "#e5c17b";
     ctx.font = "900 44px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("BESOK KAWIN? • CLUB 18+", 540, 160);
+    ctx.fillText("BESOK KAWIN? • Card Game", 540, 160);
 
     ctx.fillStyle = "#94a3b8";
     ctx.font = "600 28px sans-serif";
@@ -2373,7 +2373,7 @@ export default function BesokKawinGame() {
 
                 <p className="text-[10px] text-stone-500 mt-4 leading-relaxed">
                   Untuk menjaga kualitas & keamanan komunitas, seluruh anggota
-                  wajib masuk menggunakan akun Google terverifikasi (18+).
+                  wajib masuk menggunakan akun Google terverifikasi.
                 </p>
               </div>
             </section>
@@ -2451,7 +2451,6 @@ export default function BesokKawinGame() {
 
                     <div>
                       <label className="block text-[11px] font-semibold text-stone-300 mb-1">
-                        Usia (18+)
                       </label>
                       <input
                         type="number"
