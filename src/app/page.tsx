@@ -1007,35 +1007,6 @@ export default function SefrekuensiGame() {
     }
   };
 
-  const autoCompleteQuizDemo = async () => {
-    sfxTap();
-    if (!activeQuizProfile) return;
-    const choices: Array<"iya" | "kayanya" | "engga"> = [
-      "iya",
-      "iya",
-      "kayanya",
-      "engga",
-    ];
-    const newAnswers = { ...activeQuizProfile.answers };
-    for (let i = quizIndex; i < activeQuizProfile.questions.length; i++) {
-      const q = activeQuizProfile.questions[i];
-      newAnswers[q.id] =
-        choices[(i + Math.floor(Math.random() * 3)) % choices.length];
-    }
-    const updatedProfile: PlayerProfile = {
-      ...activeQuizProfile,
-      answers: newAnswers,
-    };
-
-    const nextP1 = quizTarget === "player1" ? updatedProfile : player1;
-    const nextP2 = quizTarget === "player2" ? updatedProfile : player2;
-    if (quizTarget === "player1") setPlayer1(updatedProfile);
-    else setPlayer2(updatedProfile);
-
-    showToast("Sisa pertanyaan otomatis terisi!", "success");
-    await finishQuizPhase(nextP1, nextP2);
-  };
-
   const startSoloGame = () => {
     if (!player1) return;
     sfxTap();
@@ -2026,7 +1997,7 @@ export default function SefrekuensiGame() {
                     🔥 Iya lagi
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Setuju banget
+                    Setuju banget — masuk ke Dek Masalah Utama
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
@@ -2045,7 +2016,7 @@ export default function SefrekuensiGame() {
                     🤔 Kayanya sih
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Ragu-ragu
+                    Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
@@ -2064,22 +2035,13 @@ export default function SefrekuensiGame() {
                     🛡️ Engga
                   </span>
                   <span className="block text-[11px] text-slate-400">
-                    Bukan gue banget
+                    Bukan gua banget — dibuang dari dek permainan
                   </span>
                 </div>
                 <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
                   BUANG
                 </span>
               </button>
-            </div>
-
-            <div className="mt-4 text-center">
-              <button
-                type="button"
-                disabled={isBusy}
-                onClick={autoCompleteQuizDemo}
-                className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50"
-              >
             </div>
           </section>
         )}
@@ -2809,7 +2771,7 @@ export default function SefrekuensiGame() {
                       {/* Kotak Menampilkan Kartu yang Ditolak */}
                       <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
                         <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
-                          📌 KARTU MASALAH YANG DITOLAK OLEH {responder?.name.toUpperCase()}:
+                          📌 MASALAH YANG DITOLAK OLEH {responder?.name.toUpperCase()}:
                         </span>
                         <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
                           &ldquo;{currentCard.partnerPrompt}&rdquo;
