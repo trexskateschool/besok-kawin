@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "BESOK KAWIN? — Dating & Red Flag Card Game",
-    short_name: "Besok Kawin?",
+    name: "SEFREKUENSI — Relationship & Red Flag Card Game",
+    short_name: "Sefrekuensi",
     description: "Uji nyali dan buka red flag bareng pasangan sebelum ke KUA.",
     start_url: "/",
     display: "standalone",
