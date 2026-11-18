@@ -11,34 +11,19 @@ import {
   runTransaction,
 } from "firebase/firestore";
 
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-}
-
-declare global {
-  interface Window {
-    __deferredInstallPrompt?: BeforeInstallPromptEvent | null;
-  }
-}
-
-if (typeof window !== "undefined") {
-  window.addEventListener("beforeinstallprompt", (e: Event) => {
-    e.preventDefault();
-    window.__deferredInstallPrompt = e as BeforeInstallPromptEvent;
-  });
-}
-
 interface PlayerProfile {
   name: string;
+  email: string;
   gender: "Laki-laki" | "Perempuan";
   age: number;
   questions: QuestionItem[];
   answers: Record<string, "iya" | "kayanya" | "engga">;
-  emoji?: string;
   tier?: "young" | "mid" | "mature";
+  emoji?: string;
   vibe?: string;
   bio?: string;
+  reactAccept?: string;
+  reactReject?: string;
 }
 
 interface DeckCard extends QuestionItem {
@@ -46,15 +31,6 @@ interface DeckCard extends QuestionItem {
   sourceOwner: string;
   roundNum: number;
   responderKey: "player1" | "player2";
-}
-
-interface CardRoundState {
-  status: "dilemma" | "negotiating" | "resolved";
-  responderChoice?: number;
-  ownerChoice?: number;
-  delta?: number;
-  outcomeLabel?: string;
-  statType?: "terimaMantap" | "menyesal" | "kompromiSepakat" | "deadlockOrAfk";
 }
 
 interface HistoryItem {
@@ -73,246 +49,256 @@ interface ToastItem {
   type: "success" | "error" | "warning" | "info";
 }
 
-type ScreenType = "lobby" | "quiz" | "waiting" | "game" | "ending";
+type ScreenType =
+  | "register"
+  | "quiz"
+  | "mode"
+  | "partner-join"
+  | "game"
+  | "ending";
 
-function getBotPersonaConfig(level: number) {
-  if (level <= 23) {
+function glitterBurst(ev?: React.MouseEvent<HTMLElement>) {
+  if (typeof window === "undefined" || typeof document === "undefined") return;
+  const r = ev?.currentTarget
+    ? ev.currentTarget.getBoundingClientRect()
+    : null;
+  const x = r ? r.left + r.width / 2 : window.innerWidth / 2;
+  const y = r ? r.top + r.height / 2 : window.innerHeight / 2;
+
+  const c = document.createElement("canvas");
+  c.width = window.innerWidth;
+  c.height = window.innerHeight;
+  c.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:99";
+  document.body.appendChild(c);
+
+  const g = c.getContext("2d");
+  if (!g) {
+    c.remove();
+    return;
+  }
+
+  const cols = ["#f43f5e", "#34d399", "#fbbf24", "#38bdf8", "#ffffff"];
+  let f = 0;
+  const ps = Array.from({ length: 80 }, () => {
+    const a = Math.random() * Math.PI * 2;
+    const sp = 2 + Math.random() * 7;
     return {
-      name: "Arkan",
-      gender: "Laki-laki" as const,
-      age: 22,
-      tier: "young" as const,
-      emoji: "🧢",
-      vibe: "Spontan & Emosional",
-      bio: "Gampang kebawa suasana, suka debat panjang kalau prinsipnya disentil.",
+      x,
+      y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp - 3,
+      r: 2 + Math.random() * 4,
+      c: cols[Math.floor(Math.random() * cols.length)],
+      w: Math.random() * 6,
     };
-  } else if (level <= 33) {
+  });
+
+  function step() {
+    if (!g) return;
+    g.clearRect(0, 0, c.width, c.height);
+    f++;
+    ps.forEach((p) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.18;
+      p.vx *= 0.985;
+      g.globalAlpha =
+        Math.max(0, 1 - f / 100) * (0.55 + 0.45 * Math.sin(f * 0.5 + p.w));
+      g.fillStyle = p.c;
+      g.save();
+      g.translate(p.x, p.y);
+      g.rotate(f * 0.1 + p.w);
+      const q = p.r;
+      g.beginPath();
+      g.moveTo(0, -q * 2);
+      g.lineTo(q * 0.5, -q * 0.5);
+      g.lineTo(q * 2, 0);
+      g.lineTo(q * 0.5, q * 0.5);
+      g.lineTo(0, q * 2);
+      g.lineTo(-q * 0.5, q * 0.5);
+      g.lineTo(-q * 2, 0);
+      g.lineTo(-q * 0.5, -q * 0.5);
+      g.closePath();
+      g.fill();
+      g.restore();
+    });
+    if (f < 100) requestAnimationFrame(step);
+    else c.remove();
+  }
+  requestAnimationFrame(step);
+}
+
+function getBotPersonaConfig(
+  botGender: "Laki-laki" | "Perempuan",
+  botAge: number
+) {
+  const isFemale = botGender === "Perempuan";
+  if (botAge <= 24) {
     return {
-      name: "Nadya",
-      gender: "Perempuan" as const,
-      age: 27,
+      name: isFemale ? "Keisya" : "Arkan",
+      age: botAge,
+      gender: botGender,
+      tier: "young" as const,
+      emoji: isFemale ? "👧" : "🧑",
+      vibe: "Gen-Z Dramatis & Baperan",
+      bio: "Ekspresif, butuh validasi tinggi, gampang overthinking kalau chat dibales singkat.",
+      reactAccept:
+        "Wah seriusan kamu nerima sifatku yang itu? Jangan cuma manis di awal doang ya!",
+      reactReject:
+        "Tuh kan! Pasti ujung-ujungnya kamu nggak ngertiin aku. Yaudah coba cari jalan tengahnya gimana!",
+    };
+  } else if (botAge <= 32) {
+    return {
+      name: isFemale ? "Nadya" : "Bagas",
+      age: botAge,
+      gender: botGender,
       tier: "mid" as const,
-      emoji: "🎧",
-      vibe: "Realistis & Logis",
-      bio: "Suka diskusi objektif, hitung-hitungan untung rugi sebelum sepakat.",
+      emoji: isFemale ? "👩" : "👨",
+      vibe: "Quarter-Life Realistis",
+      bio: "Mikirin karier, stabilitas finansial, dan trauma masa lalu. Suka diskusi objektif.",
+      reactAccept:
+        "Oke, aku hargai kejujuranmu nerima itu. Tapi pastiin kamu sanggup nanggung efek sampingnya ya.",
+      reactReject:
+        "Fair enough, emang nggak semua hal harus diiyain. Ayo kita negosiasi kompromi yang masuk akal buat berdua.",
     };
   } else {
     return {
-      name: "Dimas",
-      gender: "Laki-laki" as const,
-      age: 35,
+      name: isFemale ? "Laras" : "Dimas",
+      age: botAge,
+      gender: botGender,
       tier: "mature" as const,
-      emoji: "☕",
-      vibe: "Pragmatis & To-The-Point",
-      bio: "Anti-drama, fokus solusi praktis supaya masalah cepat selesai.",
+      emoji: isFemale ? "👩‍💼" : "👨‍💼",
+      vibe: "Pragmatis Siap Nikah",
+      bio: "To-the-point, anti-drama, fokus efisiensi keuangan, keluarga, dan komitmen konkret.",
+      reactAccept:
+        "Bagus. Dalam pernikahan memang butuh kesiapan mental nerima kekurangan pasangan tanpa banyak drama.",
+      reactReject:
+        "Saya menghargai ketegasan kamu menolak. Sekarang pilih solusi paling praktis supaya ini nggak jadi masalah di rumah tangga.",
     };
   }
 }
 
-function buildDeckFromPartnerProfile(
-  partnerProfile: PlayerProfile,
-  responderKey: "player1" | "player2",
+function buildMatchDeck(
+  p1: PlayerProfile,
+  p2: PlayerProfile,
+  mode: "solo" | "couple" | "online",
   maxRounds: number
 ): DeckCard[] {
-  const mainCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
-  const wildCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
-  const fallbackCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
+  const extractDeckCards = (profile: PlayerProfile) => {
+    const mainCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
+    const wildCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
+    const fallbackCards: Omit<DeckCard, "roundNum" | "responderKey">[] = [];
 
-  partnerProfile.questions.forEach((q) => {
-    const ans = partnerProfile.answers[q.id];
-    if (ans === "iya") {
-      mainCards.push({
-        ...q,
-        isWildcard: false,
-        sourceOwner: partnerProfile.name,
-      });
-    } else if (ans === "kayanya") {
-      wildCards.push({
-        ...q,
-        isWildcard: true,
-        sourceOwner: partnerProfile.name,
-      });
-    } else {
-      fallbackCards.push({
-        ...q,
-        isWildcard: true,
-        sourceOwner: partnerProfile.name,
-      });
-    }
-  });
+    profile.questions.forEach((q) => {
+      const ans = profile.answers[q.id];
+      if (ans === "iya")
+        mainCards.push({ ...q, isWildcard: false, sourceOwner: profile.name });
+      else if (ans === "kayanya")
+        wildCards.push({ ...q, isWildcard: true, sourceOwner: profile.name });
+      else
+        fallbackCards.push({
+          ...q,
+          isWildcard: true,
+          sourceOwner: profile.name,
+        });
+    });
 
-  const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
-  const pool = [
-    ...shuffle(mainCards),
-    ...shuffle(wildCards),
-    ...shuffle(fallbackCards),
-  ];
+    const shuffle = <T,>(arr: T[]) => [...arr].sort(() => Math.random() - 0.5);
+    return [
+      ...shuffle(mainCards),
+      ...shuffle(wildCards),
+      ...shuffle(fallbackCards),
+    ];
+  };
 
-  const result: DeckCard[] = [];
+  const p2Pool = extractDeckCards(p2);
+  const p1Pool = extractDeckCards(p1);
+  const matchDeck: DeckCard[] = [];
+
   for (let r = 1; r <= maxRounds; r++) {
-    const card = pool[(r - 1) % pool.length];
-    result.push({ ...card, roundNum: r, responderKey });
+    if (mode === "solo") {
+      const card = p2Pool[(r - 1) % p2Pool.length];
+      matchDeck.push({ ...card, roundNum: r, responderKey: "player1" });
+    } else {
+      if (r % 2 === 1) {
+        const card = p2Pool[Math.floor(r / 2) % p2Pool.length];
+        matchDeck.push({ ...card, roundNum: r, responderKey: "player1" });
+      } else {
+        const card = p1Pool[Math.floor((r - 1) / 2) % p1Pool.length];
+        matchDeck.push({ ...card, roundNum: r, responderKey: "player2" });
+      }
+    }
   }
-  return result;
+  return matchDeck;
 }
 
-export default function SefrekuensiGame() {
-  const [installPromptEvent, setInstallPromptEvent] =
-    useState<BeforeInstallPromptEvent | null>(() =>
-      typeof window !== "undefined"
-        ? window.__deferredInstallPrompt || null
-        : null
-    );
-  const [isAppInstalled, setIsAppInstalled] = useState(false);
-  const [showInstallGuide, setShowInstallGuide] = useState(false);
-  const [isIosDevice, setIsIosDevice] = useState(false);
-
+export default function BesokKawinGame() {
+  // SoundFX Engine
   const [soundEnabled, setSoundEnabled] = useState(true);
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const mainScrollRef = useRef<HTMLElement | null>(null);
 
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const purgeVercelToolbar = () => {
-      document
-        .querySelectorAll(
-          'vercel-live-feedback, #__vercel-toolbar, [data-vercel-toolbar], iframe[src*="vercel.live"]'
-        )
-        .forEach((el) => el.remove());
-    };
-    purgeVercelToolbar();
-    const observer = new MutationObserver(() => purgeVercelToolbar());
-    observer.observe(document.documentElement, {
-      childList: true,
-      subtree: true,
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const ua = window.navigator.userAgent;
-    setIsIosDevice(/iPad|iPhone|iPod/.test(ua));
-
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
-    }
-
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      const promptEvt = e as BeforeInstallPromptEvent;
-      window.__deferredInstallPrompt = promptEvt;
-      setInstallPromptEvent(promptEvt);
-    };
-
-    const handleAppInstalled = () => {
-      setIsAppInstalled(true);
-      setInstallPromptEvent(null);
-      window.__deferredInstallPrompt = null;
-      setShowInstallGuide(false);
-      showToast("Game berhasil dipasang di layar utama!", "success");
-    };
-
-    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
-    window.addEventListener("appinstalled", handleAppInstalled);
-
-    if (
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as unknown as { standalone?: boolean }).standalone
-    ) {
-      setIsAppInstalled(true);
-    }
-
-    return () => {
-      window.removeEventListener(
-        "beforeinstallprompt",
-        handleBeforeInstallPrompt
-      );
-      window.removeEventListener("appinstalled", handleAppInstalled);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const handleInstallClick = async () => {
-    sfxTap();
-    const activePrompt =
-      installPromptEvent ||
-      (typeof window !== "undefined" ? window.__deferredInstallPrompt : null);
-
-    if (activePrompt) {
+  const playTone = useCallback(
+    (
+      freq: number,
+      type: OscillatorType = "sine",
+      duration = 0.15,
+      vol = 0.08,
+      delay = 0
+    ) => {
+      if (!soundEnabled || typeof window === "undefined") return;
       try {
-        await activePrompt.prompt();
-        const { outcome } = await activePrompt.userChoice;
-        if (outcome === "accepted") {
-          setIsAppInstalled(true);
-          setInstallPromptEvent(null);
-          window.__deferredInstallPrompt = null;
+        if (!audioCtxRef.current) {
+          const AudioCtx =
+            window.AudioContext ||
+            (window as unknown as { webkitAudioContext: typeof AudioContext })
+              .webkitAudioContext;
+          if (AudioCtx) audioCtxRef.current = new AudioCtx();
         }
-        return;
+        const ctx = audioCtxRef.current;
+        if (!ctx) return;
+        if (ctx.state === "suspended") ctx.resume().catch(() => {});
+
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
+        gain.gain.setValueAtTime(vol, ctx.currentTime + delay);
+        gain.gain.exponentialRampToValueAtTime(
+          0.001,
+          ctx.currentTime + delay + duration
+        );
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + delay);
+        osc.stop(ctx.currentTime + delay + duration);
       } catch {}
-    }
-    setShowInstallGuide(true);
-  };
+    },
+    [soundEnabled]
+  );
 
-  const getOrCreateAudioContext = useCallback(() => {
-    if (typeof window === "undefined") return null;
-    if (!audioCtxRef.current) {
-      const AudioCtx =
-        window.AudioContext ||
-        (window as unknown as { webkitAudioContext: typeof AudioContext })
-          .webkitAudioContext;
-      if (AudioCtx) audioCtxRef.current = new AudioCtx();
-    }
-    const ctx = audioCtxRef.current;
-    if (ctx && ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
-    }
-    return ctx;
-  }, []);
-
-  const playTone = (
-    freq: number,
-    type: OscillatorType = "sine",
-    duration = 0.15,
-    vol = 0.08,
-    delay = 0
-  ) => {
-    if (!soundEnabled) return;
-    try {
-      const ctx = getOrCreateAudioContext();
-      if (!ctx) return;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = type;
-      osc.frequency.setValueAtTime(freq, ctx.currentTime + delay);
-      gain.gain.setValueAtTime(vol, ctx.currentTime + delay);
-      gain.gain.exponentialRampToValueAtTime(
-        0.001,
-        ctx.currentTime + delay + duration
-      );
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(ctx.currentTime + delay);
-      osc.stop(ctx.currentTime + delay + duration);
-    } catch {}
-  };
-
-  const sfxTap = () => playTone(520, "triangle", 0.08, 0.06);
-  const sfxCharge = () => {
+  const sfxTap = useCallback(
+    () => playTone(520, "triangle", 0.08, 0.06),
+    [playTone]
+  );
+  const sfxCharge = useCallback(() => {
     playTone(523.25, "sine", 0.14, 0.09, 0);
     playTone(659.25, "sine", 0.18, 0.09, 0.09);
-  };
-  const sfxPenalty = () => {
+  }, [playTone]);
+  const sfxPenalty = useCallback(() => {
     playTone(220, "sawtooth", 0.18, 0.08, 0);
     playTone(165, "sawtooth", 0.25, 0.08, 0.12);
-  };
-  const sfxFlip = () => playTone(380, "sine", 0.12, 0.07);
-  const sfxWin = () => {
+  }, [playTone]);
+  const sfxFlip = useCallback(
+    () => playTone(380, "sine", 0.12, 0.07),
+    [playTone]
+  );
+  const sfxWin = useCallback(() => {
     [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
       playTone(f, "triangle", 0.25, 0.09, i * 0.1)
     );
-  };
+  }, [playTone]);
 
+  // Toast Notifications
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const showToast = useCallback(
     (message: string, type: ToastItem["type"] = "info") => {
@@ -320,93 +306,112 @@ export default function SefrekuensiGame() {
       setToasts((prev) => [...prev, { id, message, type }]);
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 3400);
+      }, 2800);
     },
     []
   );
 
-  const copyTextSafe = (text: string, successMsg: string) => {
+  const copyTextSafe = (text: string, successMsg?: string) => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard
         .writeText(text)
-        .then(() => showToast(successMsg, "success"))
+        .then(() => showToast(successMsg || "Berhasil disalin!", "success"))
         .catch(() => fallbackCopy(text, successMsg));
     } else {
       fallbackCopy(text, successMsg);
     }
   };
 
-  const fallbackCopy = (text: string, successMsg: string) => {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.position = "fixed";
-    ta.style.left = "-9999px";
-    document.body.appendChild(ta);
-    ta.select();
+  const fallbackCopy = (text: string, successMsg?: string) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-9999px";
+    document.body.appendChild(textArea);
+    textArea.select();
     try {
       document.execCommand("copy");
-      showToast(successMsg, "success");
+      showToast(successMsg || "Berhasil disalin!", "success");
     } catch {
-      showToast("Gagal menyalin otomatis.", "warning");
+      showToast("Gagal menyalin otomatis, silakan salin manual.", "warning");
     }
-    document.body.removeChild(ta);
+    document.body.removeChild(textArea);
   };
 
-  const [screen, setScreen] = useState<ScreenType>("lobby");
+  // Screen Navigation
+  const [screen, setScreen] = useState<ScreenType>("register");
+  const [animKey, setAnimKey] = useState(0);
+
   const goScreen = useCallback((next: ScreenType) => {
     setScreen(next);
-    if (mainScrollRef.current) {
-      mainScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    setAnimKey((k) => k + 1);
+    if (typeof window !== "undefined") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, []);
 
-  // Lobby Setup State
-  const [playerName, setPlayerName] = useState("");
-  const [deckVariant, setDeckVariant] = useState<"Laki-laki" | "Perempuan">(
+  // Screen 1: Registration State
+  const [landingTab, setLandingTab] = useState<"new" | "invite">("new");
+  const [inputJoinCode, setInputJoinCode] = useState("");
+  const [regName, setRegName] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regGender, setRegGender] = useState<"Laki-laki" | "Perempuan">(
     "Laki-laki"
   );
-  const [playIntent, setPlayIntent] = useState<"solo" | "create" | "join">(
-    "solo"
-  );
-  const [inputJoinCode, setInputJoinCode] = useState("");
-  const [botPersonaSlider, setBotPersonaSlider] = useState(27);
+  const [regAge, setRegAge] = useState("");
+  const [registerError, setRegisterError] = useState<{
+    title: string;
+    text: string;
+    key: number;
+  } | null>(null);
   const [isBusy, setIsBusy] = useState(false);
 
-  // Room & Quiz State
+  // Core Players & Mode State
   const [inviteCode, setInviteCode] = useState("");
-  const [myRole, setMyRole] = useState<"player1" | "player2">("player1");
+  const [myOnlineRole, setMyOnlineRole] = useState<"player1" | "player2">(
+    "player1"
+  );
   const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
   const [player2, setPlayer2] = useState<PlayerProfile | null>(null);
-  const [mode, setMode] = useState<"solo" | "multiplayer">("solo");
-  const [quizDraftProfile, setQuizDraftProfile] =
-    useState<PlayerProfile | null>(null);
+  const [mode, setMode] = useState<"solo" | "couple" | "online">("solo");
+  const [quizTarget, setQuizTarget] = useState<"player1" | "player2">(
+    "player1"
+  );
   const [quizIndex, setQuizIndex] = useState(0);
 
-  // Gameplay State
-  const [syncScore, setSyncScore] = useState(50);
-  const [deltaPop, setDeltaPop] = useState<{ val: number; key: number } | null>(
-    null
-  );
-  const [shakeHud, setShakeHud] = useState(0);
+  // Screen 3: Mode & Bot Slider State
+  const [botAgeSlider, setBotAgeSlider] = useState(25);
+
+  // Screen 3B: Partner Pass-and-Play Join State
+  const [partnerNameInput, setPartnerNameInput] = useState("");
+  const [partnerGenderInput, setPartnerGenderInput] = useState<
+    "Laki-laki" | "Perempuan"
+  >("Perempuan");
+  const [partnerAgeInput, setPartnerAgeInput] = useState("");
+  const [partnerError, setPartnerError] = useState<{
+    title: string;
+    text: string;
+    key: number;
+  } | null>(null);
+
+  // Screen 4: Gameplay State
+  const [battery, setBattery] = useState(50);
+  const [deltaBadge, setDeltaBadge] = useState<{
+    val: number;
+    key: number;
+  } | null>(null);
+  const [hudShakeKey, setHudShakeKey] = useState(0);
   const [round, setRound] = useState(1);
   const maxRounds = 8;
-
-  const [soloDeck, setSoloDeck] = useState<DeckCard[]>([]);
-  const [p1OnlineDeck, setP1OnlineDeck] = useState<DeckCard[]>([]);
-  const [p2OnlineDeck, setP2OnlineDeck] = useState<DeckCard[]>([]);
-  const [c1State, setC1State] = useState<CardRoundState>({
-    status: "dilemma",
-  });
-  const [c2State, setC2State] = useState<CardRoundState>({
-    status: "dilemma",
-  });
-  const [isSubmittingDecision, setIsSubmittingDecision] = useState(false);
-
+  const [deck, setDeck] = useState<DeckCard[]>([]);
   const [gameStage, setGameStage] = useState<
-    "dilemma" | "consequence" | "negotiate"
+    "dilemma" | "consequence" | "negotiate1" | "negotiate2"
   >("dilemma");
+  const [coupleNegotiationP1Choice, setCoupleNegotiationP1Choice] = useState<
+    number | null
+  >(null);
   const [timerSeconds, setTimerSeconds] = useState(60);
-  const [timerActive, setTimerActive] = useState(false);
+  const [timerRunning, setTimerRunning] = useState(false);
   const [consecutiveTimeouts, setConsecutiveTimeouts] = useState(0);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [stats, setStats] = useState({
@@ -415,109 +420,85 @@ export default function SefrekuensiGame() {
     kompromiSepakat: 0,
     deadlockOrAfk: 0,
   });
-  const [endingReason, setEndingReason] = useState("");
+  const [endingCustomReason, setEndingCustomReason] = useState("");
 
-  const prevScoreRef = useRef(50);
-  const lastSummaryIdRef = useRef<number>(0);
+  const prevBatteryRef = useRef(50);
 
-  const applyScoreDelta = (delta: number) => {
-    setSyncScore((prev) => Math.max(0, Math.min(100, prev + delta)));
-    if (delta !== 0) {
-      setDeltaPop({ val: delta, key: Date.now() + Math.random() });
-      if (delta < 0) setShakeHud((prev) => prev + 1);
+  const triggerBatteryDelta = useCallback((delta: number) => {
+    if (delta === 0) return;
+    setDeltaBadge({ val: delta, key: Date.now() + Math.random() });
+    if (delta < 0) {
+      setHudShakeKey((k) => k + 1);
     }
-  };
+  }, []);
 
+  // Publish Room to Firestore when Player 1 enters Screen 3 (so Partner can join from another phone)
   useEffect(() => {
-    if (screen === "game" && mode === "multiplayer") {
-      setGameStage("dilemma");
-      setTimerSeconds(60);
-      setTimerActive(true);
-    }
-  }, [round, screen, mode]);
-
-  const myResponderCardState = myRole === "player1" ? c1State : c2State;
-  const myOwnedCardState = myRole === "player1" ? c2State : c1State;
-
-  const needsResponderAction =
-    mode === "multiplayer" && myResponderCardState.status === "dilemma";
-  const needsOwnerCompromiseAction =
-    mode === "multiplayer" &&
-    !needsResponderAction &&
-    myOwnedCardState.status === "negotiating" &&
-    myOwnedCardState.ownerChoice === undefined;
-
-  useEffect(() => {
-    if (screen !== "game" || !timerActive) return;
     if (
-      mode === "multiplayer" &&
-      !needsResponderAction &&
-      !needsOwnerCompromiseAction
+      screen !== "mode" ||
+      !player1 ||
+      !inviteCode ||
+      !isFirebaseReady ||
+      !db
     ) {
       return;
     }
+    const roomRef = doc(db, "rooms", inviteCode);
+    setDoc(
+      roomRef,
+      {
+        code: inviteCode,
+        player1,
+        player2: null,
+        status: "waiting",
+        round: 1,
+        battery: 50,
+        stage: "dilemma",
+        negChoice1: null,
+        history: [],
+        stats: {
+          terimaMantap: 0,
+          menyesal: 0,
+          kompromiSepakat: 0,
+          deadlockOrAfk: 0,
+        },
+        updatedAt: Date.now(),
+      },
+      { merge: true }
+    ).catch(() => {});
+  }, [screen, player1, inviteCode]);
 
-    const interval = setInterval(() => {
-      setTimerSeconds((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          setTimerActive(false);
-          handleTimeoutPenalty();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    screen,
-    timerActive,
-    round,
-    mode,
-    needsResponderAction,
-    needsOwnerCompromiseAction,
-  ]);
-
-  // Real-time Firestore Room Listener
+  // Listen to Firestore Room for Online 2-Device Multiplayer
   useEffect(() => {
     if (!inviteCode || !isFirebaseReady || !db) return;
-    if (mode === "solo" && screen === "game") return;
+    if (mode === "solo" || mode === "couple") return;
 
     const roomRef = doc(db, "rooms", inviteCode);
-    const unsubscribe = onSnapshot(roomRef, (docSnap) => {
-      if (!docSnap.exists()) return;
-      const data = docSnap.data();
+    const unsubscribe = onSnapshot(roomRef, (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
 
       if (data.player1) setPlayer1(data.player1);
       if (data.player2) setPlayer2(data.player2);
-      if (data.p1Deck) setP1OnlineDeck(data.p1Deck);
-      if (data.p2Deck) setP2OnlineDeck(data.p2Deck);
-      if (data.c1) setC1State(data.c1);
-      if (data.c2) setC2State(data.c2);
+      if (data.deck) setDeck(data.deck);
+      if (data.stage) setGameStage(data.stage);
+      if (typeof data.negChoice1 === "number" || data.negChoice1 === null) {
+        setCoupleNegotiationP1Choice(data.negChoice1);
+      }
       if (data.history) setHistory(data.history);
       if (data.stats) setStats(data.stats);
-      if (data.endingReason) setEndingReason(data.endingReason);
-
-      if (
-        data.lastRoundSummary &&
-        data.lastRoundSummary.id !== lastSummaryIdRef.current
-      ) {
-        lastSummaryIdRef.current = data.lastRoundSummary.id;
-        showToast(
-          data.lastRoundSummary.text,
-          data.lastRoundSummary.delta >= 0 ? "success" : "warning"
-        );
+      if (typeof data.consecutiveTimeouts === "number") {
+        setConsecutiveTimeouts(data.consecutiveTimeouts);
       }
+      if (data.endingReason) setEndingCustomReason(data.endingReason);
 
       if (typeof data.battery === "number") {
-        const diff = data.battery - prevScoreRef.current;
+        const diff = data.battery - prevBatteryRef.current;
         if (diff !== 0) {
-          setDeltaPop({ val: diff, key: Date.now() + Math.random() });
-          if (diff < 0) setShakeHud((s) => s + 1);
-          prevScoreRef.current = data.battery;
+          triggerBatteryDelta(diff);
+          prevBatteryRef.current = data.battery;
         }
-        setSyncScore(data.battery);
+        setBattery(data.battery);
       }
 
       if (typeof data.round === "number") {
@@ -528,1620 +509,2480 @@ export default function SefrekuensiGame() {
         data.status === "playing" &&
         data.player1 &&
         data.player2 &&
-        screen === "waiting"
+        screen === "mode"
       ) {
-        setMode("multiplayer");
-        prevScoreRef.current = data.battery ?? 50;
-        setGameStage("dilemma");
+        setMode("online");
+        setMyOnlineRole("player1");
+        prevBatteryRef.current = data.battery ?? 50;
         setTimerSeconds(60);
-        setTimerActive(true);
+        setTimerRunning(true);
         sfxCharge();
+        showToast(
+          `${data.player2.name} bergabung lewat kode undangan!`,
+          "success"
+        );
         goScreen("game");
       }
 
       if (data.status === "finished" && screen === "game") {
-        setTimerActive(false);
-        if ((data.battery ?? 0) >= 80) sfxWin();
-        else if ((data.battery ?? 0) >= 45) sfxCharge();
+        setTimerRunning(false);
+        const finalPct = data.battery ?? 0;
+        if (finalPct >= 80) sfxWin();
+        else if (finalPct >= 45) sfxCharge();
         else sfxPenalty();
         goScreen("ending");
       }
     });
 
     return () => unsubscribe();
-  }, [inviteCode, mode, screen, goScreen, showToast]);
+  }, [
+    inviteCode,
+    mode,
+    screen,
+    goScreen,
+    showToast,
+    sfxCharge,
+    sfxPenalty,
+    sfxWin,
+    triggerBatteryDelta,
+  ]);
 
-  // Step 1: Start Calibration from Lobby
-  const handleStartCalibration = async (e: React.FormEvent) => {
+  // Countdown Timer Effect
+  const currentCard = deck[round - 1];
+  const isMyOnlineTurn =
+    mode !== "online" ||
+    !currentCard ||
+    (gameStage === "negotiate2"
+      ? currentCard.responderKey !== myOnlineRole
+      : currentCard.responderKey === myOnlineRole);
+
+  useEffect(() => {
+    if (screen !== "game" || !timerRunning) return;
+    if (mode === "online" && !isMyOnlineTurn) return;
+
+    const interval = setInterval(() => {
+      setTimerSeconds((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          setTimerRunning(false);
+          handleTimeoutPenalty();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [screen, timerRunning, round, gameStage, mode, isMyOnlineTurn]);
+
+  // ==================== SCREEN 1 HANDLERS ====================
+  const switchLandingTab = (tab: "new" | "invite") => {
+    sfxTap();
+    setLandingTab(tab);
+    setRegisterError(null);
+  };
+
+  const fillDemoInviteCode = () => {
+    sfxTap();
+    setInputJoinCode("KAWIN-888");
+    showToast(
+      "Kode demo KAWIN-888 terpasang (Pengundang: Laki-laki, 26 thn).",
+      "info"
+    );
+  };
+
+  const quickFillDemoUser = () => {
+    sfxTap();
+    const samples: Array<{
+      name: string;
+      email: string;
+      gender: "Laki-laki" | "Perempuan";
+      age: number;
+    }> = [
+      {
+        name: "Raka",
+        email: "raka.drama@mail.com",
+        gender: "Laki-laki",
+        age: 24,
+      },
+      {
+        name: "Nadya",
+        email: "nadya.jujur@mail.com",
+        gender: "Perempuan",
+        age: 27,
+      },
+      {
+        name: "Dimas",
+        email: "dimas.realistis@mail.com",
+        gender: "Laki-laki",
+        age: 29,
+      },
+      {
+        name: "Keisya",
+        email: "keisya.overthink@mail.com",
+        gender: "Perempuan",
+        age: 22,
+      },
+    ];
+    let pick = samples[Math.floor(Math.random() * samples.length)];
+    if (landingTab === "invite") {
+      pick = samples[1];
+    }
+    setRegName(pick.name);
+    setRegEmail(pick.email);
+    setRegAge(String(pick.age));
+    setRegGender(pick.gender);
+    setRegisterError(null);
+    showToast(
+      `Data demo (${pick.name}, ${pick.gender}, ${pick.age} thn) diisi!`,
+      "success"
+    );
+  };
+
+  const showRegisterError = (title: string, text: string) => {
+    sfxPenalty();
+    setRegisterError({ title, text, key: Date.now() + Math.random() });
+  };
+
+  const handleRegistration = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = playerName.trim();
-    if (!cleanName) {
-      sfxPenalty();
-      showToast("Masukkan nama panggilanmu dulu.", "warning");
+    const name = regName.trim();
+    const email = regEmail.trim();
+    const age = parseInt(regAge, 10);
+
+    // STRICT 18+ VALIDATION
+    if (isNaN(age) || age < 18) {
+      showRegisterError(
+        "Akses Ditolak! Minimal usia 18 tahun untuk mengurus drama hubungan.",
+        `Usiamu baru ${
+          isNaN(age) ? "belum jelas" : age + " tahun"
+        }. Kelarin dulu urusan sekolah/kuliah sebelum uji nyali soal KUA!`
+      );
       return;
     }
 
-    if (playIntent === "join") {
-      const cleanCode = inputJoinCode.trim().toUpperCase();
-      if (cleanCode.length < 4) {
-        sfxPenalty();
-        showToast("Masukkan kode room yang valid.", "warning");
+    if (landingTab === "invite") {
+      const code = inputJoinCode.trim().toUpperCase();
+      if (!code || code.length < 4) {
+        showRegisterError(
+          "Kode Undangan Kosong!",
+          "Masukkan kode undangan pasanganmu (atau klik tombol Kode Demo)."
+        );
         return;
       }
-      if (!isFirebaseReady || !db) {
-        showToast("Layanan multiplayer belum terhubung.", "error");
-        return;
-      }
-      setIsBusy(true);
-      try {
-        const snap = await getDoc(doc(db, "rooms", cleanCode));
-        if (!snap.exists()) {
-          sfxPenalty();
-          showToast(`Kode room ${cleanCode} tidak ditemukan.`, "error");
+
+      // Check Firestore for live room first (unless using offline demo KAWIN-888)
+      if (code !== "KAWIN-888" && isFirebaseReady && db) {
+        setIsBusy(true);
+        try {
+          const snap = await getDoc(doc(db, "rooms", code));
+          if (!snap.exists()) {
+            showRegisterError(
+              "Kode Undangan Tidak Ditemukan!",
+              `Room dengan kode ${code} tidak ditemukan atau sudah berakhir.`
+            );
+            setIsBusy(false);
+            return;
+          }
+          const roomData = snap.data();
+          const hostProfile: PlayerProfile = roomData.player1;
+          if (regGender === hostProfile.gender) {
+            showRegisterError(
+              "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
+              `Kode ${code} dibuat oleh ${hostProfile.name} (${hostProfile.gender}). Kamu tidak bisa bergabung dengan jenis kelamin yang sama.`
+            );
+            setIsBusy(false);
+            return;
+          }
+
+          setRegisterError(null);
+          setInviteCode(code);
+          setMode("online");
+          setMyOnlineRole("player2");
+          setPlayer1(hostProfile);
+          setPlayer2({
+            name,
+            email,
+            gender: regGender,
+            age,
+            questions: build20QuestionsForProfile(regGender, age),
+            answers: {},
+          });
+          setQuizTarget("player2");
+          setQuizIndex(0);
+          setIsBusy(false);
+          sfxTap();
+          goScreen("quiz");
+          return;
+        } catch {
+          showRegisterError(
+            "Gagal Memeriksa Kode",
+            "Periksa koneksi internetmu atau coba Kode Demo KAWIN-888."
+          );
           setIsBusy(false);
           return;
         }
-        const roomData = snap.data();
-        if (roomData.player2 && roomData.status === "playing") {
-          sfxPenalty();
-          showToast(`Room ${cleanCode} sudah penuh.`, "error");
-          setIsBusy(false);
-          return;
-        }
-      } catch {
-        showToast("Gagal memeriksa room.", "error");
-        setIsBusy(false);
+      }
+
+      // Simulated Host Profile for Demo Invite Code KAWIN-888
+      const simulatedHost: PlayerProfile = {
+        name: "Arkan (Pengundang)",
+        email: "arkan@host.id",
+        gender: "Laki-laki",
+        age: 26,
+        questions: build20QuestionsForProfile("Laki-laki", 26),
+        answers: {},
+      };
+      simulatedHost.questions.forEach((q, idx) => {
+        simulatedHost.answers[q.id] =
+          idx % 3 === 0 ? "iya" : idx % 3 === 1 ? "kayanya" : "engga";
+      });
+
+      if (regGender === simulatedHost.gender) {
+        showRegisterError(
+          "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
+          `Kode ${code} dibuat oleh ${simulatedHost.name} (${simulatedHost.gender}). Kamu tidak bisa bergabung dengan jenis kelamin yang sama.`
+        );
         return;
       }
-      setIsBusy(false);
+
+      setRegisterError(null);
+      setInviteCode(code);
+      setMode("couple");
+      setPlayer1(simulatedHost);
+      setPlayer2({
+        name,
+        email,
+        gender: regGender,
+        age,
+        questions: build20QuestionsForProfile(regGender, age),
+        answers: {},
+      });
+      setQuizTarget("player2");
+      setQuizIndex(0);
+      sfxTap();
+      goScreen("quiz");
+      return;
     }
 
+    // Normal New Player Registration
     sfxTap();
-    setQuizDraftProfile({
-      name: cleanName,
-      gender: deckVariant,
-      age: 26,
-      questions: build20QuestionsForProfile(deckVariant, 26),
+    setRegisterError(null);
+    const newCode = "KAWIN-" + Math.floor(100 + Math.random() * 899);
+    setMode("online");
+    setMyOnlineRole("player1");
+    setInviteCode(newCode);
+    setPlayer1({
+      name,
+      email,
+      gender: regGender,
+      age,
+      questions: build20QuestionsForProfile(regGender, age),
       answers: {},
     });
+    setPlayer2(null);
+    setQuizTarget("player1");
     setQuizIndex(0);
     goScreen("quiz");
   };
 
-  // Step 2: Answer 20 Calibration Cards
+  // ==================== SCREEN 2 HANDLERS ====================
+  const activeQuizProfile = quizTarget === "player1" ? player1 : player2;
+  const activeQuizQuestion = activeQuizProfile?.questions[quizIndex];
+
+  const finishQuizPhase = async (
+    updatedP1: PlayerProfile | null,
+    updatedP2: PlayerProfile | null
+  ) => {
+    if (quizTarget === "player2" && updatedP1 && updatedP2) {
+      if (mode === "online" && isFirebaseReady && db && inviteCode) {
+        setIsBusy(true);
+        try {
+          const generatedDeck = buildMatchDeck(
+            updatedP1,
+            updatedP2,
+            "online",
+            maxRounds
+          );
+          const roomRef = doc(db, "rooms", inviteCode);
+          await runTransaction(db, async (tx) => {
+            const snap = await tx.get(roomRef);
+            if (!snap.exists()) return;
+            tx.update(roomRef, {
+              player2: updatedP2,
+              deck: generatedDeck,
+              status: "playing",
+              round: 1,
+              battery: 50,
+              stage: "dilemma",
+              negChoice1: null,
+              consecutiveTimeouts: 0,
+              history: [],
+              stats: {
+                terimaMantap: 0,
+                menyesal: 0,
+                kompromiSepakat: 0,
+                deadlockOrAfk: 0,
+              },
+              updatedAt: Date.now(),
+            });
+          });
+          setDeck(generatedDeck);
+          setBattery(50);
+          prevBatteryRef.current = 50;
+          setRound(1);
+          setGameStage("dilemma");
+          setTimerSeconds(60);
+          setTimerRunning(true);
+          showToast(
+            `Dek masalah ${updatedP2.name} siap! Memulai permainan...`,
+            "success"
+          );
+          goScreen("game");
+        } catch {
+          showToast("Gagal memulai sesi online.", "error");
+        } finally {
+          setIsBusy(false);
+        }
+        return;
+      }
+
+      showToast(
+        `Dek masalah ${updatedP2.name} siap! Memulai permainan pasangan...`,
+        "success"
+      );
+      initMatchArena(updatedP1, updatedP2, "couple");
+      return;
+    }
+
+    goScreen("mode");
+  };
+
   const answerQuiz = async (choice: "iya" | "kayanya" | "engga") => {
     sfxTap();
-    if (!quizDraftProfile) return;
-
-    const currentQ = quizDraftProfile.questions[quizIndex];
+    if (!activeQuizProfile) return;
+    const q = activeQuizProfile.questions[quizIndex];
     const updatedProfile: PlayerProfile = {
-      ...quizDraftProfile,
-      answers: { ...quizDraftProfile.answers, [currentQ.id]: choice },
+      ...activeQuizProfile,
+      answers: { ...activeQuizProfile.answers, [q.id]: choice },
     };
 
-    setQuizDraftProfile(updatedProfile);
+    const nextP1 = quizTarget === "player1" ? updatedProfile : player1;
+    const nextP2 = quizTarget === "player2" ? updatedProfile : player2;
+    if (quizTarget === "player1") setPlayer1(updatedProfile);
+    else setPlayer2(updatedProfile);
 
     if (quizIndex + 1 < updatedProfile.questions.length) {
       setQuizIndex(quizIndex + 1);
     } else {
-      await finishCalibration(updatedProfile);
+      await finishQuizPhase(nextP1, nextP2);
     }
   };
 
-  const finishCalibration = async (completedProfile: PlayerProfile) => {
-    if (playIntent === "solo") {
-      const persona = getBotPersonaConfig(botPersonaSlider);
-      const botQuestions = build20QuestionsForProfile(
-        persona.gender,
-        persona.age
-      );
-      const botAnswers: PlayerProfile["answers"] = {};
-      botQuestions.forEach((q, i) => {
-        if (i % 3 === 0 || i % 5 === 0) botAnswers[q.id] = "iya";
-        else if (i % 2 === 0) botAnswers[q.id] = "kayanya";
-        else botAnswers[q.id] = "engga";
-      });
-
-      const botProfile: PlayerProfile = {
-        name: persona.name,
-        gender: persona.gender,
-        age: persona.age,
-        questions: botQuestions,
-        answers: botAnswers,
-        emoji: persona.emoji,
-        tier: persona.tier,
-        vibe: persona.vibe,
-        bio: persona.bio,
-      };
-
-      const generatedSoloDeck = buildDeckFromPartnerProfile(
-        botProfile,
-        "player1",
-        maxRounds
-      );
-
-      setMode("solo");
-      setPlayer1(completedProfile);
-      setPlayer2(botProfile);
-      setSoloDeck(generatedSoloDeck);
-      setSyncScore(50);
-      prevScoreRef.current = 50;
-      setDeltaPop(null);
-      setRound(1);
-      setConsecutiveTimeouts(0);
-      setHistory([]);
-      setStats({
-        terimaMantap: 0,
-        menyesal: 0,
-        kompromiSepakat: 0,
-        deadlockOrAfk: 0,
-      });
-      setEndingReason("");
-      setGameStage("dilemma");
-      setTimerSeconds(60);
-      setTimerActive(true);
-      sfxCharge();
-      goScreen("game");
-      return;
-    }
-
-    if (!isFirebaseReady || !db) {
-      showToast("Koneksi database belum siap.", "error");
-      return;
-    }
-
-    setIsBusy(true);
-    try {
-      if (playIntent === "create") {
-        const generatedCode = "MEJA-" + Math.floor(100 + Math.random() * 899);
-        const roomRef = doc(db, "rooms", generatedCode);
-        await setDoc(roomRef, {
-          code: generatedCode,
-          player1: completedProfile,
-          player2: null,
-          status: "waiting",
-          round: 1,
-          battery: 50,
-          c1: { status: "dilemma" },
-          c2: { status: "dilemma" },
-          history: [],
-          stats: {
-            terimaMantap: 0,
-            menyesal: 0,
-            kompromiSepakat: 0,
-            deadlockOrAfk: 0,
-          },
-          updatedAt: Date.now(),
-        });
-
-        setMyRole("player1");
-        setMode("multiplayer");
-        setInviteCode(generatedCode);
-        setPlayer1(completedProfile);
-        setPlayer2(null);
-        sfxCharge();
-        goScreen("waiting");
-      } else if (playIntent === "join") {
-        const code = inputJoinCode.trim().toUpperCase();
-        const roomRef = doc(db, "rooms", code);
-        const roomSnap = await getDoc(roomRef);
-        if (!roomSnap.exists()) {
-          showToast("Room tidak ditemukan.", "error");
-          setIsBusy(false);
-          return;
-        }
-        const roomData = roomSnap.data();
-        const hostProfile: PlayerProfile = roomData.player1;
-
-        const p1Deck = buildDeckFromPartnerProfile(
-          completedProfile,
-          "player1",
-          maxRounds
-        );
-        const p2Deck = buildDeckFromPartnerProfile(
-          hostProfile,
-          "player2",
-          maxRounds
-        );
-
-        await runTransaction(db, async (tx) => {
-          const snap = await tx.get(roomRef);
-          if (!snap.exists()) throw new Error("Room hilang");
-          tx.update(roomRef, {
-            player2: completedProfile,
-            p1Deck,
-            p2Deck,
-            status: "playing",
-            round: 1,
-            battery: 50,
-            c1: { status: "dilemma" },
-            c2: { status: "dilemma" },
-            history: [],
-            stats: {
-              terimaMantap: 0,
-              menyesal: 0,
-              kompromiSepakat: 0,
-              deadlockOrAfk: 0,
-            },
-            updatedAt: Date.now(),
-          });
-        });
-
-        setMyRole("player2");
-        setMode("multiplayer");
-        setInviteCode(code);
-        setPlayer1(hostProfile);
-        setPlayer2(completedProfile);
-        setP1OnlineDeck(p1Deck);
-        setP2OnlineDeck(p2Deck);
-        setGameStage("dilemma");
-        setTimerSeconds(60);
-        setTimerActive(true);
-        sfxCharge();
-        goScreen("game");
-      }
-    } catch (err) {
-      console.error(err);
-      showToast("Gagal menyiapkan room permainan.", "error");
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const finalizeRoundIfBothResolved = (
-    data: Record<string, unknown>,
-    c1: CardRoundState,
-    c2: CardRoundState
-  ) => {
-    const p1Deck: DeckCard[] = (data.p1Deck as DeckCard[]) || [];
-    const p2Deck: DeckCard[] = (data.p2Deck as DeckCard[]) || [];
-    const curRound = (data.round as number) || 1;
-    const card1 = p1Deck[curRound - 1];
-    const card2 = p2Deck[curRound - 1];
-
-    const roundDelta = (c1.delta ?? 0) + (c2.delta ?? 0);
-    const nextScore = Math.max(
-      0,
-      Math.min(100, ((data.battery as number) ?? 50) + roundDelta)
-    );
-
-    const prevHistory: HistoryItem[] = (data.history as HistoryItem[]) || [];
-    const newItems: HistoryItem[] = [
-      {
-        round: curRound,
-        category: card1?.category || "Topik",
-        isWildcard: Boolean(card1?.isWildcard),
-        problem: card1?.partnerPrompt || "",
-        outcomeLabel: c1.outcomeLabel || "",
-        delta: c1.delta ?? 0,
-        type:
-          (c1.delta ?? 0) > 5
-            ? "good"
-            : (c1.delta ?? 0) > 0
-            ? "neutral"
-            : "bad",
-      },
-      {
-        round: curRound,
-        category: card2?.category || "Topik",
-        isWildcard: Boolean(card2?.isWildcard),
-        problem: card2?.partnerPrompt || "",
-        outcomeLabel: c2.outcomeLabel || "",
-        delta: c2.delta ?? 0,
-        type:
-          (c2.delta ?? 0) > 5
-            ? "good"
-            : (c2.delta ?? 0) > 0
-            ? "neutral"
-            : "bad",
-      },
+  const autoCompleteQuizDemo = async () => {
+    sfxTap();
+    if (!activeQuizProfile) return;
+    const choices: Array<"iya" | "kayanya" | "engga"> = [
+      "iya",
+      "iya",
+      "kayanya",
+      "engga",
     ];
+    const newAnswers = { ...activeQuizProfile.answers };
+    for (let i = quizIndex; i < activeQuizProfile.questions.length; i++) {
+      const q = activeQuizProfile.questions[i];
+      newAnswers[q.id] =
+        choices[(i + Math.floor(Math.random() * 3)) % choices.length];
+    }
+    const updatedProfile: PlayerProfile = {
+      ...activeQuizProfile,
+      answers: newAnswers,
+    };
 
-    const prevStats = (data.stats as typeof stats) || {
+    const nextP1 = quizTarget === "player1" ? updatedProfile : player1;
+    const nextP2 = quizTarget === "player2" ? updatedProfile : player2;
+    if (quizTarget === "player1") setPlayer1(updatedProfile);
+    else setPlayer2(updatedProfile);
+
+    showToast("Sisa pertanyaan otomatis terisi untuk simulasi!", "success");
+    await finishQuizPhase(nextP1, nextP2);
+  };
+
+  // ==================== SCREEN 3 & 3B HANDLERS ====================
+  const startSoloGame = () => {
+    if (!player1) return;
+    sfxTap();
+    const botGender =
+      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+    const persona = getBotPersonaConfig(botGender, botAgeSlider);
+    const botQuestions = build20QuestionsForProfile(botGender, botAgeSlider);
+
+    const botAnswers: PlayerProfile["answers"] = {};
+    botQuestions.forEach((q, i) => {
+      if (i % 3 === 0 || i % 5 === 0) botAnswers[q.id] = "iya";
+      else if (i % 2 === 0) botAnswers[q.id] = "kayanya";
+      else botAnswers[q.id] = "engga";
+    });
+
+    const botProfile: PlayerProfile = {
+      ...persona,
+      email: "bot@besokkawin.id",
+      questions: botQuestions,
+      answers: botAnswers,
+    };
+
+    setMode("solo");
+    setPlayer2(botProfile);
+    initMatchArena(player1, botProfile, "solo");
+  };
+
+  const openPartnerSimulatorModal = () => {
+    if (!player1) return;
+    sfxTap();
+    setPartnerError(null);
+    setPartnerGenderInput(
+      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
+    );
+    goScreen("partner-join");
+  };
+
+  const quickFillPartnerDemo = () => {
+    if (!player1) return;
+    sfxTap();
+    const oppGender =
+      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+    setPartnerNameInput(oppGender === "Perempuan" ? "Salsa" : "Reza");
+    setPartnerAgeInput("25");
+    setPartnerGenderInput(oppGender);
+    setPartnerError(null);
+  };
+
+  const handlePartnerJoinSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!player1) return;
+    const pName = partnerNameInput.trim();
+    const pAge = parseInt(partnerAgeInput, 10);
+
+    if (isNaN(pAge) || pAge < 18) {
+      sfxPenalty();
+      setPartnerError({
+        title: "Akses Ditolak! Minimal Usia 18+",
+        text: "Pasangan harus berusia minimal 18 tahun untuk bermain.",
+        key: Date.now(),
+      });
+      return;
+    }
+
+    if (partnerGenderInput === player1.gender) {
+      sfxPenalty();
+      setPartnerError({
+        title:
+          "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
+        text: `${player1.name} terdaftar sebagai ${
+          player1.gender
+        }. Pasangan harus berjenis kelamin ${
+          player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
+        }.`,
+        key: Date.now(),
+      });
+      return;
+    }
+
+    setPartnerError(null);
+    setMode("couple");
+    setPlayer2({
+      name: pName,
+      email: "pasangan@invite.id",
+      gender: partnerGenderInput,
+      age: pAge,
+      questions: build20QuestionsForProfile(partnerGenderInput, pAge),
+      answers: {},
+    });
+    setQuizTarget("player2");
+    setQuizIndex(0);
+    goScreen("quiz");
+  };
+
+  // ==================== SCREEN 4: GAMEPLAY ENGINE ====================
+  const initMatchArena = (
+    p1: PlayerProfile,
+    p2: PlayerProfile,
+    activeMode: "solo" | "couple"
+  ) => {
+    const generatedDeck = buildMatchDeck(p1, p2, activeMode, maxRounds);
+    setBattery(50);
+    prevBatteryRef.current = 50;
+    setDeltaBadge(null);
+    setRound(1);
+    setConsecutiveTimeouts(0);
+    setHistory([]);
+    setStats({
       terimaMantap: 0,
       menyesal: 0,
       kompromiSepakat: 0,
       deadlockOrAfk: 0,
-    };
-    const updatedStats = { ...prevStats };
-    if (c1.statType)
-      updatedStats[c1.statType] = (updatedStats[c1.statType] || 0) + 1;
-    if (c2.statType)
-      updatedStats[c2.statType] = (updatedStats[c2.statType] || 0) + 1;
-
-    const isGameOver = nextScore <= 0 || curRound >= maxRounds;
-    const nextReason =
-      nextScore <= 0
-        ? "Skor sefrekuensi menyentuh 0% sebelum ronde selesai!"
-        : "";
-
-    const summaryText = `Ronde ${curRound} selesai (${
-      roundDelta >= 0 ? `+${roundDelta}%` : `${roundDelta}%`
-    })`;
-
-    return {
-      battery: nextScore,
-      history: [...prevHistory, ...newItems],
-      stats: updatedStats,
-      round: isGameOver ? curRound : curRound + 1,
-      status: isGameOver ? "finished" : "playing",
-      endingReason: nextReason,
-      c1: isGameOver ? c1 : { status: "dilemma" },
-      c2: isGameOver ? c2 : { status: "dilemma" },
-      lastRoundSummary: {
-        id: Date.now() + Math.random(),
-        text: summaryText,
-        delta: roundDelta,
-      },
-      updatedAt: Date.now(),
-    };
-  };
-
-  const submitOnlineResponderDirect = async (
-    delta: number,
-    outcomeLabel: string,
-    statType: CardRoundState["statType"]
-  ) => {
-    if (!inviteCode || !isFirebaseReady || !db) return;
-    setIsSubmittingDecision(true);
-    setTimerActive(false);
-
-    try {
-      const roomRef = doc(db, "rooms", inviteCode);
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(roomRef);
-        if (!snap.exists()) return;
-        const data = snap.data();
-        if (data.status === "finished") return;
-
-        const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
-        const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
-
-        const resolvedCard: CardRoundState = {
-          status: "resolved",
-          delta,
-          outcomeLabel,
-          statType,
-        };
-
-        if (myRole === "player1") Object.assign(c1, resolvedCard);
-        else Object.assign(c2, resolvedCard);
-
-        if (c1.status === "resolved" && c2.status === "resolved") {
-          tx.update(roomRef, finalizeRoundIfBothResolved(data, c1, c2));
-        } else {
-          tx.update(roomRef, { c1, c2, updatedAt: Date.now() });
-        }
-      });
-    } catch {
-      showToast("Gagal mengirim jawaban.", "error");
-    } finally {
-      setIsSubmittingDecision(false);
-    }
-  };
-
-  const submitOnlineResponderRejectChoice = async (chosenIdx: number) => {
-    if (!inviteCode || !isFirebaseReady || !db) return;
-    setIsSubmittingDecision(true);
-    setTimerActive(false);
-
-    try {
-      const roomRef = doc(db, "rooms", inviteCode);
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(roomRef);
-        if (!snap.exists()) return;
-        const data = snap.data();
-        if (data.status === "finished") return;
-
-        const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
-        const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
-
-        const targetCard = myRole === "player1" ? c1 : c2;
-        targetCard.status = "negotiating";
-        targetCard.responderChoice = chosenIdx;
-
-        tx.update(roomRef, { c1, c2, updatedAt: Date.now() });
-      });
-      showToast(
-        `Opsi ${String.fromCharCode(
-          65 + chosenIdx
-        )} terkunci! Menunggu pemain lain memilih kompromi...`,
-        "info"
-      );
-    } catch {
-      showToast("Gagal mengirim pilihan.", "error");
-    } finally {
-      setIsSubmittingDecision(false);
-    }
-  };
-
-  const submitOnlineOwnerCompromiseChoice = async (ownerIdx: number) => {
-    if (!inviteCode || !isFirebaseReady || !db || !player1 || !player2) return;
-    setIsSubmittingDecision(true);
-    setTimerActive(false);
-
-    try {
-      const roomRef = doc(db, "rooms", inviteCode);
-      await runTransaction(db, async (tx) => {
-        const snap = await tx.get(roomRef);
-        if (!snap.exists()) return;
-        const data = snap.data();
-        if (data.status === "finished") return;
-
-        const c1: CardRoundState = { ...(data.c1 || { status: "dilemma" }) };
-        const c2: CardRoundState = { ...(data.c2 || { status: "dilemma" }) };
-
-        const ownedCard = myRole === "player1" ? c2 : c1;
-        const responderIdx = ownedCard.responderChoice ?? 0;
-        const isTimeout = ownerIdx === -1;
-        const isMatch = !isTimeout && responderIdx === ownerIdx;
-
-        const responderName =
-          myRole === "player1" ? player2.name : player1.name;
-        const ownerName = myRole === "player1" ? player1.name : player2.name;
-
-        ownedCard.ownerChoice = ownerIdx;
-        ownedCard.status = "resolved";
-        ownedCard.delta = isMatch ? 8 : -10;
-        ownedCard.statType = isMatch ? "kompromiSepakat" : "deadlockOrAfk";
-        ownedCard.outcomeLabel = isMatch
-          ? `Sepakat! (Opsi ${String.fromCharCode(65 + ownerIdx)})`
-          : isTimeout
-          ? `Timeout Kompromi (${ownerName})`
-          : `Deadlock (${responderName}: ${String.fromCharCode(
-              65 + responderIdx
-            )} vs ${ownerName}: ${String.fromCharCode(65 + ownerIdx)})`;
-
-        if (isMatch) sfxCharge();
-        else sfxPenalty();
-
-        if (c1.status === "resolved" && c2.status === "resolved") {
-          tx.update(roomRef, finalizeRoundIfBothResolved(data, c1, c2));
-        } else {
-          tx.update(roomRef, { c1, c2, updatedAt: Date.now() });
-        }
-      });
-    } catch {
-      showToast("Gagal mengirim kompromi.", "error");
-    } finally {
-      setIsSubmittingDecision(false);
-    }
-  };
-
-  const advanceSoloRound = (projectedScore: number) => {
-    if (projectedScore <= 0) {
-      setTimerActive(false);
-      setEndingReason("Skor sefrekuensi menyentuh 0% sebelum ronde selesai!");
-      sfxPenalty();
-      goScreen("ending");
-      return;
-    }
-    if (round >= maxRounds) {
-      setTimerActive(false);
-      if (projectedScore >= 80) sfxWin();
-      else if (projectedScore >= 45) sfxCharge();
-      else sfxPenalty();
-      goScreen("ending");
-      return;
-    }
-    setRound((prev) => prev + 1);
+    });
+    setEndingCustomReason("");
+    setDeck(generatedDeck);
     setGameStage("dilemma");
     setTimerSeconds(60);
-    setTimerActive(true);
+    setTimerRunning(true);
+    goScreen("game");
   };
 
-  const myActiveDeck =
-    mode === "solo"
-      ? soloDeck
-      : myRole === "player1"
-      ? p1OnlineDeck
-      : p2OnlineDeck;
-  const myOwnedDeck = myRole === "player1" ? p2OnlineDeck : p1OnlineDeck;
+  const syncOnlineRoundOutcome = async (
+    delta: number,
+    newHistoryItem: HistoryItem,
+    statKey: keyof typeof stats,
+    nextConsecutiveTimeouts: number
+  ) => {
+    if (!inviteCode || !isFirebaseReady || !db) return;
+    const roomRef = doc(db, "rooms", inviteCode);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(roomRef);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      const curBattery = (data.battery as number) ?? 50;
+      const curRound = (data.round as number) ?? 1;
+      const nextBattery = Math.max(0, Math.min(100, curBattery + delta));
+      const prevHist = (data.history as HistoryItem[]) || [];
+      const prevStats = (data.stats as typeof stats) || {
+        terimaMantap: 0,
+        menyesal: 0,
+        kompromiSepakat: 0,
+        deadlockOrAfk: 0,
+      };
+      const updatedStats = {
+        ...prevStats,
+        [statKey]: (prevStats[statKey] || 0) + 1,
+      };
 
-  const currentCard = myActiveDeck[round - 1];
-  const myOwnedCard = myOwnedDeck[round - 1];
+      const isAfkEnd = nextConsecutiveTimeouts >= 3;
+      const isBatteryZero = nextBattery <= 0;
+      const isRoundsDone = curRound >= maxRounds;
+      const isFinished = isAfkEnd || isBatteryZero || isRoundsDone;
 
-  const meProfile =
-    mode === "solo" ? player1 : myRole === "player1" ? player1 : player2;
-  const partnerProfile =
-    mode === "solo" ? player2 : myRole === "player1" ? player2 : player1;
+      const reason = isAfkEnd
+        ? "3x Timeout / Pasangan Ghosting Berturut-turut!"
+        : isBatteryZero
+        ? "Baterai Cinta habis menyentuh 0% sebelum ronde selesai!"
+        : "";
 
-  const handleTimeoutPenalty = async () => {
-    sfxPenalty();
-    if (!currentCard || !meProfile) return;
+      tx.update(roomRef, {
+        battery: nextBattery,
+        history: [...prevHist, newHistoryItem],
+        stats: updatedStats,
+        consecutiveTimeouts: nextConsecutiveTimeouts,
+        round: isFinished ? curRound : curRound + 1,
+        stage: "dilemma",
+        negChoice1: null,
+        status: isFinished ? "finished" : "playing",
+        endingReason: reason,
+        updatedAt: Date.now(),
+      });
+    });
+  };
 
-    if (mode === "multiplayer") {
-      if (needsResponderAction) {
-        showToast("Waktu habis! Dihitung telat merespons (-10%).", "error");
-        await submitOnlineResponderDirect(
-          -10,
-          `${meProfile.name}: Timeout`,
-          "deadlockOrAfk"
-        );
-      } else if (needsOwnerCompromiseAction) {
-        showToast("Waktu habis memilih kompromi (-10%).", "error");
-        await submitOnlineOwnerCompromiseChoice(-1);
-      }
+  const applyLocalRoundOutcome = (
+    delta: number,
+    newHistoryItem: HistoryItem,
+    statKey: keyof typeof stats,
+    nextConsecutiveTimeouts: number
+  ) => {
+    const nextBattery = Math.max(0, Math.min(100, battery + delta));
+    setBattery(nextBattery);
+    prevBatteryRef.current = nextBattery;
+    triggerBatteryDelta(delta);
+    setConsecutiveTimeouts(nextConsecutiveTimeouts);
+    setHistory((prev) => [...prev, newHistoryItem]);
+    setStats((prev) => ({ ...prev, [statKey]: prev[statKey] + 1 }));
+
+    if (nextConsecutiveTimeouts >= 3) {
+      setTimeout(() => {
+        setEndingCustomReason("3x Timeout / Pasangan Ghosting Berturut-turut!");
+        sfxPenalty();
+        goScreen("ending");
+      }, 900);
       return;
     }
 
+    setTimeout(() => {
+      if (nextBattery <= 0) {
+        setEndingCustomReason(
+          "Baterai Cinta habis menyentuh 0% sebelum ronde selesai!"
+        );
+        sfxPenalty();
+        goScreen("ending");
+        return;
+      }
+      if (round >= maxRounds) {
+        if (nextBattery >= 80) sfxWin();
+        else if (nextBattery >= 45) sfxCharge();
+        else sfxPenalty();
+        goScreen("ending");
+        return;
+      }
+      setRound((r) => r + 1);
+      setGameStage("dilemma");
+      setTimerSeconds(60);
+      setTimerRunning(true);
+    }, 850);
+  };
+
+  const handleTimeoutPenalty = async () => {
+    if (!currentCard || !player1 || !player2) return;
+    sfxPenalty();
     const nextAfk = consecutiveTimeouts + 1;
-    setConsecutiveTimeouts(nextAfk);
-    const nextScore = Math.max(0, Math.min(100, syncScore - 15));
-    applyScoreDelta(-15);
-    setStats((s) => ({ ...s, deadlockOrAfk: s.deadlockOrAfk + 1 }));
-    setHistory((h) => [
-      ...h,
-      {
+    const responder =
+      currentCard.responderKey === "player1" ? player1 : player2;
+    const item: HistoryItem = {
+      round,
+      category: currentCard.category,
+      isWildcard: currentCard.isWildcard,
+      problem: currentCard.partnerPrompt,
+      outcomeLabel: `Timeout / AFK (${responder.name})`,
+      delta: -15,
+      type: "bad",
+    };
+
+    showToast(
+      "⏱️ Waktu habis / AFK! Dihitung Tolak tanpa kompromi (-15%).",
+      "error"
+    );
+
+    if (mode === "online") {
+      await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", nextAfk);
+    } else {
+      applyLocalRoundOutcome(-15, item, "deadlockOrAfk", nextAfk);
+    }
+  };
+
+  const chooseAcceptCard = async (ev: React.MouseEvent<HTMLButtonElement>) => {
+    glitterBurst(ev);
+    sfxFlip();
+    setConsecutiveTimeouts(0);
+    if (mode === "online" && inviteCode && isFirebaseReady && db) {
+      await setDoc(
+        doc(db, "rooms", inviteCode),
+        { stage: "consequence", consecutiveTimeouts: 0, updatedAt: Date.now() },
+        { merge: true }
+      );
+    } else {
+      setGameStage("consequence");
+    }
+  };
+
+  const resolveConsequence = async (isFirm: boolean) => {
+    if (!currentCard || !player1 || !player2) return;
+    setTimerRunning(false);
+    const responder =
+      currentCard.responderKey === "player1" ? player1 : player2;
+
+    if (isFirm) {
+      sfxCharge();
+      const item: HistoryItem = {
         round,
         category: currentCard.category,
         isWildcard: currentCard.isWildcard,
         problem: currentCard.partnerPrompt,
-        outcomeLabel: `${meProfile.name}: Timeout`,
-        delta: -15,
-        type: "bad",
-      },
-    ]);
-
-    if (nextAfk >= 3) {
-      setTimeout(() => {
-        setEndingReason("3x Timeout berturut-turut!");
-        goScreen("ending");
-      }, 800);
-      return;
-    }
-    setTimeout(() => advanceSoloRound(nextScore), 900);
-  };
-
-  const chooseAcceptCard = () => {
-    sfxFlip();
-    setConsecutiveTimeouts(0);
-    setGameStage("consequence");
-  };
-
-  const chooseRejectCard = () => {
-    sfxFlip();
-    setConsecutiveTimeouts(0);
-    setGameStage("negotiate");
-  };
-
-  const resolveConsequence = async (isFirm: boolean) => {
-    if (!currentCard || !meProfile) return;
-
-    if (mode === "multiplayer") {
-      if (isFirm) {
-        sfxCharge();
-        await submitOnlineResponderDirect(
-          8,
-          `${meProfile.name}: Konsisten Terima`,
-          "terimaMantap"
-        );
+        outcomeLabel: `${responder.name}: Terima Konsekuensi Mantap`,
+        delta: 10,
+        type: "good",
+      };
+      showToast("Komitmen penuh! Baterai Cinta +10%", "success");
+      if (mode === "online") {
+        await syncOnlineRoundOutcome(10, item, "terimaMantap", 0);
       } else {
-        sfxPenalty();
-        await submitOnlineResponderDirect(
-          -10,
-          `${meProfile.name}: Ragu Setelah Terima`,
-          "menyesal"
-        );
+        applyLocalRoundOutcome(10, item, "terimaMantap", 0);
       }
-      return;
-    }
-
-    setTimerActive(false);
-    if (isFirm) {
-      sfxCharge();
-      const nextScore = Math.max(0, Math.min(100, syncScore + 10));
-      applyScoreDelta(10);
-      setStats((s) => ({ ...s, terimaMantap: s.terimaMantap + 1 }));
-      setHistory((h) => [
-        ...h,
-        {
-          round,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `${meProfile.name}: Konsisten Terima`,
-          delta: 10,
-          type: "good",
-        },
-      ]);
-      showToast("Konsisten! Skor sefrekuensi +10%", "success");
-      setTimeout(() => advanceSoloRound(nextScore), 750);
     } else {
       sfxPenalty();
-      const nextScore = Math.max(0, Math.min(100, syncScore - 12));
-      applyScoreDelta(-12);
-      setStats((s) => ({ ...s, menyesal: s.menyesal + 1 }));
-      setHistory((h) => [
-        ...h,
-        {
-          round,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `${meProfile.name}: Ragu Setelah Terima`,
-          delta: -12,
-          type: "bad",
-        },
-      ]);
-      showToast("Goyah di tengah jalan! Penalti -12%", "error");
-      setTimeout(() => advanceSoloRound(nextScore), 750);
+      const item: HistoryItem = {
+        round,
+        category: currentCard.category,
+        isWildcard: currentCard.isWildcard,
+        problem: currentCard.partnerPrompt,
+        outcomeLabel: `${responder.name}: Menyesal Pilih Terima`,
+        delta: -12,
+        type: "bad",
+      };
+      showToast("Asal mengiyakan lalu menyesal! Penalti berat -12%", "error");
+      if (mode === "online") {
+        await syncOnlineRoundOutcome(-12, item, "menyesal", 0);
+      } else {
+        applyLocalRoundOutcome(-12, item, "menyesal", 0);
+      }
     }
   };
 
-  const resolveNegotiation = async (chosenIdx: number) => {
-    if (!currentCard || !meProfile || !partnerProfile) return;
-
-    if (mode === "multiplayer") {
-      sfxFlip();
-      await submitOnlineResponderRejectChoice(chosenIdx);
-      return;
+  const chooseRejectCard = async () => {
+    sfxFlip();
+    setConsecutiveTimeouts(0);
+    setCoupleNegotiationP1Choice(null);
+    if (mode === "online" && inviteCode && isFirebaseReady && db) {
+      await setDoc(
+        doc(db, "rooms", inviteCode),
+        {
+          stage: "negotiate1",
+          negChoice1: null,
+          consecutiveTimeouts: 0,
+          updatedAt: Date.now(),
+        },
+        { merge: true }
+      );
+    } else {
+      setGameStage("negotiate1");
     }
+  };
 
-    setTimerActive(false);
-    const tier = partnerProfile.tier || "mid";
-    const botIdx = currentCard.botPref[tier] ?? 0;
-    const isAgreed = chosenIdx === botIdx;
+  const resolveSoloNegotiation = (playerIdx: number, botIdx: number) => {
+    if (!currentCard || !player2) return;
+    setTimerRunning(false);
+    const isAgreed = playerIdx === botIdx;
 
     if (isAgreed) {
       sfxCharge();
-      const nextScore = Math.max(0, Math.min(100, syncScore + 5));
-      applyScoreDelta(5);
-      setStats((s) => ({ ...s, kompromiSepakat: s.kompromiSepakat + 1 }));
-      setHistory((h) => [
-        ...h,
-        {
-          round,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `Sepakat Kompromi (Opsi ${String.fromCharCode(
-            65 + chosenIdx
-          )})`,
-          delta: 5,
-          type: "neutral",
-        },
-      ]);
+      const item: HistoryItem = {
+        round,
+        category: currentCard.category,
+        isWildcard: currentCard.isWildcard,
+        problem: currentCard.partnerPrompt,
+        outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
+          65 + playerIdx
+        )})`,
+        delta: 5,
+        type: "neutral",
+      };
       showToast(
-        `Sepakat di Opsi ${String.fromCharCode(65 + chosenIdx)}! (+5%)`,
+        `Sepakat sama ${player2.name} di Opsi ${String.fromCharCode(
+          65 + playerIdx
+        )}! Baterai +5%`,
         "success"
       );
-      setTimeout(() => advanceSoloRound(nextScore), 850);
+      applyLocalRoundOutcome(5, item, "kompromiSepakat", 0);
     } else {
       sfxPenalty();
-      const nextScore = Math.max(0, Math.min(100, syncScore - 15));
-      applyScoreDelta(-15);
-      setStats((s) => ({ ...s, deadlockOrAfk: s.deadlockOrAfk + 1 }));
-      setHistory((h) => [
-        ...h,
-        {
-          round,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `Deadlock (Kamu: ${String.fromCharCode(
-            65 + chosenIdx
-          )} vs ${partnerProfile.name}: ${String.fromCharCode(65 + botIdx)})`,
-          delta: -15,
-          type: "bad",
-        },
-      ]);
+      const item: HistoryItem = {
+        round,
+        category: currentCard.category,
+        isWildcard: currentCard.isWildcard,
+        problem: currentCard.partnerPrompt,
+        outcomeLabel: `Tolak → Deadlock (Kamu: ${String.fromCharCode(
+          65 + playerIdx
+        )}, ${player2.name}: ${String.fromCharCode(65 + botIdx)})`,
+        delta: -15,
+        type: "bad",
+      };
       showToast(
-        `Deadlock! Kamu pilih ${String.fromCharCode(65 + chosenIdx)}, ${
-          partnerProfile.name
-        } pilih ${String.fromCharCode(65 + botIdx)} (-15%)`,
+        `Deadlock! Kamu pilih ${String.fromCharCode(65 + playerIdx)}, ${
+          player2.name
+        } maunya ${String.fromCharCode(65 + botIdx)} (-15%)`,
         "error"
       );
-      setTimeout(() => advanceSoloRound(nextScore), 850);
+      applyLocalRoundOutcome(-15, item, "deadlockOrAfk", 0);
     }
   };
 
-  const endingVerdict =
-    syncScore >= 80
-      ? {
-          emoji: "🏆",
-          title: "SEFREKUENSI TOTAL!",
-          subtitle:
-            "Cara pikir dan kompromi kalian nyambung banget. Ego bisa ditekan dan solusi selalu ketemu di tengah!",
-          border: "border-emerald-500/60",
-          badgeBg: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40",
-          titleClass: "text-emerald-300",
-        }
-      : syncScore >= 45
-      ? {
-          emoji: "⚖️",
-          title: "MASIH BISA NEGO",
-          subtitle:
-            "Banyak titik temu yang cocok, tapi masih ada beberapa prinsip yang bikin debat panjang sebelum sepakat.",
-          border: "border-amber-500/60",
-          badgeBg: "bg-amber-500/20 text-amber-300 border-amber-500/40",
-          titleClass: "text-amber-300",
-        }
-      : {
-          emoji: "💥",
-          title: "BEDA FREKUENSI",
-          subtitle: endingReason
-            ? `${endingReason} Terlalu sering deadlock dan tarik ulur argumen.`
-            : "Terlalu banyak deadlock ego dan jalan buntu setiap kali beda pendapat!",
-          border: "border-rose-500/60",
-          badgeBg: "bg-rose-500/20 text-rose-300 border-rose-500/40",
-          titleClass: "text-rose-400",
-        };
-
-  const downloadStoryCardPNG = () => {
-    if (!player1 || !player2 || typeof document === "undefined") return;
+  const submitCoupleNegotiationStep1 = async (choiceIdx: number) => {
     sfxTap();
-
-    const canvas = document.createElement("canvas");
-    canvas.width = 1080;
-    canvas.height = 1920;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.fillStyle = "#090a0f";
-    ctx.fillRect(0, 0, 1080, 1920);
-
-    const isWin = syncScore >= 80;
-    const isMid = syncScore >= 45 && syncScore < 80;
-    const accentColor = isWin ? "#10b981" : isMid ? "#f59e0b" : "#f43f5e";
-
-    const roundRect = (
-      x: number,
-      y: number,
-      w: number,
-      h: number,
-      r: number
-    ) => {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
-    };
-
-    ctx.fillStyle = "#f59e0b";
-    ctx.font = "900 44px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("SEFREKUENSI • Card Game", 540, 160);
-
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "600 28px sans-serif";
-    ctx.fillText("HASIL UJI KOMPROMI & FREKUENSI", 540, 210);
-
-    roundRect(80, 280, 920, 1180, 48);
-    ctx.fillStyle = "rgba(18, 19, 26, 0.96)";
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = accentColor;
-    ctx.stroke();
-
-    ctx.font = "130px sans-serif";
-    ctx.fillText(endingVerdict.emoji, 540, 460);
-
-    roundRect(300, 515, 480, 64, 32);
-    ctx.fillStyle = "rgba(255, 255, 255, 0.08)";
-    ctx.fill();
-    ctx.fillStyle = accentColor;
-    ctx.font = "800 30px monospace";
-    ctx.fillText(`SKOR SEFREKUENSI: ${syncScore}%`, 540, 558);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "900 62px sans-serif";
-    ctx.fillText(endingVerdict.title, 540, 665);
-
-    ctx.fillStyle = "#e2e8f0";
-    ctx.font = "700 36px sans-serif";
-    ctx.fillText(`${player1.name}  ⚡  ${player2.name}`, 540, 740);
-
-    roundRect(150, 795, 780, 44, 22);
-    ctx.fillStyle = "#090a0f";
-    ctx.fill();
-    if (syncScore > 0) {
-      roundRect(156, 801, Math.max(32, (768 * syncScore) / 100), 32, 16);
-      ctx.fillStyle = accentColor;
-      ctx.fill();
+    setCoupleNegotiationP1Choice(choiceIdx);
+    if (mode === "online" && inviteCode && isFirebaseReady && db) {
+      setTimerSeconds(60);
+      await setDoc(
+        doc(db, "rooms", inviteCode),
+        { stage: "negotiate2", negChoice1: choiceIdx, updatedAt: Date.now() },
+        { merge: true }
+      );
+    } else {
+      setGameStage("negotiate2");
     }
+  };
 
-    ctx.fillStyle = "#cbd5e1";
-    ctx.font = "500 30px sans-serif";
-    const words = endingVerdict.subtitle.split(" ");
-    let line = "";
-    let lineY = 915;
-    for (let i = 0; i < words.length; i++) {
-      const testLine = line + words[i] + " ";
-      if (ctx.measureText(testLine).width > 780 && i > 0) {
-        ctx.fillText(line.trim(), 540, lineY);
-        line = words[i] + " ";
-        lineY += 44;
+  const resolveCoupleNegotiation = async (partnerChoiceIdx: number) => {
+    if (!currentCard || coupleNegotiationP1Choice === null) return;
+    setTimerRunning(false);
+    const firstIdx = coupleNegotiationP1Choice;
+    const isAgreed = firstIdx === partnerChoiceIdx;
+
+    if (isAgreed) {
+      sfxCharge();
+      const item: HistoryItem = {
+        round,
+        category: currentCard.category,
+        isWildcard: currentCard.isWildcard,
+        problem: currentCard.partnerPrompt,
+        outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
+          65 + firstIdx
+        )})`,
+        delta: 5,
+        type: "neutral",
+      };
+      showToast(
+        `Kalian berdua sepakat di Opsi ${String.fromCharCode(
+          65 + firstIdx
+        )}! Baterai +5%`,
+        "success"
+      );
+      if (mode === "online") {
+        await syncOnlineRoundOutcome(5, item, "kompromiSepakat", 0);
       } else {
-        line = testLine;
+        applyLocalRoundOutcome(5, item, "kompromiSepakat", 0);
+      }
+    } else {
+      sfxPenalty();
+      const item: HistoryItem = {
+        round,
+        category: currentCard.category,
+        isWildcard: currentCard.isWildcard,
+        problem: currentCard.partnerPrompt,
+        outcomeLabel: `Tolak → Deadlock (${String.fromCharCode(
+          65 + firstIdx
+        )} vs ${String.fromCharCode(65 + partnerChoiceIdx)})`,
+        delta: -15,
+        type: "bad",
+      };
+      showToast(
+        `Beda pilihan kompromi (${String.fromCharCode(
+          65 + firstIdx
+        )} vs ${String.fromCharCode(65 + partnerChoiceIdx)})! Deadlock -15%`,
+        "error"
+      );
+      if (mode === "online") {
+        await syncOnlineRoundOutcome(-15, item, "deadlockOrAfk", 0);
+      } else {
+        applyLocalRoundOutcome(-15, item, "deadlockOrAfk", 0);
       }
     }
-    ctx.fillText(line.trim(), 540, lineY);
-
-    const statBoxes = [
-      { label: "KONSISTEN", val: `${stats.terimaMantap}x`, color: "#10b981" },
-      { label: "GOYAH", val: `${stats.menyesal}x`, color: "#f43f5e" },
-      { label: "KOMPROMI", val: `${stats.kompromiSepakat}x`, color: "#f59e0b" },
-      { label: "DEADLOCK", val: `${stats.deadlockOrAfk}x`, color: "#ef4444" },
-    ];
-
-    statBoxes.forEach((box, idx) => {
-      const col = idx % 2;
-      const row = Math.floor(idx / 2);
-      const bx = 140 + col * 410;
-      const by = 1140 + row * 135;
-      roundRect(bx, by, 390, 115, 24);
-      ctx.fillStyle = "rgba(9, 10, 15, 0.85)";
-      ctx.fill();
-      ctx.strokeStyle = "rgba(245, 158, 11, 0.25)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      ctx.fillStyle = box.color;
-      ctx.font = "900 34px monospace";
-      ctx.fillText(box.val, bx + 195, by + 54);
-
-      ctx.fillStyle = "#94a3b8";
-      ctx.font = "700 22px sans-serif";
-      ctx.fillText(box.label, bx + 195, by + 90);
-    });
-
-    const displayHost =
-      typeof window !== "undefined" ? window.location.host : "vercel.app";
-    ctx.fillStyle = "#f59e0b";
-    ctx.font = "800 34px monospace";
-    ctx.fillText(displayHost, 540, 1615);
-
-    const link = document.createElement("a");
-    link.download = `SEFREKUENSI-${player1.name}-${player2.name}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-    showToast("Kartu hasil berhasil diunduh!", "success");
   };
 
-  const resetToLobby = () => {
+  // ==================== ENDING & RESET HELPERS ====================
+  const copyMatchReport = () => {
+    if (!player1 || !player2) return;
+    const title =
+      battery >= 80
+        ? "BESOK KAWIN!"
+        : battery >= 45
+        ? "PACARAN DULU AJA"
+        : "STOP THE WEDDING";
+    const summary = [
+      `=== HASIL BESOK KAWIN? ===`,
+      `Pasangan: ${player1.name} & ${player2.name}`,
+      `Baterai Cinta Akhir: ${battery}% -> ${title}`,
+      `Statistik: Terima Mantap (${stats.terimaMantap}), Menyesal (${stats.menyesal}), Sepakat Kompromi (${stats.kompromiSepakat}), Deadlock/AFK (${stats.deadlockOrAfk})`,
+      `Mainkan sekarang untuk uji red flag hubunganmu!`,
+    ].join("\n");
+    copyTextSafe(summary, "Rapor kecocokan berhasil disalin!");
+  };
+
+  const replaySameProfile = () => {
     sfxTap();
-    setTimerActive(false);
-    setInviteCode("");
-    setMyRole("player1");
-    setMode("solo");
+    setTimerRunning(false);
+    setPlayer2(null);
+    setMode("online");
+    setMyOnlineRole("player1");
+    setInviteCode("KAWIN-" + Math.floor(100 + Math.random() * 899));
+    goScreen("mode");
+  };
+
+  const fullResetGame = () => {
+    sfxTap();
+    setTimerRunning(false);
     setPlayer1(null);
     setPlayer2(null);
-    setC1State({ status: "dilemma" });
-    setC2State({ status: "dilemma" });
     setHistory([]);
-    goScreen("lobby");
+    setRegName("");
+    setRegEmail("");
+    setRegAge("");
+    setInputJoinCode("");
+    setRegisterError(null);
+    setLandingTab("new");
+    goScreen("register");
   };
 
-  const activeQuizQuestion = quizDraftProfile?.questions[quizIndex];
-  const botPreview = getBotPersonaConfig(botPersonaSlider);
-  const myConfessions =
-    meProfile?.questions.filter(
+  // ==================== COMPUTED VIEW VALUES ====================
+  const botGenderForPreview: "Laki-laki" | "Perempuan" =
+    player1?.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
+  const botPreview = getBotPersonaConfig(botGenderForPreview, botAgeSlider);
+
+  let countIya = 0;
+  let countKayanya = 0;
+  let countEngga = 0;
+  const confessions: Array<{ tag: string; text: string }> = [];
+
+  if (player1) {
+    player1.questions.forEach((q) => {
+      const ans = player1.answers[q.id];
+      if (ans === "iya") {
+        countIya++;
+        confessions.push({ tag: "🔥 Masalah", text: q.statement });
+      } else if (ans === "kayanya") {
+        countKayanya++;
+        confessions.push({ tag: "🤔 Wildcard", text: q.statement });
+      } else {
+        countEngga++;
+      }
+    });
+  }
+
+  const responder =
+    currentCard && player1 && player2
+      ? currentCard.responderKey === "player1"
+        ? player1
+        : player2
+      : null;
+  const cardPartner =
+    currentCard && player1 && player2
+      ? currentCard.responderKey === "player1"
+        ? player2
+        : player1
+      : null;
+
+  const responderConfessions =
+    responder?.questions.filter(
       (q) =>
-        meProfile.answers[q.id] === "iya" ||
-        meProfile.answers[q.id] === "kayanya"
+        responder.answers[q.id] === "iya" ||
+        responder.answers[q.id] === "kayanya"
     ) || [];
   const personalTrap =
-    myConfessions.length > 0
-      ? myConfessions[round % myConfessions.length]
-      : meProfile?.questions[0];
+    responderConfessions.length > 0
+      ? responderConfessions[round % responderConfessions.length]
+      : responder?.questions[0];
+
+  const cluePhrases: Record<"young" | "mid" | "mature", string> = {
+    young: "Aku maunya yang tetep ngejaga perasaan & perhatian kita sih...",
+    mid: "Menurutku kita butuh aturan yang realistis dan adil buat masing-masing.",
+    mature:
+      "Pilih opsi yang paling praktis, terukur, dan minim drama ke depannya.",
+  };
 
   return (
-    <div className="fixed inset-0 overflow-hidden overscroll-none flex flex-col bg-[#090a0f] text-stone-100">
-      <style>{`
-        html, body { position: fixed; inset: 0; width: 100%; height: 100%; overflow: hidden; overscroll-behavior: none; }
-        vercel-live-feedback, #__vercel-toolbar, [data-vercel-toolbar], iframe[src*="vercel.live"] {
-          display: none !important;
-        }
-        .card-surface {
-          background: linear-gradient(165deg, rgba(24, 25, 34, 0.92) 0%, rgba(13, 14, 20, 0.96) 100%);
-          backdrop-filter: blur(18px);
-        }
-        .btn-tactile { transition: transform 0.12s ease; }
-        .btn-tactile:active { transform: scale(0.97); }
-      `}</style>
-
-      {/* HEADER */}
-      <header
-        style={{ paddingTop: "max(0.65rem, env(safe-area-inset-top))" }}
-        className="w-full shrink-0 border-b border-amber-500/15 bg-[#090a0f]/95 z-40 pb-2.5"
-      >
-        <div className="max-w-xl mx-auto px-4 flex items-center justify-between gap-2">
-          <button
-            type="button"
-            onClick={resetToLobby}
-            className="flex items-center gap-2 text-left"
-          >
-            <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-400/40 flex items-center justify-center text-base">
-              🃏
+    <>
+      {/* TOP NAVIGATION BAR */}
+      <header className="w-full border-b border-slate-800/80 bg-obsidian/80 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center shadow-lg shadow-rose-500/25">
+              <svg
+                className="w-5 h-5 text-white"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth="2.3"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"
+                />
+              </svg>
             </div>
             <div>
-              <span className="block font-bold text-xs sm:text-sm text-stone-100 tracking-wide">
-                SEFREKUENSI
-              </span>
-              <span className="block text-[10px] text-stone-400">
-                Game Kartu Dilema &amp; Kompromi
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold tracking-tight text-base sm:text-lg text-white">
+                  BESOK KAWIN?
+                </span>
+                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                  18+
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-none">
+                Dating &amp; Red Flag Card Game
+              </p>
             </div>
-          </button>
+          </div>
 
-          <div className="flex items-center gap-1.5">
-            {!isAppInstalled && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                const next = !soundEnabled;
+                setSoundEnabled(next);
+                showToast(
+                  next ? "Suara efek diaktifkan" : "Suara efek dimatikan",
+                  "info"
+                );
+              }}
+              title="Suara Efek"
+              className="p-2.5 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/70 transition"
+            >
+              {soundEnabled ? (
+                <svg
+                  className="w-4 h-4 text-emerald-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"
+                  />
+                </svg>
+              ) : (
+                <svg
+                  className="w-4 h-4 text-slate-500"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15zM17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2"
+                  />
+                </svg>
+              )}
+            </button>
+
+            {screen !== "register" && (
               <button
                 type="button"
-                onClick={handleInstallClick}
-                className="px-2.5 py-1.5 rounded-full bg-amber-400 text-stone-950 text-[11px] font-extrabold btn-tactile"
+                onClick={() => {
+                  fullResetGame();
+                  showToast("Sesi direset. Silakan mulai dari awal.", "info");
+                }}
+                className="text-xs font-semibold px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-300 border border-slate-700/70 transition"
               >
-                Install
-              </button>
-            )}
-            <button
-              onClick={() => setSoundEnabled(!soundEnabled)}
-              className="w-7 h-7 rounded-full bg-stone-900 text-stone-300 border border-white/10 flex items-center justify-center text-xs"
-            >
-              {soundEnabled ? "🔊" : "🔈"}
-            </button>
-            {screen !== "lobby" && (
-              <button
-                onClick={resetToLobby}
-                className="text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-300 border border-white/10"
-              >
-                Menu
+                Keluar
               </button>
             )}
           </div>
         </div>
       </header>
 
-      {/* INSTALL MODAL */}
-      {showInstallGuide && (
-        <div
-          onClick={() => setShowInstallGuide(false)}
-          className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4"
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md card-surface border border-amber-500/25 rounded-3xl p-5"
-          >
-            <h3 className="font-bold text-stone-100 text-sm mb-3">
-              Pasang Game ke Layar Utama
-            </h3>
-            <p className="text-xs text-stone-300 mb-4 leading-relaxed">
-              {isIosDevice
-                ? "Buka di Safari, ketuk ikon Share di bawah layar, lalu pilih Add to Home Screen."
-                : "Buka di Google Chrome, ketuk menu titik tiga (⋮) di pojok kanan atas, lalu pilih Install app."}
-            </p>
-            <button
-              onClick={() => setShowInstallGuide(false)}
-              className="w-full py-2.5 rounded-full bg-amber-400 text-stone-950 font-extrabold text-xs"
-            >
-              Mengerti
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* TOASTS */}
+      {/* TOAST NOTIFICATION CONTAINER */}
       <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md flex flex-col gap-2 pointer-events-none">
-        {toasts.map((t) => (
-          <div
-            key={t.id}
-            className="px-4 py-3 rounded-2xl border bg-stone-950/95 border-amber-500/30 text-stone-100 text-xs font-semibold shadow-xl"
-          >
-            ✦ {t.message}
-          </div>
-        ))}
+        {toasts.map((t) => {
+          const styles = {
+            success: "bg-emerald-950/95 border-emerald-500/60 text-emerald-200",
+            error: "bg-red-950/95 border-red-500/60 text-red-200",
+            warning: "bg-amber-950/95 border-amber-500/60 text-amber-200",
+            info: "bg-slate-900/95 border-slate-700 text-slate-200",
+          };
+          const icons = {
+            success: "✅",
+            error: "🚨",
+            warning: "⚠️",
+            info: "💬",
+          };
+          return (
+            <div
+              key={t.id}
+              className={`pointer-events-auto px-4 py-3 rounded-2xl border backdrop-blur-md shadow-2xl text-xs font-bold flex items-center gap-2.5 animate-card-enter ${styles[t.type]}`}
+            >
+              <span className="text-sm">{icons[t.type]}</span>
+              <span>{t.message}</span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* MAIN CONTENT */}
-      <main
-        ref={mainScrollRef}
-        className="flex-1 min-h-0 overflow-y-auto overscroll-none w-full flex flex-col"
-      >
-        <div className="my-auto w-full max-w-xl mx-auto px-4 py-4 flex flex-col justify-center">
-          {/* ==================== SCREEN 1: LOBBY ==================== */}
-          {screen === "lobby" && (
-            <section className="space-y-3">
-              <div className="card-surface border border-amber-500/25 rounded-3xl p-5 shadow-2xl">
-                <span className="inline-block px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-widest bg-amber-500/10 text-amber-300 border border-amber-500/25 mb-3">
-                  2-Player &amp; Solo Card Game
+      {/* MAIN APP CONTAINER */}
+      <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6 flex flex-col justify-center">
+        {/* =================================================================== */}
+        {/* SCREEN 1: REGISTRASI & VALIDASI 18+                                 */}
+        {/* =================================================================== */}
+        {screen === "register" && (
+          <section key={animKey} className="animate-card-enter">
+            <div className="text-center mb-6">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-3">
+                <span>🔥</span> Uji Nyali Sebelum DP Gedung
+              </span>
+              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                Buka Borokmu di Depan,
+                <br />
+                <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-500 to-amber-400">
+                  Biar Nggak Nyesel di KUA.
                 </span>
-                <h1 className="text-2xl font-extrabold text-stone-100 leading-snug mb-1.5">
-                  Seberapa Sefrekuensi Isi Kepalamu?
-                </h1>
-                <p className="text-xs text-stone-400 leading-relaxed mb-4">
-                  Jawab 20 kartu pengakuan singkat, lalu adu argumen dan cari
-                  kompromi bareng teman, pasangan, atau lawan AI dalam 8 ronde.
-                </p>
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-md mx-auto">
+                Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi
+                kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian
+                sanggup bertahan.
+              </p>
+            </div>
 
-                <form onSubmit={handleStartCalibration} className="space-y-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-stone-300 mb-1">
-                      Nama Panggilan
-                    </label>
+            <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-900/90 border border-slate-800 mb-4">
+              <button
+                type="button"
+                onClick={() => switchLandingTab("new")}
+                className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  landingTab === "new"
+                    ? "bg-rose-500 text-white shadow-md shadow-rose-500/20"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Daftar Pemain Baru
+              </button>
+              <button
+                type="button"
+                onClick={() => switchLandingTab("invite")}
+                className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold transition ${
+                  landingTab === "invite"
+                    ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                Punya Kode Undangan?
+              </button>
+            </div>
+
+            <div className="bg-cardbg/90 backdrop-blur-xl border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl">
+              {landingTab === "invite" && (
+                <div className="mb-5 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-amber-400 mb-1.5">
+                    Masukkan Kode Undangan Pasangan
+                  </label>
+                  <div className="flex gap-2">
                     <input
                       type="text"
-                      required
-                      maxLength={20}
-                      value={playerName}
-                      onChange={(e) => setPlayerName(e.target.value)}
-                      placeholder="Masukkan namamu..."
-                      className="w-full bg-black/50 border border-white/10 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm text-stone-100 focus:outline-none"
+                      value={inputJoinCode}
+                      onChange={(e) => setInputJoinCode(e.target.value)}
+                      placeholder="Contoh: KAWIN-729"
+                      maxLength={12}
+                      className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
                     />
+                    <button
+                      type="button"
+                      onClick={fillDemoInviteCode}
+                      className="px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold border border-amber-500/30 whitespace-nowrap"
+                    >
+                      Kode Demo
+                    </button>
                   </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    *Sistem otomatis memblokir jika jenis kelaminmu sama dengan
+                    pengirim kode.
+                  </p>
+                </div>
+              )}
 
+              {registerError && (
+                <div
+                  key={registerError.key}
+                  className="mb-5 p-4 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <span className="text-base">🚫</span>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-extrabold text-red-400">
+                        {registerError.title}
+                      </h3>
+                      <p className="text-xs text-red-200/90 mt-0.5 leading-relaxed">
+                        {registerError.text}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <form onSubmit={handleRegistration} className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                    Identitas Pemain
+                  </span>
+                  <button
+                    type="button"
+                    onClick={quickFillDemoUser}
+                    className="text-xs font-semibold text-rose-400 hover:text-rose-300 underline underline-offset-4"
+                  >
+                    ⚡ Isi Cepat (Demo)
+                  </button>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="regName"
+                    className="block text-xs font-semibold text-slate-300 mb-1.5"
+                  >
+                    Nama Panggilan
+                  </label>
+                  <input
+                    type="text"
+                    id="regName"
+                    required
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    placeholder="Misal: Raka / Nadya"
+                    className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="regEmail"
+                    className="block text-xs font-semibold text-slate-300 mb-1.5"
+                  >
+                    Email Aktif
+                  </label>
+                  <input
+                    type="email"
+                    id="regEmail"
+                    required
+                    value={regEmail}
+                    onChange={(e) => setRegEmail(e.target.value)}
+                    placeholder="nama@email.com"
+                    className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none transition"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[11px] font-semibold text-stone-300 mb-1">
-                      Dek Kartu Sudut Pandang
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      Jenis Kelamin
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {(["Laki-laki", "Perempuan"] as const).map((g) => (
                         <button
                           key={g}
                           type="button"
-                          onClick={() => setDeckVariant(g)}
-                          className={`py-2.5 px-3 rounded-xl border text-xs font-bold transition ${
-                            deckVariant === g
-                              ? "border-amber-400 bg-amber-400/15 text-amber-200"
-                              : "border-white/10 bg-black/40 text-stone-400"
+                          onClick={() => setRegGender(g)}
+                          className={`py-3 px-2 rounded-xl border text-xs font-bold text-center transition ${
+                            regGender === g
+                              ? "border-rose-500 bg-rose-500/15 text-white"
+                              : "border-slate-700 bg-slate-950/90 text-slate-400"
                           }`}
                         >
-                          {g === "Laki-laki"
-                            ? "🎯 Dek Perspektif A"
-                            : "✨ Dek Perspektif B"}
+                          {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-stone-300 mb-1">
-                      Mode Bermain
+                    <label
+                      htmlFor="regAge"
+                      className="block text-xs font-semibold text-slate-300 mb-1.5"
+                    >
+                      Usia (Wajib 18+)
                     </label>
-                    <div className="grid grid-cols-3 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => setPlayIntent("solo")}
-                        className={`py-2.5 px-2 rounded-xl border text-[11px] font-bold ${
-                          playIntent === "solo"
-                            ? "border-amber-400 bg-amber-400/15 text-amber-200"
-                            : "border-white/10 bg-black/40 text-stone-400"
-                        }`}
-                      >
-                        🤖 Lawan AI
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPlayIntent("create")}
-                        className={`py-2.5 px-2 rounded-xl border text-[11px] font-bold ${
-                          playIntent === "create"
-                            ? "border-emerald-400 bg-emerald-400/15 text-emerald-200"
-                            : "border-white/10 bg-black/40 text-stone-400"
-                        }`}
-                      >
-                        🔑 Buat Room
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPlayIntent("join")}
-                        className={`py-2.5 px-2 rounded-xl border text-[11px] font-bold ${
-                          playIntent === "join"
-                            ? "border-rose-400 bg-rose-400/15 text-rose-200"
-                            : "border-white/10 bg-black/40 text-stone-400"
-                        }`}
-                      >
-                        🎟️ Gabung Kode
-                      </button>
-                    </div>
+                    <input
+                      type="number"
+                      id="regAge"
+                      required
+                      min={10}
+                      max={80}
+                      value={regAge}
+                      onChange={(e) => setRegAge(e.target.value)}
+                      placeholder="Contoh: 24"
+                      className="w-full bg-slate-950/90 border border-slate-700/90 focus:border-rose-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white placeholder-slate-500 focus:outline-none transition"
+                    />
                   </div>
+                </div>
 
-                  {playIntent === "solo" && (
-                    <div className="p-3 rounded-2xl bg-black/40 border border-white/10 space-y-1.5">
-                      <div className="flex justify-between text-xs">
-                        <span className="text-stone-300 font-bold">
-                          Lawan: {botPreview.emoji} {botPreview.name}
-                        </span>
-                        <span className="text-amber-300 font-mono text-[11px]">
-                          {botPreview.vibe}
-                        </span>
-                      </div>
-                      <input
-                        type="range"
-                        min={18}
-                        max={45}
-                        value={botPersonaSlider}
-                        onChange={(e) =>
-                          setBotPersonaSlider(parseInt(e.target.value, 10))
-                        }
-                        className="w-full"
-                      />
-                    </div>
-                  )}
-
-                  {playIntent === "join" && (
-                    <div>
-                      <input
-                        type="text"
-                        value={inputJoinCode}
-                        onChange={(e) => setInputJoinCode(e.target.value)}
-                        placeholder="Masukkan kode room (misal: MEJA-412)"
-                        maxLength={12}
-                        className="w-full bg-black/60 border border-white/15 focus:border-rose-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-stone-100 focus:outline-none"
-                      />
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={isBusy}
-                    className="w-full py-3.5 px-5 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-stone-950 font-extrabold text-xs sm:text-sm shadow-lg btn-tactile disabled:opacity-50"
-                  >
+                <button
+                  type="submit"
+                  disabled={isBusy}
+                  className="w-full mt-2 py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <span>
                     {isBusy
-                      ? "Memproses..."
-                      : "Mulai Kalibrasi 20 Kartu →"}
-                  </button>
-                </form>
-              </div>
-            </section>
-          )}
-
-          {/* ==================== SCREEN 2: 20 CARDS CALIBRATION ==================== */}
-          {screen === "quiz" && quizDraftProfile && activeQuizQuestion && (
-            <section className="space-y-3">
-              <div>
-                <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="font-mono font-bold text-amber-300 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/25">
-                    Kartu {quizIndex + 1} / 20
+                      ? "Memeriksa Kode..."
+                      : landingTab === "new"
+                      ? "Lanjut ke 20 Pengakuan Hidup"
+                      : "Gabung Kode & Isi 20 Pengakuan"}
                   </span>
-                  <span className="text-[11px] text-stone-400">
-                    {quizDraftProfile.name}
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M13 7l5 5m0 0l-5 5m5-5H6"
+                    />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* SCREEN 2: FASE 20 PERTANYAAN KEHIDUPAN                              */}
+        {/* =================================================================== */}
+        {screen === "quiz" && activeQuizProfile && activeQuizQuestion && (
+          <section key={animKey} className="animate-card-enter">
+            <div className="mb-4">
+              <div className="flex items-center justify-between text-xs mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+                    {activeQuizProfile.name} (
+                    {activeQuizProfile.gender === "Laki-laki" ? "👨" : "👩"}{" "}
+                    {activeQuizProfile.age} thn)
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {activeQuizQuestion.segmentLabel}
                   </span>
                 </div>
-                <div className="w-full h-1.5 bg-stone-900 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-amber-400 rounded-full transition-all duration-300"
-                    style={{ width: `${((quizIndex + 1) / 20) * 100}%` }}
-                  />
-                </div>
-              </div>
-
-              <div className="card-surface border border-amber-500/25 rounded-3xl p-5 shadow-2xl">
-                <span className="inline-block px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30 mb-2.5">
-                  {activeQuizQuestion.category}
+                <span className="font-mono font-extrabold text-rose-400 text-sm">
+                  <span>{quizIndex + 1}</span>
+                  <span className="text-slate-500">/20</span>
                 </span>
-                <blockquote className="text-base sm:text-lg font-bold text-stone-100 leading-relaxed">
+              </div>
+
+              <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden p-0.5">
+                <div
+                  className="h-full bg-gradient-to-r from-rose-500 via-pink-500 to-amber-400 rounded-full transition-all duration-300"
+                  style={{ width: `${((quizIndex + 1) / 20) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div
+              key={quizIndex}
+              className="bg-cardbg/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-6 sm:p-7 shadow-2xl min-h-[270px] flex flex-col justify-between animate-card-enter"
+            >
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-5">
+                  <span
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold tracking-wide border ${
+                      activeQuizQuestion.category === "Ketakutan Hidup"
+                        ? "bg-indigo-500/15 text-indigo-300 border-indigo-500/30"
+                        : activeQuizQuestion.category === "Kebiasaan Buruk"
+                        ? "bg-amber-500/15 text-amber-300 border-amber-500/30"
+                        : "bg-rose-500/15 text-rose-400 border-rose-500/30"
+                    }`}
+                  >
+                    {activeQuizQuestion.category}
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-500">
+                    #{String(quizIndex + 1).padStart(2, "0")}
+                  </span>
+                </div>
+
+                <blockquote className="text-lg sm:text-xl font-bold text-white leading-relaxed">
                   &ldquo;{activeQuizQuestion.statement}&rdquo;
                 </blockquote>
               </div>
 
-              {isBusy ? (
-                <div className="p-4 rounded-2xl card-surface border border-amber-500/25 text-center text-xs font-bold text-amber-300">
-                  Menyiapkan meja permainan...
+              <div className="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+                <span>Jawab jujur — ini bakal jadi dek kartu pasanganmu!</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5 mt-4">
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => answerQuiz("iya")}
+                className="w-full py-3.5 px-5 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/60 hover:border-rose-500 text-left flex items-center justify-between group btn-tactile disabled:opacity-50"
+              >
+                <div>
+                  <span className="block text-sm sm:text-base font-extrabold text-rose-400 group-hover:text-rose-300">
+                    🔥 Iya lagi
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    Setuju banget — masuk ke Dek Masalah Utama
+                  </span>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-2">
-                  <button
-                    onClick={() => answerQuiz("iya")}
-                    className="w-full py-3 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-left text-xs sm:text-sm font-extrabold text-emerald-300 btn-tactile"
+                <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-rose-500/20 text-rose-300">
+                  MASALAH
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => answerQuiz("kayanya")}
+                className="w-full py-3.5 px-5 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border-2 border-amber-500/50 hover:border-amber-400 text-left flex items-center justify-between group btn-tactile disabled:opacity-50"
+              >
+                <div>
+                  <span className="block text-sm sm:text-base font-extrabold text-amber-400 group-hover:text-amber-300">
+                    🤔 Kayanya sih
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    Ragu-ragu — masuk ke Dek Kartu Jebakan (Wildcard)
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-amber-500/20 text-amber-300">
+                  WILDCARD
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => answerQuiz("engga")}
+                className="w-full py-3.5 px-5 rounded-2xl bg-slate-800/70 hover:bg-slate-800 border-2 border-slate-700/80 hover:border-slate-500 text-left flex items-center justify-between group btn-tactile disabled:opacity-50"
+              >
+                <div>
+                  <span className="block text-sm sm:text-base font-extrabold text-slate-200">
+                    🛡️ Engga
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    Bukan gua banget — dibuang dari dek permainan
+                  </span>
+                </div>
+                <span className="text-xs font-mono font-bold px-2 py-1 rounded bg-slate-700 text-slate-400">
+                  BUANG
+                </span>
+              </button>
+            </div>
+
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={autoCompleteQuizDemo}
+                className="text-xs text-slate-500 hover:text-rose-400 underline underline-offset-4 transition disabled:opacity-50"
+              >
+                ⚡ Simulasi Isi Cepat Sisa Pertanyaan (Mode Pengujian)
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* SCREEN 3: PROFIL BOROK & PEMILIHAN MODE PERMAINAN                   */}
+        {/* =================================================================== */}
+        {screen === "mode" && player1 && (
+          <section key={animKey} className="animate-card-enter space-y-5">
+            <div className="bg-cardbg/95 border border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xl">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-rose-400">
+                    Hasil Profiling Jujur
+                  </span>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-white">
+                    Profil Borok &amp; Red Flag{" "}
+                    <span className="text-rose-400">{player1.name}</span>
+                  </h2>
+                </div>
+                <span className="text-xs font-mono bg-slate-800 px-2.5 py-1 rounded-lg text-slate-300 border border-slate-700">
+                  {player1.gender} • {player1.age} thn
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5 my-4">
+                <div className="p-3 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+                  <span className="block text-2xl font-mono font-extrabold text-rose-400">
+                    {countIya}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Iya lagi
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    Masalah Utama
+                  </span>
+                </div>
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+                  <span className="block text-2xl font-mono font-extrabold text-amber-400">
+                    {countKayanya}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Kayanya sih
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    Kartu Wildcard
+                  </span>
+                </div>
+                <div className="p-3 rounded-2xl bg-slate-800/70 border border-slate-700 text-center">
+                  <span className="block text-2xl font-mono font-extrabold text-slate-300">
+                    {countEngga}
+                  </span>
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Engga
+                  </span>
+                  <span className="block text-[10px] text-slate-500">
+                    Dibuang
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800/90">
+                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                  💣 Senjata Makan Tuan Teratasmu:
+                </p>
+                {confessions.length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">
+                    Kamu menjawab &ldquo;Engga&rdquo; semua! Pencitraan tingkat
+                    dewa — hati-hati kena kartu jebakan sistem.
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5 text-xs text-slate-300">
+                    {confessions.slice(0, 3).map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-800 text-rose-300 border border-slate-700">
+                          {item.tag}
+                        </span>
+                        <span className="line-clamp-2">
+                          &ldquo;{item.text}&rdquo;
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            <div className="text-center">
+              <h3 className="text-base font-extrabold text-white">
+                Pilih Lawan Main Uji Kecocokan
+              </h3>
+              <p className="text-xs text-slate-400">
+                Baterai Cinta dimulai dari{" "}
+                <span className="text-amber-400 font-bold">50%</span>. Sanggup
+                tembus 80%?
+              </p>
+            </div>
+
+            {/* MODE A: SOLO (LAWAN BOT AI) */}
+            <div className="bg-cardbg/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-5 transition">
+              <div className="flex items-start justify-between gap-3 mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-lg">
+                    🤖
+                  </div>
+                  <div>
+                    <h4 className="font-extrabold text-white text-base">
+                      Mode Solo — Lawan Bot AI
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      Otomatis lawan jenis (
+                      <span className="text-rose-400 font-semibold">
+                        {botGenderForPreview}
+                      </span>
+                      ) dengan kepribadian sesuai usia.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <label
+                    htmlFor="botAgeSlider"
+                    className="text-xs font-bold text-slate-300"
                   >
-                    🔥 Iya, ini gue banget (Kartu Utama)
-                  </button>
-                  <button
-                    onClick={() => answerQuiz("kayanya")}
-                    className="w-full py-3 px-4 rounded-2xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/40 text-left text-xs sm:text-sm font-extrabold text-amber-300 btn-tactile"
+                    Pilih Usia Bot AI:
+                  </label>
+                  <span className="font-mono font-extrabold text-sm px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                    {botAgeSlider} Tahun
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  id="botAgeSlider"
+                  min={18}
+                  max={45}
+                  value={botAgeSlider}
+                  onChange={(e) =>
+                    setBotAgeSlider(parseInt(e.target.value, 10))
+                  }
+                  className="w-full my-2"
+                />
+                <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-3">
+                  <span>18 (Dramatis)</span>
+                  <span>28 (Realistis)</span>
+                  <span>45 (Pragmatis)</span>
+                </div>
+
+                <div className="flex items-center gap-3 pt-3 border-t border-slate-800/80">
+                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-lg shrink-0">
+                    {botPreview.emoji}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-sm text-white">
+                        {botPreview.name} ({botAgeSlider} thn)
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        {botPreview.vibe}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
+                      &ldquo;{botPreview.bio}&rdquo;
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={startSoloGame}
+                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
+              >
+                Mulai Main Lawan Bot AI →
+              </button>
+            </div>
+
+            {/* MODE B: AJAK PASANGAN (KODE UNDANGAN) */}
+            <div className="bg-cardbg/95 border-2 border-slate-800 hover:border-emerald-500/50 rounded-3xl p-5 transition">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-xl shadow-lg">
+                  💌
+                </div>
+                <div>
+                  <h4 className="font-extrabold text-white text-base">
+                    Mode Ajak Pasangan (Kode Undangan)
+                  </h4>
+                  <p className="text-xs text-slate-400">
+                    Kirim kode ke pasangan lawan jenis (bisa beda HP secara
+                    online atau gantian di HP ini).
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between gap-2 mb-3">
+                <div>
+                  <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-bold">
+                    Kode Undangan Kamu
+                  </span>
+                  <span className="font-mono font-extrabold text-lg text-emerald-400 tracking-wider">
+                    {inviteCode}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    copyTextSafe(
+                      inviteCode,
+                      `Kode undangan ${inviteCode} disalin! Kirim ke pasangan lawan jenismu.`
+                    )
+                  }
+                  className="px-3.5 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 btn-tactile"
+                >
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth="2"
                   >
-                    🤔 Kadang-kadang / Situasional (Wildcard)
-                  </button>
-                  <button
-                    onClick={() => answerQuiz("engga")}
-                    className="w-full py-3 px-4 rounded-2xl bg-stone-900 hover:bg-stone-800 border border-white/10 text-left text-xs sm:text-sm font-extrabold text-stone-300 btn-tactile"
-                  >
-                    🛡️ Nggak sama sekali
-                  </button>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                    />
+                  </svg>
+                  Salin Kode
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={openPartnerSimulatorModal}
+                className="w-full py-3 px-4 rounded-2xl bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile"
+              >
+                📲 Main Berdua di Perangkat Ini / Simulasi Pasangan
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* SCREEN 3B: PENDAFTARAN PASANGAN (PASS & PLAY / SIMULASI)            */}
+        {/* =================================================================== */}
+        {screen === "partner-join" && player1 && (
+          <section key={animKey} className="animate-card-enter">
+            <div className="bg-cardbg/95 border border-emerald-500/30 rounded-3xl p-5 sm:p-6 shadow-2xl">
+              <div className="flex items-center justify-between mb-4">
+                <span className="px-3 py-1 rounded-full text-xs font-mono font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                  Kode: <span>{inviteCode}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    sfxTap();
+                    goScreen("mode");
+                  }}
+                  className="text-xs text-slate-400 hover:text-white"
+                >
+                  ← Kembali
+                </button>
+              </div>
+
+              <h2 className="text-xl font-extrabold text-white">
+                Pasangan Bergabung!
+              </h2>
+              <p className="text-xs text-slate-400 mt-1 mb-4">
+                <span className="text-rose-400 font-semibold">
+                  {player1.name} ({player1.gender}, {player1.age} thn)
+                </span>{" "}
+                mengundangmu uji kecocokan. Masukkan datamu (wajib lawan jenis
+                &amp; 18+).
+              </p>
+
+              {partnerError && (
+                <div
+                  key={partnerError.key}
+                  className="mb-4 p-3.5 rounded-2xl bg-red-500/15 border border-red-500/40 text-red-200 animate-shake"
+                >
+                  <p className="text-xs font-extrabold text-red-400">
+                    {partnerError.title}
+                  </p>
+                  <p className="text-xs text-red-200/90 mt-0.5">
+                    {partnerError.text}
+                  </p>
                 </div>
               )}
-            </section>
-          )}
 
-          {/* ==================== SCREEN 3: WAITING ROOM ==================== */}
-          {screen === "waiting" && player1 && (
-            <section className="space-y-3">
-              <div className="card-surface border border-amber-500/35 rounded-3xl p-5 shadow-xl text-center">
-                <span className="inline-block px-3 py-1 rounded-full text-[10px] font-mono uppercase tracking-widest bg-amber-500/15 text-amber-300 border border-amber-500/30 mb-3">
-                  Menunggu Pemain Kedua...
-                </span>
-                <h2 className="text-lg font-bold text-stone-100 mb-1">
-                  Kode Room Permainan
-                </h2>
-                <p className="text-xs text-stone-400 mb-4">
-                  Bagikan kode ini ke teman mainmu untuk masuk ke meja yang
-                  sama.
-                </p>
+              <form onSubmit={handlePartnerJoinSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Nama Panggilan Pasangan
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={partnerNameInput}
+                    onChange={(e) => setPartnerNameInput(e.target.value)}
+                    placeholder="Nama pasanganmu"
+                    className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-3 text-sm text-white focus:outline-none"
+                  />
+                </div>
 
-                <div className="inline-block font-mono font-extrabold text-2xl px-6 py-3 rounded-2xl bg-black/70 text-amber-300 border border-amber-400/40 tracking-widest">
-                  {inviteCode}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Jenis Kelamin Pasangan
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {(["Laki-laki", "Perempuan"] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setPartnerGenderInput(g)}
+                          className={`py-2.5 px-2 rounded-xl border text-xs font-bold text-center transition ${
+                            partnerGenderInput === g
+                              ? "border-emerald-500 bg-emerald-500/15 text-white"
+                              : "border-slate-700 bg-slate-950 text-slate-400"
+                          }`}
+                        >
+                          {g === "Laki-laki" ? "👨 Laki-laki" : "👩 Perempuan"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      Usia Pasangan (18+)
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min={10}
+                      max={80}
+                      value={partnerAgeInput}
+                      onChange={(e) => setPartnerAgeInput(e.target.value)}
+                      placeholder="Contoh: 25"
+                      className="w-full bg-slate-950 border border-slate-700 focus:border-emerald-500 rounded-xl px-4 py-2.5 text-sm font-mono font-bold text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={quickFillPartnerDemo}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 underline underline-offset-4"
+                  >
+                    ⚡ Isi Cepat Data Pasangan
+                  </button>
                 </div>
 
                 <button
-                  onClick={() => {
-                    const shareOrigin =
-                      typeof window !== "undefined"
-                        ? window.location.origin
-                        : "";
-                    copyTextSafe(
-                      `Ayo main SEFREKUENSI! Buka ${shareOrigin} pilih Gabung Kode dan masukkan: ${inviteCode}`,
-                      "Kode room berhasil disalin!"
-                    );
-                  }}
-                  className="block w-full mt-4 py-3 rounded-full bg-amber-400 text-stone-950 font-extrabold text-xs btn-tactile"
+                  type="submit"
+                  className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-sm shadow-lg shadow-emerald-500/25 btn-tactile"
                 >
-                  📋 Salin Kode Room
+                  Generate Dek Masalah Pasangan &amp; Mulai →
                 </button>
-              </div>
-            </section>
-          )}
+              </form>
+            </div>
+          </section>
+        )}
 
-          {/* ==================== SCREEN 4: GAMEPLAY ==================== */}
-          {screen === "game" &&
-            currentCard &&
-            meProfile &&
-            partnerProfile && (
-              <section className="space-y-2.5">
-                <div
-                  key={shakeHud}
-                  className="card-surface border border-amber-500/25 rounded-3xl p-3.5 shadow-xl relative"
-                >
-                  {deltaPop && (
-                    <div
-                      key={deltaPop.key}
-                      className="absolute right-6 -top-3 pointer-events-none z-30"
+        {/* =================================================================== */}
+        {/* SCREEN 4: ARENA GAMEPLAY UTAMA & BATERAI CINTA                      */}
+        {/* =================================================================== */}
+        {screen === "game" &&
+          currentCard &&
+          player1 &&
+          player2 &&
+          responder &&
+          cardPartner && (
+            <section className="space-y-4">
+              {/* BATERAI CINTA HUD */}
+              <div
+                key={hudShakeKey}
+                className={`bg-cardbg/95 backdrop-blur-xl border border-slate-800 rounded-3xl p-4 shadow-xl relative overflow-visible ${
+                  hudShakeKey > 0 ? "animate-shake" : ""
+                }`}
+              >
+                {deltaBadge && (
+                  <div
+                    key={deltaBadge.key}
+                    className="absolute right-6 -top-3 pointer-events-none z-30"
+                  >
+                    <span
+                      className={`inline-block font-mono font-extrabold text-base px-2.5 py-1 rounded-xl shadow-lg animate-delta ${
+                        deltaBadge.val > 0
+                          ? "bg-emerald-500 text-slate-950"
+                          : "bg-red-500 text-white"
+                      }`}
                     >
+                      {deltaBadge.val > 0
+                        ? `+${deltaBadge.val}%`
+                        : `${deltaBadge.val}%`}
+                    </span>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">🔋</span>
+                    <div>
+                      <span className="text-xs font-extrabold uppercase tracking-wider text-slate-300">
+                        Baterai Cinta
+                      </span>
                       <span
-                        className={`inline-block font-mono font-extrabold text-sm px-2.5 py-0.5 rounded-full shadow-lg ${
-                          deltaPop.val > 0
-                            ? "bg-emerald-400 text-stone-950"
-                            : "bg-rose-500 text-white"
+                        className={`ml-1.5 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          battery >= 80
+                            ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                            : battery >= 45
+                            ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                            : "bg-red-500/15 text-red-400 border-red-500/30"
                         }`}
                       >
-                        {deltaPop.val > 0
-                          ? `+${deltaPop.val}%`
-                          : `${deltaPop.val}%`}
+                        {battery >= 80
+                          ? "Siap Besok Kawin!"
+                          : battery >= 45
+                          ? "Zona Pacaran Dulu"
+                          : "Zona Bahaya!"}
                       </span>
+                    </div>
+                  </div>
+                  <span
+                    className={`font-mono font-extrabold text-xl sm:text-2xl ${
+                      battery >= 80
+                        ? "text-emerald-400"
+                        : battery >= 45
+                        ? "text-amber-400"
+                        : "text-red-400"
+                    }`}
+                  >
+                    {battery}%
+                  </span>
+                </div>
+
+                {/* Visual Battery Gauge */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex-1 h-6 bg-slate-950 rounded-xl border-2 border-slate-700 p-1 relative overflow-hidden">
+                    <div
+                      className={`h-full rounded-lg transition-all duration-500 ease-out relative battery-shimmer ${
+                        battery >= 80
+                          ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                          : battery >= 45
+                          ? "bg-gradient-to-r from-amber-500 to-yellow-400"
+                          : "bg-gradient-to-r from-red-600 to-rose-500"
+                      }`}
+                      style={{ width: `${battery}%` }}
+                    />
+                    <div
+                      className="absolute top-0 bottom-0 left-[45%] w-0.5 bg-slate-600/70"
+                      title="Batas Minimal 45%"
+                    />
+                    <div
+                      className="absolute top-0 bottom-0 left-[80%] w-0.5 bg-emerald-400/70"
+                      title="Target Besok Kawin 80%"
+                    />
+                  </div>
+                  <div className="w-2 h-3.5 bg-slate-700 rounded-r-md" />
+                </div>
+
+                {/* Round & Timer Bar */}
+                <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800/80 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-200">
+                      Ronde <span className="text-rose-400">{round}</span>/8
+                    </span>
+                    <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[140px] sm:max-w-[200px]">
+                      Giliran:{" "}
+                      {gameStage === "negotiate2"
+                        ? cardPartner.name
+                        : responder.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold ${
+                        timerSeconds <= 10
+                          ? "bg-red-500/20 border-red-500/60 text-red-400 animate-pulse"
+                          : "bg-slate-950 border-slate-700 text-slate-200"
+                      }`}
+                    >
+                      <span>⏱️</span>
+                      <span>{timerSeconds}s</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ONLINE WAITING STATE WHEN IT'S PARTNER'S TURN */}
+              {mode === "online" && !isMyOnlineTurn ? (
+                <div className="bg-cardbg/95 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-7 text-center shadow-2xl animate-card-enter">
+                  <div className="text-4xl mb-3">⏳</div>
+                  <h3 className="text-lg font-extrabold text-white">
+                    Menunggu Giliran{" "}
+                    {gameStage === "negotiate2"
+                      ? cardPartner.name
+                      : responder.name}
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-1.5 max-w-sm mx-auto">
+                    Pasanganmu sedang membaca kartu dan menentukan pilihan di
+                    perangkatnya...
+                  </p>
+                </div>
+              ) : (
+                <>
+                  {/* STAGE 1: DILEMMA CARD */}
+                  {gameStage === "dilemma" && (
+                    <div
+                      key={`dilemma-${round}`}
+                      className={`bg-cardbg/95 backdrop-blur-xl border-2 ${
+                        currentCard.isWildcard
+                          ? "border-amber-500/50"
+                          : "border-slate-800"
+                      } rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-enter`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                        <span className="px-3 py-1 rounded-full text-xs font-extrabold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                          {currentCard.category}
+                        </span>
+                        {currentCard.isWildcard ? (
+                          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                            ⚡ KARTU JEBAKAN (WILDCARD)
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-slate-800 text-slate-400">
+                            🔥 MASALAH UTAMA
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90 mb-4">
+                        <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-base shrink-0">
+                          {cardPartner.emoji ||
+                            (cardPartner.gender === "Perempuan" ? "👩" : "👨")}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-white truncate">
+                            Pengakuan {cardPartner.name} ({cardPartner.age} thn)
+                          </p>
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {currentCard.isWildcard
+                              ? 'Dia sempat ragu menjawab "Kayanya sih" soal ini...'
+                              : 'Dia ngaku jujur "Iya lagi" soal borok ini:'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="my-4">
+                        <p className="text-base sm:text-lg font-bold text-white leading-relaxed">
+                          &ldquo;{currentCard.partnerPrompt}&rdquo;
+                        </p>
+                        <p className="text-xs text-slate-400 italic mt-2.5 pl-3 border-l-2 border-slate-700">
+                          Pengakuan asli: &ldquo;{currentCard.statement}&rdquo;
+                        </p>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-slate-900/90 border border-slate-800 mb-5">
+                        <p className="text-xs font-bold text-slate-300">
+                          👉{" "}
+                          <span className="text-rose-400">
+                            {responder.name}
+                          </span>
+                          , kamu siap hidup bareng pasangan yang punya
+                          sifat/ketakutan ini?
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <button
+                          type="button"
+                          onClick={chooseAcceptCard}
+                          className="py-4 px-4 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border-2 border-emerald-500/70 hover:border-emerald-400 text-center group btn-tactile"
+                        >
+                          <span className="block text-base sm:text-lg font-extrabold text-emerald-400">
+                            💚 TERIMA
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            Uji Konsekuensi (+10% / -12%)
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={chooseRejectCard}
+                          className="py-4 px-4 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border-2 border-rose-500/70 hover:border-rose-400 text-center group btn-tactile"
+                        >
+                          <span className="block text-base sm:text-lg font-extrabold text-rose-400">
+                            🛑 TOLAK
+                          </span>
+                          <span className="block text-[10px] text-slate-400 mt-0.5">
+                            Cari Jalan Tengah (+5% / -15%)
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   )}
 
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="text-xs font-bold text-stone-300">
-                      ⚡ Skor Sefrekuensi
-                    </span>
-                    <span
-                      className={`font-mono font-extrabold text-base ${
-                        syncScore >= 80
-                          ? "text-emerald-400"
-                          : syncScore >= 45
-                          ? "text-amber-300"
-                          : "text-rose-400"
-                      }`}
-                    >
-                      {syncScore}%
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-black/70 rounded-full border border-white/10 p-0.5">
+                  {/* STAGE 2A: CONSEQUENCE CARD */}
+                  {gameStage === "consequence" && (
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        syncScore >= 80
-                          ? "bg-emerald-400"
-                          : syncScore >= 45
-                          ? "bg-amber-400"
-                          : "bg-rose-500"
-                      }`}
-                      style={{ width: `${syncScore}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between mt-2 text-[11px] text-stone-400">
-                    <span>
-                      Ronde <strong className="text-amber-300">{round}</strong>
-                      /8 •{" "}
-                      <strong className="text-stone-100">
-                        {meProfile.name}
-                      </strong>{" "}
-                      vs{" "}
-                      <strong className="text-amber-300">
-                        {partnerProfile.name}
-                      </strong>
-                    </span>
-                    <span
-                      className={`font-mono font-bold ${
-                        timerSeconds <= 10 ? "text-rose-400 animate-pulse" : ""
-                      }`}
+                      key={`conseq-${round}`}
+                      className="bg-cardbg/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
                     >
-                      ⏱️ {timerSeconds}s
-                    </span>
-                  </div>
-                </div>
-
-                {(mode === "solo" || needsResponderAction) && (
-                  <>
-                    {gameStage === "dilemma" && (
-                      <div className="card-surface border border-amber-500/25 rounded-3xl p-4 shadow-2xl">
-                        <div className="flex items-center justify-between gap-2 mb-2.5">
-                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold uppercase bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                            {currentCard.category}
-                          </span>
-                          <span className="text-[11px] font-semibold text-stone-400">
-                            Kartu {partnerProfile.name}
-                          </span>
-                        </div>
-
-                        <p className="text-sm sm:text-base font-bold text-stone-100 leading-snug mb-2">
-                          &ldquo;{currentCard.partnerPrompt}&rdquo;
-                        </p>
-                        <p className="text-[11px] text-stone-400 italic mb-3.5 pl-2.5 border-l-2 border-amber-400/40">
-                          Pernyataan {partnerProfile.name}: &ldquo;
-                          {currentCard.statement}&rdquo;
-                        </p>
-
-                        <div className="grid grid-cols-2 gap-2.5">
-                          <button
-                            onClick={chooseAcceptCard}
-                            className="py-3 px-2 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-400/50 text-center btn-tactile"
-                          >
-                            <span className="block text-xs sm:text-sm font-extrabold text-emerald-300">
-                              ✅ TERIMA
-                            </span>
-                            <span className="block text-[9px] text-stone-400 mt-0.5">
-                              Uji Konsekuensi
-                            </span>
-                          </button>
-                          <button
-                            onClick={chooseRejectCard}
-                            className="py-3 px-2 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-400/50 text-center btn-tactile"
-                          >
-                            <span className="block text-xs sm:text-sm font-extrabold text-rose-300">
-                              🛑 TOLAK
-                            </span>
-                            <span className="block text-[9px] text-stone-400 mt-0.5">
-                              Ajak Kompromi
-                            </span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {gameStage === "consequence" && (
-                      <div className="card-surface border border-amber-400/50 rounded-3xl p-4 shadow-2xl">
-                        <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/40 mb-2">
-                          ⚠️ KARTU KONSEKUENSI
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                          ⚠️ KARTU KONSEKUENSI TERBUKA
                         </span>
-                        <p className="text-sm sm:text-base font-bold text-stone-100 mb-2.5">
+                        <span className="text-xs font-bold text-slate-400">
+                          {responder.name}
+                        </span>
+                      </div>
+
+                      {mode === "solo" && cardPartner.reactAccept && (
+                        <div className="mb-4 p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs text-indigo-200">
+                          <span className="font-bold text-indigo-300">
+                            {cardPartner.name} ({cardPartner.age} thn):
+                          </span>{" "}
+                          &ldquo;{cardPartner.reactAccept}&rdquo;
+                        </div>
+                      )}
+
+                      <div className="p-4 rounded-2xl bg-slate-950 border border-amber-500/30 mb-4">
+                        <p className="text-sm sm:text-base font-extrabold text-white leading-relaxed">
                           &ldquo;{currentCard.consequenceQuestion}&rdquo;
                         </p>
                         {personalTrap && (
-                          <p className="text-[11px] text-stone-400 italic mb-3 p-2.5 rounded-xl bg-black/50 border border-white/10">
-                            🪞 Kartu dirimu sendiri: &ldquo;
-                            {personalTrap.statement}&rdquo;
-                          </p>
+                          <div className="mt-3 pt-3 border-t border-slate-800/90">
+                            <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
+                              🪞 Cermin Pengakuanmu Sendiri di Awal:
+                            </span>
+                            <p className="text-xs text-slate-300 italic">
+                              Padahal di awal {responder.name} sendiri ngaku:
+                              &ldquo;{personalTrap.statement}&rdquo;
+                            </p>
+                          </div>
                         )}
-                        <div className="space-y-2">
-                          <button
-                            disabled={isSubmittingDecision}
-                            onClick={() => resolveConsequence(true)}
-                            className="w-full py-3 px-4 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs flex justify-between btn-tactile disabled:opacity-50"
-                          >
-                            <span>💪 Tetap Konsisten Terima</span>
-                            <span>
-                              {mode === "multiplayer" ? "+8%" : "+10%"}
-                            </span>
-                          </button>
-                          <button
-                            disabled={isSubmittingDecision}
-                            onClick={() => resolveConsequence(false)}
-                            className="w-full py-3 px-4 rounded-2xl bg-rose-500/20 border border-rose-500/60 text-rose-200 font-extrabold text-xs flex justify-between btn-tactile disabled:opacity-50"
-                          >
-                            <span>😰 Ragu / Tarik Ucapan</span>
-                            <span>
-                              {mode === "multiplayer" ? "-10%" : "-12%"}
-                            </span>
-                          </button>
-                        </div>
                       </div>
-                    )}
 
-                    {gameStage === "negotiate" && (
-                      <div className="card-surface border border-rose-500/45 rounded-3xl p-4 shadow-2xl">
-                        <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-rose-500/20 text-rose-300 mb-2">
-                          🤝 PILIH JALAN TENGAH
+                      <p className="text-xs text-slate-400 mb-4 text-center">
+                        Setelah sadar tabrakan sifat ini, kamu beneran sanggup
+                        atau mulai nyesel?
+                      </p>
+
+                      <div className="space-y-2.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            glitterBurst(e);
+                            resolveConsequence(true);
+                          }}
+                          className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-extrabold text-xs sm:text-sm shadow-lg shadow-emerald-500/20 flex items-center justify-between btn-tactile"
+                        >
+                          <span>💪 Tetap Terima Konsekuensinya</span>
+                          <span className="font-mono bg-black/25 px-2.5 py-1 rounded-lg text-emerald-200">
+                            +10%
+                          </span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => resolveConsequence(false)}
+                          className="w-full py-3.5 px-4 rounded-2xl bg-red-500/15 hover:bg-red-500/25 border-2 border-red-500/60 text-red-300 font-extrabold text-xs sm:text-sm flex items-center justify-between btn-tactile"
+                        >
+                          <span>😰 Ragu / Menyesal Pilih Terima</span>
+                          <span className="font-mono bg-red-500/20 px-2.5 py-1 rounded-lg text-red-300">
+                            -12%
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* STAGE 2B: SOLO NEGOTIATION */}
+                  {gameStage === "negotiate1" && mode === "solo" && (
+                    <div
+                      key={`neg-solo-${round}`}
+                      className="bg-cardbg/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                          🤝 DISKUSI JALAN TENGAH
                         </span>
-                        <p className="text-xs font-semibold text-stone-300 mb-2.5">
-                          Pilih opsi kompromi — jika {partnerProfile.name}{" "}
-                          memilih opsi yang sama, kalian{" "}
-                          <strong className="text-emerald-300">
-                            SEPAKAT (+8%)
-                          </strong>
-                          .
+                        <span className="text-xs text-slate-400">
+                          Sepakat:{" "}
+                          <strong className="text-emerald-400">+5%</strong> |
+                          Beda: <strong className="text-red-400">-15%</strong>
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-base">{cardPartner.emoji}</span>
+                          <span className="text-xs font-extrabold text-white">
+                            {cardPartner.name} ({cardPartner.age} thn)
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+                            {cardPartner.vibe}
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                          &ldquo;{cardPartner.reactReject}&rdquo;
                         </p>
-                        <div className="space-y-1.5">
-                          {currentCard.compromises.map((opt, idx) => (
+                        <p className="text-[11px] text-amber-400/90 mt-1.5 font-medium">
+                          💡 Petunjuk gaya kompromi:{" "}
+                          {cluePhrases[cardPartner.tier || "mid"]}
+                        </p>
+                      </div>
+
+                      <p className="text-xs font-bold text-slate-300 mb-2.5">
+                        Pilih 1 opsi kompromi yang menurutmu bakal disetujui{" "}
+                        {cardPartner.name}:
+                      </p>
+
+                      <div className="space-y-2.5">
+                        {currentCard.compromises.map((opt, idx) => {
+                          const botPrefIdx =
+                            currentCard.botPref[cardPartner.tier || "mid"] ?? 0;
+                          return (
                             <button
                               key={idx}
-                              disabled={isSubmittingDecision}
-                              onClick={() => resolveNegotiation(idx)}
-                              className="w-full p-2.5 rounded-xl bg-black/50 hover:bg-white/5 border border-white/10 text-left flex items-start gap-2 text-[11px] sm:text-xs text-stone-200 btn-tactile disabled:opacity-50"
+                              type="button"
+                              onClick={() =>
+                                resolveSoloNegotiation(idx, botPrefIdx)
+                              }
+                              className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-left flex items-start gap-3 transition btn-tactile"
                             >
-                              <span className="font-mono font-bold text-amber-300">
-                                {String.fromCharCode(65 + idx)}.
+                              <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-amber-400 shrink-0 mt-0.5">
+                                {String.fromCharCode(65 + idx)}
                               </span>
-                              <span>{opt}</span>
+                              <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                                {opt}
+                              </span>
                             </button>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
-                    )}
-                  </>
-                )}
+                    </div>
+                  )}
 
-                {mode === "multiplayer" &&
-                  needsOwnerCompromiseAction &&
-                  myOwnedCard && (
-                    <div className="card-surface border border-amber-400/60 rounded-3xl p-4 shadow-2xl">
-                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[10px] font-mono font-extrabold bg-amber-400/20 text-amber-300 border border-amber-400/40 mb-2">
-                        🚨 {partnerProfile.name.toUpperCase()} MENOLAK KARTUMU
-                      </span>
-                      <p className="text-xs font-bold text-stone-100 leading-snug mb-1.5">
-                        Kartumu: &ldquo;{myOwnedCard.statement}&rdquo;
-                      </p>
-                      <p className="text-[11px] text-stone-300 mb-3">
-                        Pilih kompromi yang sama dengan{" "}
-                        <strong className="text-amber-300">
-                          {partnerProfile.name}
+                  {/* STAGE 2B: COUPLE / ONLINE NEGOTIATION STEP 1 */}
+                  {gameStage === "negotiate1" && mode !== "solo" && (
+                    <div
+                      key={`neg-c1-${round}`}
+                      className="bg-cardbg/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
+                          🤝 NEGOSIASI PASANGAN (TAHAP 1/2)
+                        </span>
+                      </div>
+
+                      <p className="text-xs text-slate-300 mb-3">
+                        <strong className="text-rose-400">
+                          {responder.name}
                         </strong>{" "}
-                        agar{" "}
-                        <strong className="text-emerald-300">
-                          SEPAKAT (+8%)
+                        menolak masalah ini! Pilih kompromi diam-diam sebelum
+                        gantian ke{" "}
+                        <strong className="text-emerald-400">
+                          {cardPartner.name}
                         </strong>
                         :
                       </p>
-                      <div className="space-y-1.5">
-                        {myOwnedCard.compromises.map((opt, idx) => (
+
+                      <div className="space-y-2.5">
+                        {currentCard.compromises.map((opt, idx) => (
                           <button
                             key={idx}
-                            disabled={isSubmittingDecision}
-                            onClick={() =>
-                              submitOnlineOwnerCompromiseChoice(idx)
-                            }
-                            className="w-full p-2.5 rounded-xl bg-black/50 hover:bg-amber-400/10 border border-white/10 text-left flex items-start gap-2 text-[11px] sm:text-xs text-stone-200 btn-tactile disabled:opacity-50"
+                            type="button"
+                            onClick={() => submitCoupleNegotiationStep1(idx)}
+                            className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-rose-400 text-left flex items-start gap-3 transition btn-tactile"
                           >
-                            <span className="font-mono font-bold text-amber-300">
-                              {String.fromCharCode(65 + idx)}.
+                            <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-rose-400 shrink-0 mt-0.5">
+                              {String.fromCharCode(65 + idx)}
                             </span>
-                            <span>{opt}</span>
+                            <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                              {opt}
+                            </span>
                           </button>
                         ))}
                       </div>
                     </div>
                   )}
 
-                {mode === "multiplayer" &&
-                  !needsResponderAction &&
-                  !needsOwnerCompromiseAction && (
-                    <div className="card-surface border border-amber-500/30 rounded-3xl p-6 text-center shadow-2xl">
-                      <div className="text-3xl mb-2">⏳</div>
-                      <h3 className="text-base font-bold text-stone-100">
-                        Keputusanmu Terkunci
-                      </h3>
-                      <p className="text-xs text-stone-300 mt-1.5">
-                        Menunggu{" "}
-                        <strong className="text-amber-300">
-                          {partnerProfile.name}
-                        </strong>{" "}
-                        menyelesaikan gilirannya di Ronde {round}...
-                      </p>
-                    </div>
-                  )}
-              </section>
-            )}
-
-          {/* ==================== SCREEN 5: ENDING ==================== */}
-          {screen === "ending" && player1 && player2 && (
-            <section className="space-y-3 text-center">
-              <div
-                className={`card-surface border-2 rounded-3xl p-5 shadow-2xl ${endingVerdict.border}`}
-              >
-                <div className="text-3xl mb-1.5">{endingVerdict.emoji}</div>
-                <span
-                  className={`inline-block px-3 py-0.5 rounded-full text-[10px] font-mono font-extrabold uppercase border mb-1.5 ${endingVerdict.badgeBg}`}
-                >
-                  SKOR SEFREKUENSI: {syncScore}%
-                </span>
-                <h1 className={`text-2xl font-extrabold ${endingVerdict.titleClass}`}>
-                  {endingVerdict.title}
-                </h1>
-                <p className="text-xs text-stone-300 mt-2 leading-relaxed">
-                  {endingVerdict.subtitle}
-                </p>
-                <div className="mt-3 pt-2.5 border-t border-white/10 text-xs text-stone-400">
-                  <strong className="text-stone-100">{player1.name}</strong> ⚡{" "}
-                  <strong className="text-amber-300">{player2.name}</strong>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-1.5">
-                <div className="p-2 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
-                  <span className="block font-mono font-extrabold text-sm text-emerald-300">
-                    {stats.terimaMantap}
-                  </span>
-                  <span className="text-[9px] text-stone-400">Konsisten</span>
-                </div>
-                <div className="p-2 rounded-2xl bg-rose-500/10 border border-rose-500/25">
-                  <span className="block font-mono font-extrabold text-sm text-rose-300">
-                    {stats.menyesal}
-                  </span>
-                  <span className="text-[9px] text-stone-400">Goyah</span>
-                </div>
-                <div className="p-2 rounded-2xl bg-amber-500/10 border border-amber-500/25">
-                  <span className="block font-mono font-extrabold text-sm text-amber-300">
-                    {stats.kompromiSepakat}
-                  </span>
-                  <span className="text-[9px] text-stone-400">Kompromi</span>
-                </div>
-                <div className="p-2 rounded-2xl bg-red-500/10 border border-red-500/25">
-                  <span className="block font-mono font-extrabold text-sm text-red-400">
-                    {stats.deadlockOrAfk}
-                  </span>
-                  <span className="text-[9px] text-stone-400">Deadlock</span>
-                </div>
-              </div>
-
-              {history.length > 0 && (
-                <div className="card-surface border border-white/10 rounded-3xl p-4 text-left space-y-2 max-h-48 overflow-y-auto">
-                  <span className="block text-[10px] font-mono uppercase tracking-wider text-stone-400">
-                    Rekap Ronde Permainan
-                  </span>
-                  {history.map((item, idx) => (
+                  {/* STAGE 2C: COUPLE / ONLINE NEGOTIATION STEP 2 */}
+                  {gameStage === "negotiate2" && mode !== "solo" && (
                     <div
-                      key={idx}
-                      className="p-2.5 rounded-xl bg-black/40 border border-white/5 flex items-start justify-between gap-2 text-[11px]"
+                      key={`neg-c2-${round}`}
+                      className="bg-cardbg/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
                     >
-                      <div className="min-w-0">
-                        <span className="font-bold text-stone-200 block truncate">
-                          R{item.round} • {item.category}
-                        </span>
-                        <span className="text-stone-400 block truncate">
-                          {item.outcomeLabel}
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          📲 GILIRAN {cardPartner.name.toUpperCase()} (TAHAP
+                          2/2)
                         </span>
                       </div>
-                      <span
-                        className={`font-mono font-bold shrink-0 ${
-                          item.delta >= 0 ? "text-emerald-400" : "text-rose-400"
-                        }`}
-                      >
-                        {item.delta >= 0 ? `+${item.delta}%` : `${item.delta}%`}
-                      </span>
+
+                      <p className="text-xs text-slate-300 mb-3">
+                        <strong className="text-rose-400">
+                          {responder.name}
+                        </strong>{" "}
+                        sudah mengunci pilihannya. Sekarang{" "}
+                        <strong className="text-emerald-400">
+                          {cardPartner.name}
+                        </strong>{" "}
+                        pilih jalan tengah yang sama agar sepakat (+5%):
+                      </p>
+
+                      <div className="space-y-2.5">
+                        {currentCard.compromises.map((opt, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => resolveCoupleNegotiation(idx)}
+                            className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-emerald-400 text-left flex items-start gap-3 transition btn-tactile"
+                          >
+                            <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-emerald-400 shrink-0 mt-0.5">
+                              {String.fromCharCode(65 + idx)}
+                            </span>
+                            <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
+                              {opt}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
 
-              <button
-                onClick={downloadStoryCardPNG}
-                className="w-full py-3 rounded-full bg-stone-100 hover:bg-white text-stone-950 font-extrabold text-xs sm:text-sm shadow-lg btn-tactile"
-              >
-                📸 Unduh Kartu Hasil Story
-              </button>
-
-              <button
-                onClick={resetToLobby}
-                className="w-full py-2.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 font-bold text-xs border border-white/10 btn-tactile"
-              >
-                Main Lagi
-              </button>
+              {/* Bottom Utility Bar: Simulate Timeout / AFK */}
+              <div className="flex items-center justify-between px-2 pt-1">
+                <span className="text-[11px] font-mono text-slate-500">
+                  AFK Berturut-turut: {consecutiveTimeouts}/3
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTimerRunning(false);
+                    handleTimeoutPenalty();
+                  }}
+                  className="text-[11px] font-semibold text-slate-400 hover:text-red-400 underline underline-offset-4 transition"
+                >
+                  💤 Simulasi Timeout / Pasangan AFK (-15%)
+                </button>
+              </div>
             </section>
           )}
-        </div>
+
+        {/* =================================================================== */}
+        {/* SCREEN 5: ENDING & RAPOR KECOCOKAN                                  */}
+        {/* =================================================================== */}
+        {screen === "ending" && player1 && player2 && (
+          <section key={animKey} className="animate-card-enter space-y-5">
+            <div
+              className={`bg-cardbg/95 border-2 rounded-3xl p-6 sm:p-7 text-center shadow-2xl relative overflow-hidden ${
+                battery >= 80
+                  ? "border-emerald-500/60 shadow-emerald-500/15"
+                  : battery >= 45
+                  ? "border-amber-500/60 shadow-amber-500/10"
+                  : "border-red-500/60 shadow-red-500/15"
+              }`}
+            >
+              <div
+                className={`w-16 h-16 mx-auto rounded-2xl border flex items-center justify-center text-4xl mb-4 shadow-lg ${
+                  battery >= 80
+                    ? "bg-emerald-500/20 border-emerald-500/40"
+                    : battery >= 45
+                    ? "bg-amber-500/20 border-amber-500/40"
+                    : "bg-red-500/20 border-red-500/40"
+                }`}
+              >
+                {battery >= 80 ? "💍" : battery >= 45 ? "⏳" : "🚨"}
+              </div>
+
+              <span
+                className={`inline-block px-3.5 py-1 rounded-full text-xs font-mono font-extrabold uppercase tracking-widest border mb-2 ${
+                  battery >= 80
+                    ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                    : battery >= 45
+                    ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                    : "bg-red-500/20 text-red-300 border-red-500/40"
+                }`}
+              >
+                BATERAI CINTA AKHIR: {battery}%
+              </span>
+
+              <h1
+                className={`text-3xl sm:text-4xl font-extrabold tracking-tight mt-1 ${
+                  battery >= 80
+                    ? "text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-teal-300 to-amber-300"
+                    : battery >= 45
+                    ? "text-amber-400"
+                    : "text-red-500"
+                }`}
+              >
+                {battery >= 80
+                  ? "BESOK KAWIN!"
+                  : battery >= 45
+                  ? "PACARAN DULU AJA"
+                  : "STOP THE WEDDING"}
+              </h1>
+
+              <p className="text-xs sm:text-sm text-slate-300 mt-3 leading-relaxed max-w-md mx-auto">
+                {battery >= 80
+                  ? "Red flag kalian berdua ternyata saling mengunci kayak puzzle! Kesiapan mental dan kompromi kalian udah matang. Langsung booking KUA dan sebar undangan!"
+                  : battery >= 45
+                  ? "Rasa sayang sih ada, tapi masih banyak kompromi yang gantung dan ego yang belum kelar. Jangan buru-buru DP gedung — pacaran dulu aja sambil benerin komunikasi!"
+                  : endingCustomReason
+                  ? `${endingCustomReason} Terlalu banyak deadlock dan penyesalan. Mending batalin sekarang daripada jadi drama di pengadilan agama!`
+                  : "Terlalu banyak penyesalan, deadlock ego, dan bom waktu kebiasaan buruk. Mending stop sekarang sebelum jadi beban pikiran seumur hidup!"}
+              </p>
+
+              <div className="mt-5 pt-4 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-400">
+                <span className="font-bold text-white">
+                  {player1.name} ({player1.age})
+                </span>
+                <span>⚡</span>
+                <span className="font-bold text-rose-400">
+                  {player2.name} ({player2.age})
+                </span>
+              </div>
+            </div>
+
+            {/* Mini Stats Summary */}
+            <div className="grid grid-cols-4 gap-2">
+              <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-emerald-400">
+                  {stats.terimaMantap}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Terima (+10%)
+                </span>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-rose-400">
+                  {stats.menyesal}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Nyesel (-12%)
+                </span>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-amber-400">
+                  {stats.kompromiSepakat}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Sepakat (+5%)
+                </span>
+              </div>
+              <div className="p-2.5 rounded-2xl bg-red-500/10 border border-red-500/25 text-center">
+                <span className="block font-mono font-extrabold text-lg text-red-400">
+                  {stats.deadlockOrAfk}
+                </span>
+                <span className="text-[10px] text-slate-400 leading-tight block">
+                  Gagal/AFK (-15%)
+                </span>
+              </div>
+            </div>
+
+            {/* Rapor Kecocokan (Round History) */}
+            <div className="bg-cardbg/95 border border-slate-800 rounded-3xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-extrabold text-white">
+                  📋 Rapor Kecocokan Tiap Ronde
+                </h3>
+                <button
+                  type="button"
+                  onClick={copyMatchReport}
+                  className="text-xs font-bold text-rose-400 hover:text-rose-300 underline underline-offset-4"
+                >
+                  Salin Rapor
+                </button>
+              </div>
+
+              <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                {history.map((item, idx) => {
+                  const deltaColor =
+                    item.delta > 0
+                      ? "text-emerald-400 bg-emerald-500/15 border-emerald-500/30"
+                      : "text-red-400 bg-red-500/15 border-red-500/30";
+                  return (
+                    <div
+                      key={idx}
+                      className="p-3 rounded-2xl bg-slate-950/90 border border-slate-800/90 flex items-start justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="font-mono text-[10px] font-bold text-slate-500">
+                            R{item.round}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400">
+                            {item.category}
+                          </span>
+                          {item.isWildcard && (
+                            <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300">
+                              WILDCARD
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-slate-200 font-medium line-clamp-2">
+                          {item.problem}
+                        </p>
+                        <p className="text-[11px] font-bold text-slate-400 mt-1">
+                          → {item.outcomeLabel}
+                        </p>
+                      </div>
+                      <span
+                        className={`font-mono font-extrabold text-xs px-2 py-1 rounded-lg border shrink-0 ${deltaColor}`}
+                      >
+                        {item.delta > 0 ? `+${item.delta}%` : `${item.delta}%`}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-6">
+              <button
+                type="button"
+                onClick={replaySameProfile}
+                className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile"
+              >
+                🔄 Ganti Pasangan
+              </button>
+              <button
+                type="button"
+                onClick={fullResetGame}
+                className="py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
+              >
+                ✨ Main Ulang Dari Awal
+              </button>
+            </div>
+          </section>
+        )}
       </main>
-    </div>
+
+      {/* FOOTER */}
+      <footer className="w-full py-4 text-center text-[11px] text-slate-600">
+        SEFREKUENSI
+      </footer>
+    </>
   );
 }
