@@ -348,7 +348,6 @@ export default function BesokKawinGame() {
       }
     }
 
-    // Hanya tampilkan panduan jika browser benar-benar memblokir prompt otomatis (misal iOS Safari / WebView)
     setShowInstallGuide(true);
   };
 
@@ -897,7 +896,7 @@ export default function BesokKawinGame() {
       sfxPenalty();
       setRegError({
         title: "Verifikasi Gagal",
-        text: "Keanggotaan BESOK KAWIN? hanya terbuka untuk usia minimal 18 tahun.",
+        text: "Keanggotaan BESOK KAWIN? hanya terbuka bagi peserta yang sudah cukup umur.",
         key: Date.now(),
       });
       return;
@@ -1929,9 +1928,13 @@ export default function BesokKawinGame() {
     ctx.font = "600 28px sans-serif";
     ctx.fillText("Berani buka borokmu sebelum ke KUA?", 540, 1580);
 
+    const displayHost =
+      typeof window !== "undefined"
+        ? window.location.host
+        : "kartu-visi.vercel.app";
     ctx.fillStyle = "#e5c17b";
     ctx.font = "800 34px monospace";
-    ctx.fillText("besok-kawin.vercel.app", 540, 1635);
+    ctx.fillText(displayHost, 540, 1635);
 
     const link = document.createElement("a");
     link.download = `BESOK-KAWIN-${player1.name}-${player2.name}.png`;
@@ -2106,7 +2109,7 @@ export default function BesokKawinGame() {
                 BESOK KAWIN?
               </span>
               <p className="text-[10px] text-stone-400 tracking-wide truncate hidden sm:block">
-                Private Matchmaking Club
+                Kartu Visi &amp; Komunikasi
               </p>
             </div>
           </button>
@@ -2177,7 +2180,7 @@ export default function BesokKawinGame() {
         </div>
       </header>
 
-      {/* INSTALL GUIDE MODAL (Hanya muncul jika WebView/iOS memblokir install otomatis) */}
+      {/* INSTALL GUIDE MODAL */}
       {showInstallGuide && (
         <div
           onClick={() => setShowInstallGuide(false)}
@@ -2283,7 +2286,7 @@ export default function BesokKawinGame() {
 
                 <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-[10px] font-mono tracking-[0.2em] uppercase bg-amber-500/10 text-amber-300 border border-amber-500/25 mb-5">
                   <span>✦</span>
-                  <span>Invitation & Verified Members Only</span>
+                  <span>Invitation &amp; Verified Members Only</span>
                 </div>
 
                 <div className="w-20 h-20 mx-auto mb-5 rounded-full bg-gradient-to-tr from-amber-500/20 via-rose-500/20 to-amber-300/30 p-[1px] shadow-2xl shadow-amber-500/10">
@@ -2300,7 +2303,7 @@ export default function BesokKawinGame() {
                 </h1>
 
                 <p className="text-xs sm:text-sm text-stone-400 max-w-sm mx-auto leading-relaxed mb-6">
-                  Komunitas kencan & uji kecocokan pranikah eksklusif. Buka
+                  Permainan kartu &amp; uji kecocokan komunikasi pranikah. Buka
                   20 pengakuan jujurmu di depan sebelum melangkah lebih serius.
                 </p>
 
@@ -2324,7 +2327,7 @@ export default function BesokKawinGame() {
                       Deep Card Test
                     </span>
                     <span className="block text-[9px] text-stone-500">
-                      Uji ego & kompromi
+                      Uji ego &amp; kompromi
                     </span>
                   </div>
                   <div className="p-2.5 rounded-2xl bg-black/40 border border-white/5">
@@ -2372,7 +2375,7 @@ export default function BesokKawinGame() {
                 </button>
 
                 <p className="text-[10px] text-stone-500 mt-4 leading-relaxed">
-                  Untuk menjaga kualitas & keamanan komunitas, seluruh anggota
+                  Untuk menjaga kualitas &amp; keamanan komunitas, seluruh anggota
                   wajib masuk menggunakan akun Google terverifikasi.
                 </p>
               </div>
@@ -2451,6 +2454,7 @@ export default function BesokKawinGame() {
 
                     <div>
                       <label className="block text-[11px] font-semibold text-stone-300 mb-1">
+                        Usia
                       </label>
                       <input
                         type="number"
@@ -2925,12 +2929,16 @@ export default function BesokKawinGame() {
                 </div>
 
                 <button
-                  onClick={() =>
+                  onClick={() => {
+                    const shareOrigin =
+                      typeof window !== "undefined"
+                        ? window.location.origin
+                        : "https://kartu-visi.vercel.app";
                     copyTextSafe(
-                      `Ayo uji kecocokan kita di BESOK KAWIN! Masuk dengan Google di https://besok-kawin.vercel.app lalu buka tab Private Room dan masukkan kode: ${inviteCode}`,
+                      `Ayo uji kecocokan kita di BESOK KAWIN! Masuk dengan Google di ${shareOrigin} lalu buka tab Private Room dan masukkan kode: ${inviteCode}`,
                       "Kode undangan privat berhasil disalin!"
-                    )
-                  }
+                    );
+                  }}
                   className="block w-full mt-4 py-3 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-stone-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 btn-tactile"
                 >
                   📋 Salin Kode Undangan
@@ -2973,7 +2981,7 @@ export default function BesokKawinGame() {
 
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold text-stone-300">
-                      🥂 Chemistry & Battery
+                      🥂 Chemistry &amp; Battery
                     </span>
                     <span
                       className={`font-mono font-extrabold text-base ${
@@ -3239,14 +3247,14 @@ export default function BesokKawinGame() {
                   </h3>
                   <p className="text-xs text-stone-300">
                     Kirim pesan ke pasangan Match kamu. Anggota VIP{" "}
-                    <strong>Rp10.000 sekali bayar</strong> bebas membaca &
+                    <strong>Rp10.000 sekali bayar</strong> bebas membaca &amp;
                     membalas pesan ke semua Match tanpa sensor.
                   </p>
                   <button
                     onClick={() => goScreen("profile")}
                     className="w-full mt-1 py-3 rounded-full bg-gradient-to-r from-amber-300 via-amber-400 to-rose-400 text-stone-950 font-extrabold text-xs sm:text-sm shadow-lg shadow-amber-500/20 btn-tactile"
                   >
-                    💬 Buka Match & Chat Sekarang →
+                    💬 Buka Match &amp; Chat Sekarang →
                   </button>
                 </div>
               )}
