@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "SEFREKUENSI — Dating & Red Flag Card Game";
+export const alt = "SEFREKUENSI — Relationship & Red Flag Card Game";
 export const size = {
   width: 1200,
   height: 630,
@@ -38,7 +38,7 @@ export default function Image() {
             marginBottom: "28px",
           }}
         >
-          18+ DATING & RED FLAG CARD GAME
+          RELATIONSHIP & RED FLAG CARD GAME
         </div>
 
         <div
