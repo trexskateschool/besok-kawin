@@ -58,6 +58,35 @@ type ScreenType =
   | "game"
   | "ending";
 
+function formatRejectedProblemForOwner(
+  rejectorName: string,
+  rawStatement: string
+): string {
+  let text = rawStatement.trim().replace(/[.!?]+$/, "");
+
+  text = text.replace(
+    /\b(pasangan|cowok|cewek|pacar|suami|istri|keluarga|orang\s*tua|ortu|hidup|karier|karir|uang|duit|gaji|waktu|diri|hati|perasaan|mental|emosi|ego|sikap|kebiasaan|masa\s*lalu)\s+(gua|gue|aku|saya)\b/gi,
+    (_, noun: string) => `${noun.toLowerCase()}mu`
+  );
+
+  text = text.replace(/\b(gua|gue|aku|saya)\b/gi, "kamu");
+  text = text.replace(/\s+/g, " ").trim();
+
+  if (!/^kamu\b/i.test(text)) {
+    const firstWord = text.split(" ")[0] || "";
+    const isAcronym =
+      firstWord.length > 1 && firstWord === firstWord.toUpperCase();
+    if (!isAcronym && text.length > 0) {
+      text = text.charAt(0).toLowerCase() + text.slice(1);
+    }
+    text = `kamu ${text}`;
+  } else {
+    text = `kamu${text.slice(4)}`;
+  }
+
+  return `${rejectorName} menolak masalahmu soal ${text}.`;
+}
+
 function glitterBurst(ev?: React.MouseEvent<HTMLElement>) {
   if (typeof window === "undefined" || typeof document === "undefined") return;
   const r = ev?.currentTarget
@@ -358,7 +387,7 @@ export default function SefrekuensiGame() {
       setToasts((prev) => [...prev, { id, message, type }]);
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 2800);
+      }, 3600);
     },
     []
   );
@@ -582,6 +611,31 @@ export default function SefrekuensiGame() {
           if (data.status === "playing") {
             setTimerSeconds(60);
             setTimerRunning(true);
+
+            if (
+              data.stage === "negotiate1" &&
+              Array.isArray(data.deck) &&
+              typeof data.round === "number" &&
+              data.player1 &&
+              data.player2
+            ) {
+              const activeCard = data.deck[data.round - 1] as
+                | DeckCard
+                | undefined;
+              if (activeCard && activeCard.responderKey !== myOnlineRole) {
+                const rejectorProfile =
+                  activeCard.responderKey === "player1"
+                    ? (data.player1 as PlayerProfile)
+                    : (data.player2 as PlayerProfile);
+                showToast(
+                  formatRejectedProblemForOwner(
+                    rejectorProfile.name,
+                    activeCard.statement
+                  ),
+                  "warning"
+                );
+              }
+            }
           }
         }
 
@@ -630,6 +684,7 @@ export default function SefrekuensiGame() {
   }, [
     inviteCode,
     mode,
+    myOnlineRole,
     goScreen,
     showToast,
     sfxCharge,
@@ -1285,6 +1340,14 @@ export default function SefrekuensiGame() {
       );
     } else {
       setGameStage("negotiate1");
+      if (mode === "couple" && currentCard && player1 && player2) {
+        const rejector =
+          currentCard.responderKey === "player1" ? player1 : player2;
+        showToast(
+          formatRejectedProblemForOwner(rejector.name, currentCard.statement),
+          "warning"
+        );
+      }
     }
   };
 
@@ -1487,7 +1550,6 @@ export default function SefrekuensiGame() {
         ? `${endingCustomReason} Terlalu banyak deadlock dan penyesalan untuk dilanjutkan.`
         : "Terlalu banyak penyesalan, deadlock ego, dan tabrakan kebiasaan buruk. Evaluasi ulang sebelum melangkah lebih jauh.";
 
-      // 1. Background
       const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
       bgGrad.addColorStop(0, "#070b14");
       bgGrad.addColorStop(0.5, "#0d1322");
@@ -1495,8 +1557,14 @@ export default function SefrekuensiGame() {
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
-      // Subtle radial glow at top
-      const radialGlow = ctx.createRadialGradient(W / 2, 220, 40, W / 2, 220, 560);
+      const radialGlow = ctx.createRadialGradient(
+        W / 2,
+        220,
+        40,
+        W / 2,
+        220,
+        560
+      );
       radialGlow.addColorStop(
         0,
         isHigh
@@ -1509,7 +1577,6 @@ export default function SefrekuensiGame() {
       ctx.fillStyle = radialGlow;
       ctx.fillRect(0, 0, W, 780);
 
-      // 2. Top Brand Header
       ctx.textAlign = "center";
       ctx.fillStyle = "#f43f5e";
       ctx.font = "800 24px sans-serif";
@@ -1519,7 +1586,6 @@ export default function SefrekuensiGame() {
       ctx.font = "600 17px sans-serif";
       ctx.fillText("RELATIONSHIP & RED FLAG COMPATIBILITY REPORT", W / 2, 102);
 
-      // 3. Main Verdict Card
       const cardX = 56;
       const cardY = 132;
       const cardW = W - 112;
@@ -1532,7 +1598,6 @@ export default function SefrekuensiGame() {
       ctx.strokeStyle = accentBorder;
       ctx.stroke();
 
-      // Battery Pill Badge
       const pillText = `BATERAI CINTA AKHIR: ${battery}%`;
       ctx.font = "800 20px monospace";
       const pillW = ctx.measureText(pillText).width + 56;
@@ -1551,7 +1616,6 @@ export default function SefrekuensiGame() {
       ctx.textAlign = "center";
       ctx.fillText(pillText, W / 2, pillY + 29);
 
-      // Visual Battery Progress Bar
       const barW = 680;
       const barH = 34;
       const barX = (W - barW) / 2;
@@ -1571,22 +1635,22 @@ export default function SefrekuensiGame() {
         ctx.fill();
       }
 
-      // 45% and 80% markers
       ctx.fillStyle = "rgba(148, 163, 184, 0.65)";
       ctx.fillRect(barX + barW * 0.45, barY + 2, 2, barH - 4);
       ctx.fillStyle = "rgba(52, 211, 153, 0.75)";
       ctx.fillRect(barX + barW * 0.8, barY + 2, 2, barH - 4);
 
-      // Main Verdict Headline
       ctx.fillStyle = accentPrimary;
       ctx.font = "900 62px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(verdictTitle, W / 2, barY + 114);
 
-      // Player Matchup Pill
       const matchupText = `${player1.name} (${player1.age} thn)   ×   ${player2.name} (${player2.age} thn)`;
       ctx.font = "700 24px sans-serif";
-      const matchW = Math.min(cardW - 80, ctx.measureText(matchupText).width + 64);
+      const matchW = Math.min(
+        cardW - 80,
+        ctx.measureText(matchupText).width + 64
+      );
       const matchH = 48;
       const matchX = (W - matchW) / 2;
       const matchY = barY + 138;
@@ -1605,7 +1669,6 @@ export default function SefrekuensiGame() {
         matchY + 32
       );
 
-      // Verdict Summary Paragraph
       ctx.fillStyle = "#cbd5e1";
       ctx.font = "500 22px sans-serif";
       const descLines = wrapCanvasText(ctx, verdictDesc, cardW - 110);
@@ -1613,7 +1676,6 @@ export default function SefrekuensiGame() {
         ctx.fillText(line, W / 2, matchY + 92 + i * 32);
       });
 
-      // 4. Stats 4-Column Row
       const statY = cardY + cardH + 24;
       const statH = 126;
       const gap = 16;
@@ -1677,7 +1739,6 @@ export default function SefrekuensiGame() {
         ctx.fillText(sc.sub, sx + statW / 2, statY + 106);
       });
 
-      // 5. Rapor Singkat Kecocokan Tiap Ronde
       const logBoxY = statY + statH + 24;
       const logBoxH = 804;
 
@@ -1696,9 +1757,12 @@ export default function SefrekuensiGame() {
       ctx.textAlign = "right";
       ctx.fillStyle = "#94a3b8";
       ctx.font = "700 18px monospace";
-      ctx.fillText(`${history.length} RONDE TERCATAT`, cardX + cardW - 32, logBoxY + 45);
+      ctx.fillText(
+        `${history.length} RONDE TERCATAT`,
+        cardX + cardW - 32,
+        logBoxY + 45
+      );
 
-      // Divider line
       ctx.fillStyle = "#1e293b";
       ctx.fillRect(cardX + 32, logBoxY + 64, cardW - 64, 2);
 
@@ -1716,7 +1780,6 @@ export default function SefrekuensiGame() {
         ctx.strokeStyle = "#1e293b";
         ctx.stroke();
 
-        // Round badge
         drawRoundedRect(ctx, rowX + 14, rowY + 14, 48, 48, 12);
         ctx.fillStyle = "#1e293b";
         ctx.fill();
@@ -1726,7 +1789,6 @@ export default function SefrekuensiGame() {
         ctx.font = "800 18px monospace";
         ctx.fillText(`R${item.round}`, rowX + 38, rowY + 44);
 
-        // Category + Wildcard tag
         ctx.textAlign = "left";
         ctx.fillStyle = "#94a3b8";
         ctx.font = "700 15px sans-serif";
@@ -1735,7 +1797,6 @@ export default function SefrekuensiGame() {
           : item.category.toUpperCase();
         ctx.fillText(metaText, rowX + 76, rowY + 31);
 
-        // Outcome summary line
         ctx.fillStyle = "#f1f5f9";
         ctx.font = "600 18px sans-serif";
         const maxTextWidth = rowW - 210;
@@ -1745,7 +1806,6 @@ export default function SefrekuensiGame() {
           rowY + 57
         );
 
-        // Delta pill on right
         const deltaStr = item.delta > 0 ? `+${item.delta}%` : `${item.delta}%`;
         const isPositive = item.delta > 0;
         const dPillW = 92;
@@ -1770,18 +1830,19 @@ export default function SefrekuensiGame() {
         ctx.fillText(deltaStr, dPillX + dPillW / 2, dPillY + 28);
       });
 
-      // 6. Footer Branding
       ctx.textAlign = "center";
       ctx.fillStyle = "#64748b";
       ctx.font = "600 18px sans-serif";
       ctx.fillText(
-        "SEFREKUENSI  •  Buka Borokmu di Depan, Biar Nggak Nyesel di KUA",
+        "SEFREKUENSI  •  by Krisna Oktaria",
         W / 2,
         H - 36
       );
 
-      const safeP1 = player1.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "p1";
-      const safeP2 = player2.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "p2";
+      const safeP1 =
+        player1.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "p1";
+      const safeP2 =
+        player2.name.toLowerCase().replace(/[^a-z0-9]/g, "") || "p2";
       const fileName = `rapor-sefrekuensi-${safeP1}-${safeP2}.png`;
 
       const triggerDownloadUrl = (url: string, revokeAfter: boolean) => {
@@ -2970,7 +3031,7 @@ export default function SefrekuensiGame() {
                           <p className="text-[11px] text-slate-400 truncate">
                             {currentCard.isWildcard
                               ? 'Dia sempat ragu menjawab "Kayanya sih" soal ini...'
-                              : 'Dia ngaku jujur "Iya lagi" soal borok ini:'}
+                              : 'Dia ngaku jujur "Iya lagi" soal masalah ini:'}
                           </p>
                         </div>
                       </div>
@@ -3188,25 +3249,31 @@ export default function SefrekuensiGame() {
 
                       <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
                         <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
-                          📌 MASALAH YANG DITOLAK OLEH{" "}
+                          📌 NOTIFIKASI PENOLAKAN DARI{" "}
                           {responder.name.toUpperCase()}:
                         </span>
                         <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
-                          &ldquo;{currentCard.partnerPrompt}&rdquo;
+                          &ldquo;
+                          {formatRejectedProblemForOwner(
+                            responder.name,
+                            currentCard.statement
+                          )}
+                          &rdquo;
                         </p>
                       </div>
 
                       <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
                         <p className="text-xs text-slate-300 leading-relaxed">
-                          <strong className="text-rose-400">
-                            {responder.name}
-                          </strong>{" "}
-                          menolak masalahmu. Sebagai pemilik kartu (
+                          Sebagai pemilik kartu (
                           <strong className="text-emerald-400">
                             {cardPartner.name}
                           </strong>
                           ), pilih 1 opsi jalan tengah / kompromi untuk
-                          ditawarkan kembali ke {responder.name}:
+                          ditawarkan kembali ke{" "}
+                          <strong className="text-rose-400">
+                            {responder.name}
+                          </strong>
+                          :
                         </p>
                       </div>
 
@@ -3466,7 +3533,7 @@ export default function SefrekuensiGame() {
                 <span>
                   {isDownloadingImage
                     ? "Menyiapkan Gambar Rapor..."
-                    : "📸 Download Gambar Rapor (.PNG)"}
+                    : "📸 Download Gambar Rapor"}
                 </span>
               </button>
 
