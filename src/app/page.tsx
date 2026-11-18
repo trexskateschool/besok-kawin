@@ -34,6 +34,20 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+declare global {
+  interface Window {
+    __deferredInstallPrompt?: BeforeInstallPromptEvent | null;
+  }
+}
+
+// Tangkap event install bawaan browser sedini mungkin sebelum React selesai mount
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", (e: Event) => {
+    e.preventDefault();
+    window.__deferredInstallPrompt = e as BeforeInstallPromptEvent;
+  });
+}
+
 interface PlayerProfile {
   name: string;
   email: string;
@@ -206,7 +220,11 @@ function toPlayerProfile(pub: PublicMatchProfile): PlayerProfile {
 
 export default function BesokKawinGame() {
   const [installPromptEvent, setInstallPromptEvent] =
-    useState<BeforeInstallPromptEvent | null>(null);
+    useState<BeforeInstallPromptEvent | null>(() =>
+      typeof window !== "undefined"
+        ? window.__deferredInstallPrompt || null
+        : null
+    );
   const [isAppInstalled, setIsAppInstalled] = useState(false);
   const [showInstallGuide, setShowInstallGuide] = useState(false);
   const [isIosDevice, setIsIosDevice] = useState(false);
@@ -269,14 +287,21 @@ export default function BesokKawinGame() {
       navigator.serviceWorker.register("/sw.js").catch(() => {});
     }
 
+    if (window.__deferredInstallPrompt) {
+      setInstallPromptEvent(window.__deferredInstallPrompt);
+    }
+
     const handleBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
-      setInstallPromptEvent(e as BeforeInstallPromptEvent);
+      const promptEvt = e as BeforeInstallPromptEvent;
+      window.__deferredInstallPrompt = promptEvt;
+      setInstallPromptEvent(promptEvt);
     };
 
     const handleAppInstalled = () => {
       setIsAppInstalled(true);
       setInstallPromptEvent(null);
+      window.__deferredInstallPrompt = null;
       setShowInstallGuide(false);
       showToast("✅ Besok Kawin? berhasil terpasang di HP!", "success");
     };
@@ -303,16 +328,27 @@ export default function BesokKawinGame() {
 
   const handleInstallClick = async () => {
     sfxTap();
-    if (installPromptEvent) {
-      await installPromptEvent.prompt();
-      const { outcome } = await installPromptEvent.userChoice;
-      if (outcome === "accepted") {
-        setIsAppInstalled(true);
-        setInstallPromptEvent(null);
-        showToast("Menginstal Besok Kawin? ke layar utama...", "success");
+    const activePrompt =
+      installPromptEvent ||
+      (typeof window !== "undefined" ? window.__deferredInstallPrompt : null);
+
+    if (activePrompt) {
+      try {
+        await activePrompt.prompt();
+        const { outcome } = await activePrompt.userChoice;
+        if (outcome === "accepted") {
+          setIsAppInstalled(true);
+          setInstallPromptEvent(null);
+          window.__deferredInstallPrompt = null;
+          showToast("Menginstal Besok Kawin? ke HP...", "success");
+        }
+        return;
+      } catch (err) {
+        console.error("Prompt install gagal:", err);
       }
-      return;
     }
+
+    // Hanya tampilkan panduan jika browser benar-benar memblokir prompt otomatis (misal iOS Safari / WebView)
     setShowInstallGuide(true);
   };
 
@@ -2007,25 +2043,24 @@ export default function BesokKawinGame() {
         .btn-tactile:active { transform: scale(0.97); }
       `}</style>
 
-      {/* EXCLUSIVE TOP HEADER (ANTI-OVERLAP & LOGO EMBLEM) */}
+      {/* EXCLUSIVE TOP HEADER (ANTI-OVERLAP & TOMBOL INSTALL TANPA LOGO HP) */}
       <header
         style={{ paddingTop: "max(0.65rem, env(safe-area-inset-top))" }}
         className="w-full shrink-0 border-b border-amber-500/15 bg-[#07080c]/95 backdrop-blur-xl z-40 pb-2.5"
       >
-        <div className="max-w-xl mx-auto px-3.5 sm:px-4 flex items-center justify-between gap-2">
+        <div className="max-w-xl mx-auto px-3 sm:px-4 flex items-center justify-between gap-1.5">
           {/* Brand Logo + Title */}
           <button
             type="button"
             onClick={() => {
               if (myPublicProfile) goScreen("bursa");
             }}
-            className="flex items-center gap-2 min-w-0 text-left"
+            className="flex items-center gap-1.5 sm:gap-2 min-w-0 text-left shrink"
           >
-            <div className="w-8 h-8 shrink-0 rounded-full bg-gradient-to-br from-amber-200 via-amber-400 to-rose-500 p-[1.5px] shadow-md shadow-amber-500/20">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 shrink-0 rounded-full bg-gradient-to-br from-amber-200 via-amber-400 to-rose-500 p-[1.5px] shadow-md shadow-amber-500/20">
               <div className="w-full h-full rounded-full bg-[#0b0c12] flex items-center justify-center">
-                {/* Custom Interlocking Rings & Diamond Crest SVG Logo */}
                 <svg
-                  className="w-4 h-4"
+                  className="w-3.5 h-3.5 sm:w-4 sm:h-4"
                   viewBox="0 0 24 24"
                   fill="none"
                   xmlns="http://www.w3.org/2000/svg"
@@ -2067,14 +2102,9 @@ export default function BesokKawinGame() {
             </div>
 
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="font-serif font-bold tracking-wide text-[11px] sm:text-sm text-stone-100 truncate">
-                  BESOK KAWIN?
-                </span>
-                <span className="hidden sm:inline-block text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 shrink-0">
-                  18+
-                </span>
-              </div>
+              <span className="block font-serif font-bold tracking-tight sm:tracking-wide text-[11px] sm:text-sm text-stone-100 truncate">
+                BESOK KAWIN?
+              </span>
               <p className="text-[10px] text-stone-400 tracking-wide truncate hidden sm:block">
                 Private Matchmaking Club
               </p>
@@ -2082,14 +2112,14 @@ export default function BesokKawinGame() {
           </button>
 
           {/* Right Navigation Actions */}
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {googleUser && myPublicProfile && (
               <button
                 onClick={() => {
                   sfxTap();
                   goScreen(screen === "profile" ? "bursa" : "profile");
                 }}
-                className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-bold flex items-center gap-1 border transition btn-tactile shrink-0 ${
+                className={`px-2.5 sm:px-3 py-1.5 rounded-full text-[10px] sm:text-[11px] font-bold flex items-center gap-1 border transition btn-tactile shrink-0 ${
                   screen === "profile"
                     ? "bg-gradient-to-r from-amber-300 to-amber-500 text-stone-950 border-amber-300"
                     : "bg-stone-900/90 hover:bg-stone-800 text-amber-300 border-amber-500/35"
@@ -2107,12 +2137,11 @@ export default function BesokKawinGame() {
 
             {!isAppInstalled && (
               <button
+                type="button"
                 onClick={handleInstallClick}
-                title="Pasang Aplikasi"
-                className="w-7 h-7 sm:w-auto sm:h-auto sm:px-2.5 sm:py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 border border-white/10 text-[11px] font-semibold flex items-center justify-center gap-1 transition btn-tactile shrink-0"
+                className="px-2.5 sm:px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 hover:from-amber-200 hover:to-amber-400 text-stone-950 text-[10px] sm:text-[11px] font-extrabold tracking-wide transition btn-tactile shrink-0 shadow-sm shadow-amber-500/20"
               >
-                <span>📲</span>
-                <span className="hidden sm:inline">App</span>
+                Install
               </button>
             )}
 
@@ -2128,7 +2157,7 @@ export default function BesokKawinGame() {
               (screen === "game" || screen === "mode" || screen === "ending") && (
                 <button
                   onClick={fullResetToLounge}
-                  className="text-[10px] sm:text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-300 border border-white/10 whitespace-nowrap shrink-0"
+                  className="text-[10px] sm:text-[11px] font-semibold px-2 sm:px-2.5 py-1.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-300 border border-white/10 whitespace-nowrap shrink-0"
                 >
                   Lounge
                 </button>
@@ -2139,7 +2168,7 @@ export default function BesokKawinGame() {
                 <button
                   onClick={handleGoogleLogout}
                   title="Keluar Akun Google"
-                  className="text-[10px] sm:text-[11px] font-semibold px-2.5 py-1.5 rounded-full bg-stone-900/80 hover:bg-rose-950/50 text-stone-400 hover:text-rose-300 border border-white/10 whitespace-nowrap shrink-0"
+                  className="text-[10px] sm:text-[11px] font-semibold px-2 sm:px-2.5 py-1.5 rounded-full bg-stone-900/80 hover:bg-rose-950/50 text-stone-400 hover:text-rose-300 border border-white/10 whitespace-nowrap shrink-0"
                 >
                   Keluar
                 </button>
@@ -2148,7 +2177,7 @@ export default function BesokKawinGame() {
         </div>
       </header>
 
-      {/* INSTALL GUIDE MODAL */}
+      {/* INSTALL GUIDE MODAL (Hanya muncul jika WebView/iOS memblokir install otomatis) */}
       {showInstallGuide && (
         <div
           onClick={() => setShowInstallGuide(false)}
@@ -2159,12 +2188,9 @@ export default function BesokKawinGame() {
             className="w-full max-w-md glass-luxury border border-amber-500/25 rounded-3xl p-5 shadow-2xl animate-card-enter"
           >
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">📲</span>
-                <h3 className="font-serif font-bold text-stone-100 text-sm sm:text-base">
-                  Pasang Aplikasi di Layar Utama
-                </h3>
-              </div>
+              <h3 className="font-serif font-bold text-stone-100 text-sm sm:text-base">
+                Pasang Aplikasi ke Layar Utama
+              </h3>
               <button
                 onClick={() => setShowInstallGuide(false)}
                 className="w-7 h-7 rounded-full bg-stone-800 text-stone-400 hover:text-white text-xs font-bold"
@@ -2197,16 +2223,15 @@ export default function BesokKawinGame() {
             ) : (
               <ol className="space-y-2 text-xs text-stone-300 mb-4">
                 <li className="p-2.5 rounded-2xl bg-black/40 border border-white/5">
-                  <strong>1.</strong> Ketuk menu{" "}
-                  <strong className="text-amber-300">Titik Tiga (⋮)</strong> di
-                  pojok kanan atas Chrome.
+                  <strong>1.</strong> Pastikan membuka situs ini langsung di{" "}
+                  <strong className="text-amber-300">Google Chrome</strong>{" "}
+                  (bukan browser di dalam Instagram/WA).
                 </li>
                 <li className="p-2.5 rounded-2xl bg-black/40 border border-white/5">
-                  <strong>2.</strong> Pilih{" "}
-                  <strong className="text-emerald-300">
-                    Install app / Tambahkan ke Layar utama
-                  </strong>
-                  .
+                  <strong>2.</strong> Ketuk menu{" "}
+                  <strong className="text-amber-300">Titik Tiga (⋮)</strong> di
+                  pojok kanan atas lalu pilih{" "}
+                  <strong className="text-emerald-300">Install app</strong>.
                 </li>
               </ol>
             )}
@@ -2215,7 +2240,7 @@ export default function BesokKawinGame() {
               onClick={() => setShowInstallGuide(false)}
               className="w-full py-2.5 rounded-full bg-gradient-to-r from-amber-300 to-amber-500 text-stone-950 font-extrabold text-xs btn-tactile"
             >
-              Tutup Panduan
+              Mengerti
             </button>
           </div>
         </div>
@@ -3265,7 +3290,7 @@ export default function BesokKawinGame() {
                 onClick={fullResetToLounge}
                 className="w-full py-2.5 rounded-full bg-stone-900 hover:bg-stone-800 text-stone-200 font-bold text-xs border border-white/10 btn-tactile"
               >
-                ✦ Kembali ke Lounge
+                ✦ Kembali ke Exclusive Lounge
               </button>
             </section>
           )}
@@ -3282,7 +3307,7 @@ export default function BesokKawinGame() {
         </div>
 
         <footer className="w-full pt-2 pb-1 text-center text-[10px] font-mono tracking-widest uppercase text-stone-600 shrink-0">
-          BESOK KAWIN?
+          BESOK KAWIN? • Verified Google Members Only
         </footer>
       </main>
     </div>
