@@ -24,12 +24,6 @@ interface PlayerProfile {
   age: number;
   questions: QuestionItem[];
   answers: Record<string, "iya" | "kayanya" | "engga">;
-  tier?: "young" | "mid" | "mature";
-  emoji?: string;
-  vibe?: string;
-  bio?: string;
-  reactAccept?: string;
-  reactReject?: string;
 }
 
 interface DeckCard extends QuestionItem {
@@ -71,13 +65,6 @@ type ScreenType =
   | "partner-join"
   | "game"
   | "ending";
-
-const STAKE_PRESETS = [
-  "Kalah wajib traktir makan / kopi",
-  "Skor < 80% wajib jawab 1 pertanyaan jujur tanpa marah",
-  "Yang paling sering deadlock wajib post rapor ini di Threads",
-  "Kalah wajib nurutin 1 permintaan pasangan seharian",
-];
 
 function formatStatementToSecondPerson(rawStatement: string): string {
   let text = rawStatement.trim().replace(/[.!?]+$/, "");
@@ -277,60 +264,9 @@ function truncateCanvasText(
   return `${trimmed}...`;
 }
 
-function getBotPersonaConfig(
-  botGender: "Laki-laki" | "Perempuan",
-  botAge: number
-) {
-  const isFemale = botGender === "Perempuan";
-  if (botAge <= 24) {
-    return {
-      name: isFemale ? "Keisya" : "Arkan",
-      age: botAge,
-      gender: botGender,
-      tier: "young" as const,
-      emoji: isFemale ? "👧" : "🧑",
-      vibe: "Gen-Z Dramatis & Baperan",
-      bio: "Ekspresif, butuh validasi tinggi, gampang overthinking kalau chat dibales singkat.",
-      reactAccept:
-        "Wah seriusan kamu nerima sifatku yang itu? Jangan cuma manis di awal doang ya!",
-      reactReject:
-        "Tuh kan! Pasti ujung-ujungnya kamu nggak ngertiin aku. Yaudah coba cari jalan tengahnya gimana!",
-    };
-  } else if (botAge <= 32) {
-    return {
-      name: isFemale ? "Nadya" : "Bagas",
-      age: botAge,
-      gender: botGender,
-      tier: "mid" as const,
-      emoji: isFemale ? "👩" : "👨",
-      vibe: "Quarter-Life Realistis",
-      bio: "Mikirin karier, stabilitas finansial, dan trauma masa lalu. Suka diskusi objektif.",
-      reactAccept:
-        "Oke, aku hargai kejujuranmu nerima itu. Tapi pastiin kamu sanggup nanggung efek sampingnya ya.",
-      reactReject:
-        "Fair enough, emang nggak semua hal harus diiyain. Ayo kita negosiasi kompromi yang masuk akal buat berdua.",
-    };
-  } else {
-    return {
-      name: isFemale ? "Laras" : "Dimas",
-      age: botAge,
-      gender: botGender,
-      tier: "mature" as const,
-      emoji: isFemale ? "👩‍💼" : "👨‍💼",
-      vibe: "Pragmatis Siap Nikah",
-      bio: "To-the-point, anti-drama, fokus efisiensi keuangan, keluarga, dan komitmen konkret.",
-      reactAccept:
-        "Bagus. Dalam pernikahan memang butuh kesiapan mental nerima kekurangan pasangan tanpa banyak drama.",
-      reactReject:
-        "Saya menghargai ketegasan kamu menolak. Sekarang pilih solusi paling praktis supaya ini nggak jadi masalah di rumah tangga.",
-    };
-  }
-}
-
 function buildMatchDeck(
   p1: PlayerProfile,
   p2: PlayerProfile,
-  mode: "solo" | "couple" | "online",
   maxRounds: number
 ): DeckCard[] {
   const extractDeckCards = (profile: PlayerProfile) => {
@@ -365,17 +301,12 @@ function buildMatchDeck(
   const matchDeck: DeckCard[] = [];
 
   for (let r = 1; r <= maxRounds; r++) {
-    if (mode === "solo") {
-      const card = p2Pool[(r - 1) % p2Pool.length];
+    if (r % 2 === 1) {
+      const card = p2Pool[Math.floor(r / 2) % p2Pool.length];
       matchDeck.push({ ...card, roundNum: r, responderKey: "player1" });
     } else {
-      if (r % 2 === 1) {
-        const card = p2Pool[Math.floor(r / 2) % p2Pool.length];
-        matchDeck.push({ ...card, roundNum: r, responderKey: "player1" });
-      } else {
-        const card = p1Pool[Math.floor((r - 1) / 2) % p1Pool.length];
-        matchDeck.push({ ...card, roundNum: r, responderKey: "player2" });
-      }
+      const card = p1Pool[Math.floor((r - 1) / 2) % p1Pool.length];
+      matchDeck.push({ ...card, roundNum: r, responderKey: "player2" });
     }
   }
   return matchDeck;
@@ -507,7 +438,6 @@ export default function SefrekuensiGame() {
   );
   const [regAge, setRegAge] = useState("");
   const [deckTheme, setDeckTheme] = useState<DeckTheme>("standar");
-  const [customStake, setCustomStake] = useState(STAKE_PRESETS[0]);
   const [registerError, setRegisterError] = useState<{
     title: string;
     text: string;
@@ -535,12 +465,11 @@ export default function SefrekuensiGame() {
   );
   const [player1, setPlayer1] = useState<PlayerProfile | null>(null);
   const [player2, setPlayer2] = useState<PlayerProfile | null>(null);
-  const [mode, setMode] = useState<"solo" | "couple" | "online">("online");
+  const [mode, setMode] = useState<"couple" | "online">("online");
   const [quizTarget, setQuizTarget] = useState<"player1" | "player2">(
     "player1"
   );
   const [quizIndex, setQuizIndex] = useState(0);
-  const [botAgeSlider, setBotAgeSlider] = useState(25);
 
   const [partnerNameInput, setPartnerNameInput] = useState("");
   const [partnerGenderInput, setPartnerGenderInput] = useState<
@@ -655,7 +584,6 @@ export default function SefrekuensiGame() {
     []
   );
 
-  const handleStakeChange = async (newStake: string) => {
     setCustomStake(newStake);
     if (mode === "online" && inviteCode && isFirebaseReady && db) {
       try {
@@ -893,7 +821,7 @@ export default function SefrekuensiGame() {
       if (!isFirebaseReady || !db) {
         showRegisterError(
           "Koneksi Server Terputus",
-          "Layanan bermain online sedang tidak tersedia. Periksa koneksi internetmu atau mainkan Mode Solo / 1 Perangkat."
+          "Layanan bermain online sedang tidak tersedia. Periksa koneksi internetmu atau mainkan Mode 1 Perangkat."
         );
         return;
       }
@@ -1040,7 +968,6 @@ export default function SefrekuensiGame() {
               const generatedDeck = buildMatchDeck(
                 updatedP1,
                 p2Data,
-                "online",
                 maxRounds
               );
               tx.update(roomRef, {
@@ -1084,7 +1011,6 @@ export default function SefrekuensiGame() {
               const generatedDeck = buildMatchDeck(
                 p1Data,
                 updatedP2,
-                "online",
                 maxRounds
               );
               tx.update(roomRef, {
@@ -1151,7 +1077,7 @@ export default function SefrekuensiGame() {
         `Dek masalah ${updatedP2.name} siap! Memulai permainan pasangan...`,
         "success"
       );
-      initMatchArena(updatedP1, updatedP2, "couple");
+      initMatchArena(updatedP1, updatedP2);
       return;
     }
 
@@ -1177,37 +1103,6 @@ export default function SefrekuensiGame() {
     } else {
       await finishQuizPhase(nextP1, nextP2);
     }
-  };
-
-  const startSoloGame = () => {
-    if (!player1) return;
-    sfxTap();
-    const botGender =
-      player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
-    const persona = getBotPersonaConfig(botGender, botAgeSlider);
-    const botQuestions = build20QuestionsForProfile(
-      botGender,
-      botAgeSlider,
-      deckTheme
-    );
-
-    const botAnswers: PlayerProfile["answers"] = {};
-    botQuestions.forEach((q, i) => {
-      if (i % 3 === 0 || i % 5 === 0) botAnswers[q.id] = "iya";
-      else if (i % 2 === 0) botAnswers[q.id] = "kayanya";
-      else botAnswers[q.id] = "engga";
-    });
-
-    const botProfile: PlayerProfile = {
-      ...persona,
-      email: "bot@sefrekuensi.id",
-      questions: botQuestions,
-      answers: botAnswers,
-    };
-
-    setMode("solo");
-    setPlayer2(botProfile);
-    initMatchArena(player1, botProfile, "solo");
   };
 
   const openPartnerSimulatorModal = () => {
@@ -1270,12 +1165,8 @@ export default function SefrekuensiGame() {
     goScreen("quiz");
   };
 
-  const initMatchArena = (
-    p1: PlayerProfile,
-    p2: PlayerProfile,
-    activeMode: "solo" | "couple"
-  ) => {
-    const generatedDeck = buildMatchDeck(p1, p2, activeMode, maxRounds);
+  const initMatchArena = (p1: PlayerProfile, p2: PlayerProfile) => {
+    const generatedDeck = buildMatchDeck(p1, p2, maxRounds);
     setBattery(50);
     prevBatteryRef.current = 50;
     setDeltaBadge(null);
@@ -1489,8 +1380,7 @@ export default function SefrekuensiGame() {
   const runPencitraanAudit = async (
     responder: PlayerProfile,
     cardPartner: PlayerProfile,
-    card: DeckCard,
-    accuserIsBot = false
+    card: DeckCard
   ) => {
     const contradiction = findContradictoryConfession(responder, card);
 
@@ -1499,11 +1389,7 @@ export default function SefrekuensiGame() {
       const alertObj: AuditAlert = {
         id: Date.now() + Math.random(),
         title: `🚨 DETEKTOR PENCITRAAN TERBUKTI! (${responder.name})`,
-        detail: `${
-          accuserIsBot ? `${cardPartner.name} (Bot AI)` : cardPartner.name
-        } menuduh pencitraan dan terbukti! Di awal ${
-          responder.name
-        } mengaku: "${contradiction.statement}"`,
+        detail: `${cardPartner.name} menuduh pencitraan dan terbukti! Di awal ${responder.name} mengaku: "${contradiction.statement}"`,
         delta: -15,
         isCaught: true,
       };
@@ -1572,35 +1458,6 @@ export default function SefrekuensiGame() {
     sfxFlip();
     setConsecutiveTimeouts(0);
 
-    if (mode === "solo" && currentCard && player1 && player2) {
-      setTimerRunning(false);
-      const contradiction = findContradictoryConfession(player1, currentCard);
-      const botAudits =
-        Boolean(contradiction) &&
-        (player2.tier !== "young" || Math.random() < 0.7);
-
-      if (botAudits) {
-        await runPencitraanAudit(player1, player2, currentCard, true);
-      } else {
-        sfxCharge();
-        const item: HistoryItem = {
-          round,
-          category: currentCard.category,
-          isWildcard: currentCard.isWildcard,
-          problem: currentCard.partnerPrompt,
-          outcomeLabel: `${player1.name}: Komitmen Dipercaya ${player2.name}`,
-          delta: 10,
-          type: "good",
-        };
-        showToast(
-          `${player2.name} percaya komitmenmu! Baterai Cinta +10%`,
-          "success"
-        );
-        applyLocalRoundOutcome(10, item, "terimaMantap", 0);
-      }
-      return;
-    }
-
     if (mode === "online" && inviteCode && isFirebaseReady && db) {
       await setDoc(
         doc(db, "rooms", inviteCode),
@@ -1638,7 +1495,7 @@ export default function SefrekuensiGame() {
         applyLocalRoundOutcome(10, item, "terimaMantap", 0);
       }
     } else {
-      await runPencitraanAudit(responder, cardPartner, currentCard, false);
+      await runPencitraanAudit(responder, cardPartner, currentCard);
     }
   };
 
@@ -1667,52 +1524,6 @@ export default function SefrekuensiGame() {
           "warning"
         );
       }
-    }
-  };
-
-  const resolveSoloNegotiation = (
-    ownerChoiceIdx: number,
-    botResponderIdx: number
-  ) => {
-    if (!currentCard || !player2) return;
-    setTimerRunning(false);
-    const isAgreed = ownerChoiceIdx === botResponderIdx;
-
-    if (isAgreed) {
-      sfxCharge();
-      const item: HistoryItem = {
-        round,
-        category: currentCard.category,
-        isWildcard: currentCard.isWildcard,
-        problem: currentCard.partnerPrompt,
-        outcomeLabel: `Tolak → Sepakat Kompromi (${String.fromCharCode(
-          65 + ownerChoiceIdx
-        )})`,
-        delta: 5,
-        type: "neutral",
-      };
-      showToast(
-        `Sepakat dengan ${player2.name} di Opsi ${String.fromCharCode(
-          65 + ownerChoiceIdx
-        )}! Baterai +5%`,
-        "success"
-      );
-      applyLocalRoundOutcome(5, item, "kompromiSepakat", 0);
-    } else {
-      sfxPenalty();
-      const item: HistoryItem = {
-        round,
-        category: currentCard.category,
-        isWildcard: currentCard.isWildcard,
-        problem: currentCard.partnerPrompt,
-        outcomeLabel: `Tolak → Deadlock (Pemilik: ${String.fromCharCode(
-          65 + ownerChoiceIdx
-        )}, Bot: ${String.fromCharCode(65 + botResponderIdx)})`,
-        delta: -15,
-        type: "bad",
-      };
-      showToast(`Deadlock! Pilihan kompromi tidak cocok (-15%)`, "error");
-      applyLocalRoundOutcome(-15, item, "deadlockOrAfk", 0);
     }
   };
 
@@ -1801,45 +1612,6 @@ export default function SefrekuensiGame() {
   ) => {
     if (!player1 || !player2) return;
     sfxTap();
-
-    if (mode === "solo") {
-      setTimerRunning(false);
-      const botChoice = suddenDeathItem.botPref[player2.tier || "mid"] ?? 0;
-      const isSync = choiceIdx === botChoice;
-      const delta = isSync ? 15 : -15;
-      if (isSync && ev) glitterBurst(ev);
-
-      const item: HistoryItem = {
-        round: maxRounds,
-        category: "Sinkronisasi Otak",
-        isWildcard: false,
-        problem: suddenDeathItem.scenario,
-        outcomeLabel: isSync
-          ? `Sinkronisasi Otak Cocok! (Opsi ${String.fromCharCode(
-              65 + choiceIdx
-            )})`
-          : `Beda Frekuensi (${String.fromCharCode(
-              65 + choiceIdx
-            )} vs Bot ${String.fromCharCode(65 + botChoice)})`,
-        delta,
-        type: isSync ? "good" : "bad",
-      };
-
-      showToast(
-        isSync
-          ? "⚡ SINKRONISASI OTAK BERHASIL! Bonus Clutch +15%!"
-          : "💥 Beda frekuensi di ronde penentu! -15%.",
-        isSync ? "success" : "error"
-      );
-
-      applyLocalRoundOutcome(
-        delta,
-        item,
-        isSync ? "kompromiSepakat" : "deadlockOrAfk",
-        0
-      );
-      return;
-    }
 
     if (mode === "couple") {
       if (p1SyncChoice === null) {
@@ -2183,7 +1955,6 @@ export default function SefrekuensiGame() {
         ctx.fillText(line, W / 2, matchY + 88 + i * 31);
       });
 
-      // Custom Stake Box inside PNG
       const stakeBoxY = cardY + cardH + 20;
       const stakeBoxH = 104;
       drawRoundedRect(ctx, cardX, stakeBoxY, cardW, stakeBoxH, 24);
@@ -2426,7 +2197,7 @@ export default function SefrekuensiGame() {
     if (mode === "online" && isFirebaseReady && db && inviteCode) {
       setIsBusy(true);
       try {
-        const freshDeck = buildMatchDeck(player1, player2, "online", maxRounds);
+        const freshDeck = buildMatchDeck(player1, player2, maxRounds);
         await setDoc(
           doc(db, "rooms", inviteCode),
           {
@@ -2469,7 +2240,7 @@ export default function SefrekuensiGame() {
       "Kesempatan kedua dimulai! Baterai Cinta kembali ke 50%.",
       "success"
     );
-    initMatchArena(player1, player2, mode === "solo" ? "solo" : "couple");
+    initMatchArena(player1, player2);
   };
 
   const fullResetGame = () => {
@@ -2487,10 +2258,6 @@ export default function SefrekuensiGame() {
     setLandingTab("new");
     goScreen("register");
   };
-
-  const botGenderForPreview: "Laki-laki" | "Perempuan" =
-    player1?.gender === "Laki-laki" ? "Perempuan" : "Laki-laki";
-  const botPreview = getBotPersonaConfig(botGenderForPreview, botAgeSlider);
 
   let countIya = 0;
   let countKayanya = 0;
@@ -2524,13 +2291,6 @@ export default function SefrekuensiGame() {
         ? player2
         : player1
       : null;
-
-  const cluePhrases: Record<"young" | "mid" | "mature", string> = {
-    young: "Aku maunya yang tetep ngejaga perasaan & perhatian kita sih...",
-    mid: "Menurutku kita butuh aturan yang realistis dan adil buat masing-masing.",
-    mature:
-      "Pilih opsi yang paling praktis, terukur, dan minim drama ke depannya.",
-  };
 
   const mySyncChoiceOnline =
     myOnlineRole === "player1" ? p1SyncChoice : p2SyncChoice;
@@ -3144,7 +2904,7 @@ export default function SefrekuensiGame() {
             <div className="bg-cardbg/95 border border-amber-500/40 rounded-3xl p-5 shadow-xl">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-amber-400">
-                  🎯 Taruhan Nyata (Tercetak di Rapor)
+                  🎯 Taruhan Nyata
                 </span>
               </div>
               <input
@@ -3178,7 +2938,7 @@ export default function SefrekuensiGame() {
 
             <div className="text-center">
               <h3 className="text-base font-extrabold text-white">
-                Pilih Lawan Main Uji Kecocokan
+                Undang Pasangan untuk Uji Kecocokan
               </h3>
               <p className="text-xs text-slate-400">
                 Baterai Cinta dimulai dari{" "}
@@ -3271,85 +3031,6 @@ export default function SefrekuensiGame() {
                 className="w-full py-3 px-4 rounded-2xl bg-slate-800/90 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs sm:text-sm btn-tactile"
               >
                 📲 Atau Main Berdua Gantian di 1 HP Ini
-              </button>
-            </div>
-
-            <div className="bg-cardbg/95 border-2 border-slate-800 hover:border-rose-500/50 rounded-3xl p-5 transition">
-              <div className="flex items-start justify-between gap-3 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-lg">
-                    🤖
-                  </div>
-                  <div>
-                    <h4 className="font-extrabold text-white text-base">
-                      Mode Solo — Lawan Bot AI
-                    </h4>
-                    <p className="text-xs text-slate-400">
-                      Otomatis lawan jenis (
-                      <span className="text-rose-400 font-semibold">
-                        {botGenderForPreview}
-                      </span>
-                      ) dengan kepribadian sesuai usia.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-4 rounded-2xl bg-slate-950/90 border border-slate-800 mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <label
-                    htmlFor="botAgeSlider"
-                    className="text-xs font-bold text-slate-300"
-                  >
-                    Pilih Usia Bot AI:
-                  </label>
-                  <span className="font-mono font-extrabold text-sm px-2.5 py-0.5 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30">
-                    {botAgeSlider} Tahun
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  id="botAgeSlider"
-                  min={20}
-                  max={45}
-                  value={botAgeSlider}
-                  onChange={(e) =>
-                    setBotAgeSlider(parseInt(e.target.value, 10))
-                  }
-                  className="w-full my-2"
-                />
-                <div className="flex justify-between text-[10px] font-mono text-slate-500 mb-3">
-                  <span>20 (Dramatis)</span>
-                  <span>28 (Realistis)</span>
-                  <span>45 (Pragmatis)</span>
-                </div>
-
-                <div className="flex items-center gap-3 pt-3 border-t border-slate-800/80">
-                  <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center text-lg shrink-0">
-                    {botPreview.emoji}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm text-white">
-                        {botPreview.name} ({botAgeSlider} thn)
-                      </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                        {botPreview.vibe}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 truncate mt-0.5">
-                      &ldquo;{botPreview.bio}&rdquo;
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={startSoloGame}
-                className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-extrabold text-sm shadow-lg shadow-rose-500/25 btn-tactile"
-              >
-                Mulai Main Lawan Bot AI →
               </button>
             </div>
           </section>
@@ -3758,8 +3439,7 @@ export default function SefrekuensiGame() {
 
                       <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-slate-950/80 border border-slate-800/90 mb-4">
                         <div className="w-9 h-9 rounded-full bg-slate-800 flex items-center justify-center text-base shrink-0">
-                          {cardPartner.emoji ||
-                            (cardPartner.gender === "Perempuan" ? "👩" : "👨")}
+                          {cardPartner.gender === "Perempuan" ? "👩" : "👨"}
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-extrabold text-white truncate">
@@ -3835,7 +3515,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {gameStage === "consequence" && mode !== "solo" && (
+                  {gameStage === "consequence" && (
                     <div
                       key={`conseq-${round}`}
                       className="bg-cardbg/95 backdrop-blur-xl border-2 border-amber-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
@@ -3896,83 +3576,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {gameStage === "negotiate1" && mode === "solo" && (
-                    <div
-                      key={`neg-solo-${round}`}
-                      className="bg-cardbg/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <span className="px-3 py-1 rounded-full text-xs font-mono font-extrabold bg-rose-500/20 text-rose-300 border border-rose-500/40">
-                          🚨 KARTU DITOLAK — USULKAN KOMPROMI
-                        </span>
-                        <span className="text-xs text-slate-400">
-                          Sepakat:{" "}
-                          <strong className="text-emerald-400">+5%</strong> |
-                          Beda: <strong className="text-red-400">-15%</strong>
-                        </span>
-                      </div>
-
-                      <div className="p-4 rounded-2xl bg-rose-950/30 border border-rose-500/40 mb-4">
-                        <span className="block text-[10px] font-mono uppercase tracking-wider text-rose-400 font-bold mb-1">
-                          📌 MASALAH YANG DITOLAK OLEH{" "}
-                          {responder?.name.toUpperCase()}:
-                        </span>
-                        <p className="text-xs sm:text-sm font-bold text-white leading-relaxed">
-                          &ldquo;{currentCard.partnerPrompt}&rdquo;
-                        </p>
-                      </div>
-
-                      <div className="p-3.5 rounded-2xl bg-slate-950 border border-slate-800 mb-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-base">{cardPartner.emoji}</span>
-                          <span className="text-xs font-extrabold text-white">
-                            {cardPartner.name} ({cardPartner.age} thn)
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
-                            {cardPartner.vibe}
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-300 leading-relaxed">
-                          &ldquo;{cardPartner.reactReject}&rdquo;
-                        </p>
-                        <p className="text-[11px] text-amber-400/90 mt-1.5 font-medium">
-                          💡 Petunjuk gaya kompromi:{" "}
-                          {cluePhrases[cardPartner.tier || "mid"]}
-                        </p>
-                      </div>
-
-                      <p className="text-xs font-bold text-slate-300 mb-2.5">
-                        Pilih 1 opsi kompromi untuk ditawarkan ke{" "}
-                        {cardPartner.name}:
-                      </p>
-
-                      <div className="space-y-2.5">
-                        {currentCard.compromises.map((opt, idx) => {
-                          const botPrefIdx =
-                            currentCard.botPref[cardPartner.tier || "mid"] ?? 0;
-                          return (
-                            <button
-                              key={idx}
-                              type="button"
-                              onClick={() =>
-                                resolveSoloNegotiation(idx, botPrefIdx)
-                              }
-                              className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-amber-400 text-left flex items-start gap-3 transition btn-tactile"
-                            >
-                              <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-amber-400 shrink-0 mt-0.5">
-                                {String.fromCharCode(65 + idx)}
-                              </span>
-                              <span className="text-xs sm:text-sm font-semibold text-slate-200 leading-snug">
-                                {opt}
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {gameStage === "negotiate1" && mode !== "solo" && (
+                  {gameStage === "negotiate1" && (
                     <div
                       key={`neg-c1-${round}`}
                       className="bg-cardbg/95 backdrop-blur-xl border-2 border-rose-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
@@ -4033,7 +3637,7 @@ export default function SefrekuensiGame() {
                     </div>
                   )}
 
-                  {gameStage === "negotiate2" && mode !== "solo" && (
+                  {gameStage === "negotiate2" && (
                     <div
                       key={`neg-c2-${round}`}
                       className="bg-cardbg/95 backdrop-blur-xl border-2 border-emerald-500/50 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-flip"
