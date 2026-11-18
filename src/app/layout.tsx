@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SEFREKUENSI — Dating & Red Flag Card Game",
+  title: "SEFREKUENSI — Relationship & Red Flag Card Game",
   description:
     "Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian sanggup bertahan.",
 };
