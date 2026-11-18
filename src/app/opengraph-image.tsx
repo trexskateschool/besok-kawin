@@ -1,6 +1,6 @@
 import { ImageResponse } from "next/og";
 
-export const alt = "BESOK KAWIN? — Dating & Red Flag Card Game";
+export const alt = "SEFREKUENSI — Dating & Red Flag Card Game";
 export const size = {
   width: 1200,
   height: 630,
@@ -51,7 +51,7 @@ export default function Image() {
             marginBottom: "16px",
           }}
         >
-          BESOK KAWIN?
+          SEFREKUENSI
         </div>
 
         <div
