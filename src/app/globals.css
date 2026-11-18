@@ -2,22 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  body {
-    background-color: #090d16;
-    color: #f8fafc;
-    font-family: var(--font-sans), "Plus Jakarta Sans", sans-serif;
-    overflow-x: hidden;
-    -webkit-tap-highlight-color: transparent;
-  }
+body {
+  background-color: #090d16;
+  color: #f8fafc;
+  font-family: var(--font-sans), "Plus Jakarta Sans", sans-serif;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
 
-  .font-mono {
-    font-family: var(--font-mono), "JetBrains Mono", monospace;
-  }
+.font-mono {
+  font-family: var(--font-mono), "JetBrains Mono", monospace;
 }
 
 .bg-obsidian {
   background-color: #090d16;
+}
+
+.bg-obsidian\/80 {
+  background-color: rgba(9, 13, 22, 0.8);
 }
 
 .bg-cardbg {
