@@ -314,6 +314,7 @@ function buildMatchDeck(
 
 export default function SefrekuensiGame() {
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const audioCtxRef = useRef<AudioContext | null>(null);
 
   const playTone = useCallback(
@@ -788,7 +789,7 @@ export default function SefrekuensiGame() {
     if (isNaN(age) || age < 18) {
       showRegisterError(
         "Usia Belum Mencukupi",
-        "Permainan ini dirancang khusus untuk dewasa yang sudah siap membahas komitmen hubungan serius."
+        "Permainan ini ditujukan bagi pengguna berusia 18 tahun ke atas untuk simulasi kesiapan komitmen hubungan."
       );
       return;
     }
@@ -840,8 +841,8 @@ export default function SefrekuensiGame() {
 
         if (regGender === hostProfile.gender) {
           showRegisterError(
-            "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
-            `Kode ${code} dibuat oleh ${hostProfile.name} (${hostProfile.gender}). Kamu tidak bisa bergabung dengan jenis kelamin yang sama.`
+            "Slot Peran Sudah Terisi!",
+            `Sesi ini dirancang untuk simulasi pasangan pria dan wanita. Peran ${hostProfile.gender} di room ${code} sudah diisi oleh ${hostProfile.name}.`
           );
           setIsBusy(false);
           return;
@@ -1108,7 +1109,7 @@ export default function SefrekuensiGame() {
       sfxPenalty();
       setPartnerError({
         title: "Usia Belum Mencukupi",
-        text: "Permainan ini dirancang khusus untuk dewasa yang sudah siap membahas komitmen hubungan serius.",
+        text: "Permainan ini ditujukan bagi pengguna berusia 18 tahun ke atas untuk simulasi kesiapan komitmen hubungan.",
         key: Date.now(),
       });
       return;
@@ -1117,11 +1118,10 @@ export default function SefrekuensiGame() {
     if (partnerGenderInput === player1.gender) {
       sfxPenalty();
       setPartnerError({
-        title:
-          "Ditolak! Kode undangan hanya berlaku untuk pasangan lawan jenis.",
-        text: `${player1.name} terdaftar sebagai ${
+        title: "Slot Peran Tidak Tersedia!",
+        text: `Sesi simulasi ini membutuhkan satu peran Laki-laki dan satu peran Perempuan. Peran ${
           player1.gender
-        }. Pasangan harus berjenis kelamin ${
+        } sudah diisi oleh ${player1.name}, tersisa slot untuk peran ${
           player1.gender === "Laki-laki" ? "Perempuan" : "Laki-laki"
         }.`,
         key: Date.now(),
@@ -1728,10 +1728,9 @@ export default function SefrekuensiGame() {
     if (typeof window === "undefined") return;
     const baseUrl = window.location.origin + window.location.pathname;
     const shareUrl = `${baseUrl}?code=${inviteCode}`;
-    const shareMsg = `Uji kecocokan & buka borok kita di SEFREKUENSI!\nLink: ${shareUrl}\nAtau masukkan Kode Undangan: ${inviteCode}`;
     copyTextSafe(
-      shareMsg,
-      `Link & kode undangan ${inviteCode} disalin! Kirim ke WhatsApp pasanganmu.`
+      shareUrl,
+      `Link undangan (${inviteCode}) disalin! Kirim langsung ke pasanganmu.`
     );
   };
 
@@ -2382,6 +2381,49 @@ export default function SefrekuensiGame() {
         })}
       </div>
 
+      {showPrivacyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl animate-card-enter">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-base font-extrabold text-white">
+                🔒 Kebijakan Privasi &amp; Data
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowPrivacyModal(false)}
+                className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+              <p>
+                <strong>1. Penggunaan Data:</strong> Nama panggilan, email,
+                usia, peran pemain, serta jawaban kuis hanya digunakan untuk
+                mencocokkan sesi permainan di dalam room bersama pasanganmu.
+              </p>
+              <p>
+                <strong>2. Kerahasiaan:</strong> Kami tidak menjual,
+                menyewakan, atau membagikan informasi pribadi maupun hasil kuis
+                kepada pihak ketiga mana pun.
+              </p>
+              <p>
+                <strong>3. Tujuan Hiburan &amp; Edukasi:</strong> Aplikasi ini
+                adalah simulasi interaktif komunikasi hubungan untuk pengguna
+                berusia 18 tahun ke atas.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPrivacyModal(false)}
+              className="w-full mt-5 py-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs transition"
+            >
+              Mengerti
+            </button>
+          </div>
+        </div>
+      )}
+
       <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6 flex flex-col justify-center">
         {screen === "register" && (
           <section key={animKey} className="animate-card-enter">
@@ -2443,8 +2485,8 @@ export default function SefrekuensiGame() {
                     className="w-full bg-slate-950 border border-slate-700 focus:border-amber-400 rounded-xl px-3.5 py-2.5 text-sm font-mono font-bold uppercase text-white placeholder-slate-600 focus:outline-none"
                   />
                   <p className="text-[11px] text-slate-400 mt-1.5">
-                    *Tema dek otomatis mengikuti room pasangan &amp; memblokir
-                    jenis kelamin yang sama.
+                    *Tema dek otomatis mengikuti room pasangan (1 slot peran
+                    Pria &amp; 1 slot peran Wanita).
                   </p>
                 </div>
               )}
@@ -2516,7 +2558,7 @@ export default function SefrekuensiGame() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                      Jenis Kelamin
+                      Peran / Jenis Kelamin
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {(["Laki-laki", "Perempuan"] as const).map((g) => (
@@ -2541,7 +2583,7 @@ export default function SefrekuensiGame() {
                       htmlFor="regAge"
                       className="block text-xs font-semibold text-slate-300 mb-1.5"
                     >
-                      Usia (Tahun)
+                      Usia (18+ Tahun)
                     </label>
                     <input
                       type="number"
@@ -2622,6 +2664,18 @@ export default function SefrekuensiGame() {
                     />
                   </svg>
                 </button>
+
+                <p className="text-[11px] text-center text-slate-500 pt-1">
+                  Dengan melanjutkan, kamu menyetujui{" "}
+                  <button
+                    type="button"
+                    onClick={() => setShowPrivacyModal(true)}
+                    className="text-slate-400 underline hover:text-rose-400"
+                  >
+                    Kebijakan Privasi &amp; Penggunaan Data
+                  </button>
+                  .
+                </p>
               </form>
             </div>
           </section>
@@ -2866,8 +2920,8 @@ export default function SefrekuensiGame() {
                       Main Online Beda Perangkat
                     </h4>
                     <p className="text-xs text-slate-400">
-                      Kirim kode/link ke HP pasangan lawan jenis. Layar otomatis
-                      mulai saat dia selesai menjawab!
+                      Kirim kode/link ke HP pasanganmu untuk mengisi peran
+                      kedua. Layar otomatis mulai saat dia selesai menjawab!
                     </p>
                   </div>
                 </div>
@@ -2970,7 +3024,8 @@ export default function SefrekuensiGame() {
                 <span className="text-rose-400 font-semibold">
                   {player1.name} ({player1.gender}, {player1.age} thn)
                 </span>{" "}
-                mengundangmu uji kecocokan. Masukkan datamu (wajib lawan jenis).
+                mengundangmu uji kecocokan. Masukkan datamu untuk melengkapi
+                peran pasangan.
               </p>
 
               {partnerError && (
@@ -3005,7 +3060,7 @@ export default function SefrekuensiGame() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Jenis Kelamin Pasangan
+                      Peran / Jenis Kelamin Pasangan
                     </label>
                     <div className="grid grid-cols-2 gap-2">
                       {(["Laki-laki", "Perempuan"] as const).map((g) => (
@@ -3027,7 +3082,7 @@ export default function SefrekuensiGame() {
 
                   <div>
                     <label className="block text-xs font-semibold text-slate-300 mb-1">
-                      Usia Pasangan (Tahun)
+                      Usia Pasangan (18+ Tahun)
                     </label>
                     <input
                       type="number"
@@ -3793,7 +3848,7 @@ export default function SefrekuensiGame() {
                   onClick={handleSecondChance}
                   className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile disabled:opacity-50"
                 >
-                  {isBusy ? "Memulai Ulang..." : "🔄 Main Lagi"}
+                  {isBusy ? "Memulai Ulang..." : "🔄 Kesempatan Kedua"}
                 </button>
                 <button
                   type="button"
@@ -3808,8 +3863,16 @@ export default function SefrekuensiGame() {
         )}
       </main>
 
-      <footer className="w-full py-4 text-center text-[11px] text-slate-600">
-        SEFREKUENSI • Krisna Oktaria
+      <footer className="w-full py-4 text-center text-[11px] text-slate-600 flex items-center justify-center gap-2">
+        <span>SEFREKUENSI • Krisna Oktaria</span>
+        <span>•</span>
+        <button
+          type="button"
+          onClick={() => setShowPrivacyModal(true)}
+          className="hover:text-slate-400 underline"
+        >
+          Privasi
+        </button>
       </footer>
     </>
   );
