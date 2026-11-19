@@ -5,7 +5,7 @@ import {
   DeckTheme,
   DECK_THEME_META,
   QuestionItem,
-  SUDDEN_DEATH_QUESTIONS,
+  BRAIN_SYNC_QUESTIONS,
   build20QuestionsForProfile,
 } from "./questions";
 import { db, isFirebaseReady } from "@/lib/firebase";
@@ -132,12 +132,12 @@ function findContradictoryConfession(
   return null;
 }
 
-function getSuddenDeathForMatch(seedStr: string) {
+function getBrainSyncForMatch(seedStr: string) {
   let hash = 0;
   for (let i = 0; i < seedStr.length; i++) {
     hash = (hash * 31 + seedStr.charCodeAt(i)) >>> 0;
   }
-  return SUDDEN_DEATH_QUESTIONS[hash % SUDDEN_DEATH_QUESTIONS.length];
+  return BRAIN_SYNC_QUESTIONS[hash % BRAIN_SYNC_QUESTIONS.length];
 }
 
 function glitterBurst(ev?: React.MouseEvent<HTMLElement>) {
@@ -492,7 +492,7 @@ export default function SefrekuensiGame() {
   const maxRounds = 8;
   const [deck, setDeck] = useState<DeckCard[]>([]);
   const [gameStage, setGameStage] = useState<
-    "dilemma" | "consequence" | "negotiate1" | "negotiate2" | "suddendeath"
+    "dilemma" | "consequence" | "negotiate1" | "negotiate2" | "brainsync"
   >("dilemma");
 
   const [negotiateOwnerChoice, setNegotiateOwnerChoice] = useState<
@@ -737,7 +737,7 @@ export default function SefrekuensiGame() {
 
   const isMyOnlineTurn =
     mode !== "online" ||
-    gameStage === "suddendeath" ||
+    gameStage === "brainsync" ||
     !currentCard ||
     (gameStage === "consequence"
       ? currentCard.responderKey !== myOnlineRole
@@ -749,7 +749,7 @@ export default function SefrekuensiGame() {
 
   useEffect(() => {
     if (screen !== "game" || !timerRunning) return;
-    if (gameStage === "suddendeath") return;
+    if (gameStage === "brainsync") return;
     if (mode === "online" && !isMyOnlineTurn) return;
 
     const interval = setInterval(() => {
@@ -1213,7 +1213,7 @@ export default function SefrekuensiGame() {
       const isFinished = isAfkEnd || isBatteryZero || isRoundsDone;
       const nextRound = isFinished ? curRound : curRound + 1;
       const nextStage =
-        !isFinished && nextRound === maxRounds ? "suddendeath" : "dilemma";
+        !isFinished && nextRound === maxRounds ? "brainsync" : "dilemma";
 
       const reason = isAfkEnd
         ? "3x Timeout / Pasangan Ghosting Berturut-turut!"
@@ -1287,7 +1287,7 @@ export default function SefrekuensiGame() {
       }
       const nextR = round + 1;
       setRound(nextR);
-      setGameStage(nextR === maxRounds ? "suddendeath" : "dilemma");
+      setGameStage(nextR === maxRounds ? "brainsync" : "dilemma");
       setP1SyncChoice(null);
       setP2SyncChoice(null);
       setTimerSeconds(60);
@@ -1585,11 +1585,11 @@ export default function SefrekuensiGame() {
     }
   };
 
-  const suddenDeathItem = getSuddenDeathForMatch(
+  const brainSyncItem = getBrainSyncForMatch(
     inviteCode || `${player1?.name || "p1"}-${player2?.name || "p2"}`
   );
 
-  const handleSuddenDeathChoice = async (
+  const handleBrainSyncChoice = async (
     choiceIdx: number,
     ev?: React.MouseEvent<HTMLButtonElement>
   ) => {
@@ -1618,7 +1618,7 @@ export default function SefrekuensiGame() {
         round: maxRounds,
         category: "Sinkronisasi Otak",
         isWildcard: false,
-        problem: suddenDeathItem.scenario,
+        problem: brainSyncItem.scenario,
         outcomeLabel: isSync
           ? `Sinkronisasi Otak Cocok! (Opsi ${String.fromCharCode(65 + c1)})`
           : `Beda Frekuensi (${String.fromCharCode(
@@ -1684,7 +1684,7 @@ export default function SefrekuensiGame() {
               round: maxRounds,
               category: "Sinkronisasi Otak",
               isWildcard: false,
-              problem: suddenDeathItem.scenario,
+              problem: brainSyncItem.scenario,
               outcomeLabel: isSync
                 ? `Sinkronisasi Otak Cocok! (Opsi ${String.fromCharCode(
                     65 + curC1
@@ -3152,7 +3152,7 @@ export default function SefrekuensiGame() {
                       Ronde <span className="text-rose-400">{round}</span>/8
                     </span>
                     <span className="text-[11px] font-semibold text-slate-400 truncate max-w-[155px] sm:max-w-[220px]">
-                      {gameStage === "suddendeath"
+                      {gameStage === "brainsync"
                         ? "⚡ Sinkronisasi Otak (Serentak)"
                         : `Giliran: ${
                             gameStage === "consequence" ||
@@ -3163,7 +3163,7 @@ export default function SefrekuensiGame() {
                     </span>
                   </div>
 
-                  {gameStage !== "suddendeath" && (
+                  {gameStage !== "brainsync" && (
                     <div className="flex items-center gap-2">
                       <div
                         className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border font-mono font-bold ${
@@ -3213,9 +3213,9 @@ export default function SefrekuensiGame() {
                 </div>
               )}
 
-              {gameStage === "suddendeath" ? (
+              {gameStage === "brainsync" ? (
                 <div
-                  key="suddendeath-round"
+                  key="brainsync-round"
                   className="bg-cardbg/95 backdrop-blur-xl border-2 border-purple-500/60 rounded-3xl p-5 sm:p-6 shadow-2xl animate-card-enter"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
@@ -3230,7 +3230,7 @@ export default function SefrekuensiGame() {
 
                   <div className="p-4 rounded-2xl bg-slate-950 border border-purple-500/30 mb-4">
                     <p className="text-base sm:text-lg font-extrabold text-white leading-relaxed">
-                      &ldquo;{suddenDeathItem.scenario}&rdquo;
+                      &ldquo;{brainSyncItem.scenario}&rdquo;
                     </p>
                   </div>
 
@@ -3279,12 +3279,12 @@ export default function SefrekuensiGame() {
                       </p>
 
                       <div className="space-y-2.5">
-                        {suddenDeathItem.options.map((opt, idx) => (
+                        {brainSyncItem.options.map((opt, idx) => (
                           <button
                             key={idx}
                             type="button"
                             disabled={isBusy}
-                            onClick={(e) => handleSuddenDeathChoice(idx, e)}
+                            onClick={(e) => handleBrainSyncChoice(idx, e)}
                             className="w-full p-3.5 rounded-2xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 hover:border-purple-400 text-left flex items-start gap-3 transition btn-tactile disabled:opacity-50"
                           >
                             <span className="w-6 h-6 rounded-lg bg-slate-800 border border-slate-600 flex items-center justify-center font-mono font-bold text-xs text-purple-300 shrink-0 mt-0.5">
@@ -3793,7 +3793,7 @@ export default function SefrekuensiGame() {
                   onClick={handleSecondChance}
                   className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile disabled:opacity-50"
                 >
-                  {isBusy ? "Memulai Ulang..." : "🔄 Kesempatan Kedua"}
+                  {isBusy ? "Memulai Ulang..." : "🔄 Main Lagi"}
                 </button>
                 <button
                   type="button"
