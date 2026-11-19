@@ -2427,21 +2427,16 @@ export default function SefrekuensiGame() {
       <main className="flex-1 w-full max-w-xl mx-auto px-4 py-6 flex flex-col justify-center">
         {screen === "register" && (
           <section key={animKey} className="animate-card-enter">
-            <div className="text-center mb-6">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20 mb-3">
-                <span>🔥</span> Uji Nyali Sebelum DP Gedung
-              </span>
+                        <div className="text-center mb-6">
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
-                Buka Borokmu di Depan,
-                <br />
+                Kenali Sisi Paling Jujur Pasanganmu{" "}
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 via-pink-500 to-amber-400">
-                  Biar Nggak Nyesel di KUA.
+                  Sebelum Melangkah Lebih Serius.
                 </span>
               </h1>
-              <p className="text-xs sm:text-sm text-slate-400 mt-2 max-w-md mx-auto">
-                Bukan aplikasi cari pencitraan. Jawab 20 pengakuan jujur, hadapi
-                kartu masalah pasangan, dan ukur apakah Baterai Cinta kalian
-                sanggup bertahan.
+              <p className="text-xs sm:text-sm text-slate-400 mt-2.5 max-w-md mx-auto leading-relaxed">
+                Jawab 20 pengakuan, hadapi kartu dilema, dan uji apakah kompromi
+                kalian sanggup menjaga Baterai Cinta tetap menyala.
               </p>
             </div>
 
