@@ -19,9 +19,11 @@ export interface QuestionItem {
     mid: number;
     mature: number;
   };
+  targetGender?: "Laki-laki" | "Perempuan" | "all";
+  targetAge?: "young" | "mid" | "mature" | "all";
 }
 
-export interface SuddenDeathItem {
+export interface BrainSyncItem {
   id: string;
   scenario: string;
   options: [string, string, string];
@@ -58,9 +60,9 @@ export const DECK_THEME_META: Record<
   },
 };
 
-export const SUDDEN_DEATH_QUESTIONS: SuddenDeathItem[] = [
+export const BRAIN_SYNC_QUESTIONS: BrainSyncItem[] = [
   {
-    id: "sd-1",
+    id: "bs-1",
     scenario:
       "Lagi bertengkar hebat dan sama-sama capek kerja, siapa yang harus menurunkan ego duluan untuk minta maaf?",
     options: [
@@ -71,7 +73,7 @@ export const SUDDEN_DEATH_QUESTIONS: SuddenDeathItem[] = [
     botPref: { young: 1, mid: 2, mature: 0 },
   },
   {
-    id: "sd-2",
+    id: "bs-2",
     scenario:
       "Tiba-tiba ada kebutuhan darurat keluarga besar yang butuh dana besar di luar tabungan bersama. Keputusan akhirnya?",
     options: [
@@ -82,7 +84,7 @@ export const SUDDEN_DEATH_QUESTIONS: SuddenDeathItem[] = [
     botPref: { young: 0, mid: 1, mature: 2 },
   },
   {
-    id: "sd-3",
+    id: "bs-3",
     scenario:
       "Setelah menikah, salah satu dapat tawaran karier impian tapi harus LDR beda kota minimal 2 tahun. Pilihan paling masuk akal?",
     options: [
@@ -93,7 +95,7 @@ export const SUDDEN_DEATH_QUESTIONS: SuddenDeathItem[] = [
     botPref: { young: 2, mid: 0, mature: 1 },
   },
   {
-    id: "sd-4",
+    id: "bs-4",
     scenario:
       "Ketahuan pasangan masih menyimpan foto atau barang pemberian mantan di galeri/lemari lama. Reaksi paling jujur?",
     options: [
@@ -446,6 +448,196 @@ const STANDAR_QUESTIONS: QuestionItem[] = [
     ],
     botPref: { young: 0, mid: 2, mature: 1 },
   },
+  {
+    id: "std-21",
+    segmentLabel: "Fase Gengsi",
+    category: "Ketakutan Hidup",
+    statement:
+      "Gua sering ngerasa tertekan harus kelihatan udah mapan secara materi sebelum berani seriusin hubungan.",
+    partnerPrompt:
+      "Dia sering tertekan ingin terlihat mapan secara materi sebelum berani melangkah serius.",
+    consequenceQuestion:
+      "Dia bisa menunda lamaran atau menutup diri saat kondisi ekonominya belum sesuai standar gengsinya. Siap?",
+    compromises: [
+      "Susun target tabungan nikah realistis bertahap berdua",
+      "Sepakat menikah sederhana tanpa maksain gengsi pesta",
+      "Fokus pada kestabilan arus kas bulanan, bukan saldo instan",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "young",
+  },
+  {
+    id: "std-22",
+    segmentLabel: "Fase Sosial",
+    category: "Kebiasaan Buruk",
+    statement:
+      "Gua gampang kepikiran dan ngebandingin hubungan kita kalau lihat pasangan lain pamer kemesraan di medsos.",
+    partnerPrompt:
+      "Dia mudah membandingkan hubungan kalian dengan kemesraan pasangan lain di media sosial.",
+    consequenceQuestion:
+      "Kamu bisa sering dituntut melakukan hal-hal romantis demi standar konten media sosial. Sanggup?",
+    compromises: [
+      "Kurangi konsumsi konten pasangan pamer kemesraan",
+      "Tentukan bahasa cinta versi kita sendiri tanpa ikut tren",
+      "Boleh bikin konten berdua sesekali asal nggak dipaksakan",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "young",
+  },
+  {
+    id: "std-23",
+    segmentLabel: "Fase Emosi",
+    category: "Ketakutan Hidup",
+    statement:
+      "Gua susah terbuka soal ketakutan atau masalah terberat gua karena ngerasa laki-laki harus selalu kelihatan kuat.",
+    partnerPrompt:
+      "Dia sulit terbuka saat punya masalah berat karena merasa harus selalu terlihat kuat.",
+    consequenceQuestion:
+      "Kamu bisa baru tahu dia lagi punya masalah besar setelah situasinya telanjur parah. Terima?",
+    compromises: [
+      "Sediakan ruang ngobrol santai tanpa menghakimi tiap minggu",
+      "Wajib cerita kalau masalah sudah mengganggu tidur atau kesehatan",
+      "Hargai caranya menenangkan diri asal tetap kasih kabar",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "mid",
+  },
+  {
+    id: "std-24",
+    segmentLabel: "Fase Prinsip",
+    category: "Prinsip Hubungan",
+    statement:
+      "Gua nggak mau disuruh berhenti kerja setelah nikah karena karier dan kemandirian adalah identitas gua.",
+    partnerPrompt:
+      "Dia tegas menolak berhenti bekerja setelah menikah demi mempertahankan karier dan kemandiriannya.",
+    consequenceQuestion:
+      "Urusan pekerjaan rumah tangga dan pengasuhan anak nanti harus dibagi rata dua arah. Siap?",
+    compromises: [
+      "Bagi tugas domestik secara adil sesuai jam kerja masing-masing",
+      "Gunakan asisten rumah tangga atau daycare jika sama-sama sibuk",
+      "Evaluasi ulang pembagian peran saat nanti sudah punya anak",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "mid",
+  },
+  {
+    id: "std-25",
+    segmentLabel: "Fase Kebiasaan",
+    category: "Kebiasaan Buruk",
+    statement:
+      "Gua udah kelamaan hidup sendiri dan nyaman sama rutinitas pribadi, jadi agak kaku kalau harus kompromi tiap hari.",
+    partnerPrompt:
+      "Dia sudah terlalu nyaman dengan rutinitas hidup sendirinya sehingga agak kaku berkompromi.",
+    consequenceQuestion:
+      "Mengubah kebiasaan harian kecil seperti jam tidur atau tata letak rumah bisa memicu gesekan. Sanggup?",
+    compromises: [
+      "Punya zona ruang pribadi masing-masing di dalam rumah",
+      "Terapkan masa adaptasi 3 bulan pertama dengan evaluasi santai",
+      "Kompromi di aturan bersama, bebaskan kebiasaan pribadi di ruang sendiri",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Laki-laki",
+    targetAge: "mature",
+  },
+  {
+    id: "std-26",
+    segmentLabel: "Fase Prinsip",
+    category: "Prinsip Hubungan",
+    statement:
+      "Di usia sekarang, gua nggak punya energi buat drama hubungan dan bakal langsung mundur kalau sikapmu nggak dewasa.",
+    partnerPrompt:
+      "Dia tidak punya toleransi untuk drama dan siap mundur jika kamu bersikap kekanak-kanakan.",
+    consequenceQuestion:
+      "Setiap konflik menuntut kedewasaan penuh tanpa ngambek atau ancaman putus. Siap?",
+    compromises: [
+      "Gunakan komunikasi langsung tanpa sindiran saat ada masalah",
+      "Sepakat tidak pernah mengucap kata pisah saat sedang emosi",
+      "Beri waktu 1x24 jam untuk refleksi sebelum diskusi serius",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Perempuan",
+    targetAge: "mature",
+  },
+  {
+    id: "std-27",
+    segmentLabel: "Fase Hobi",
+    category: "Kebiasaan Buruk",
+    statement:
+      "Gua punya hobi rutin di akhir pekan yang susah banget gua tinggalin walau udah berkeluarga nanti.",
+    partnerPrompt:
+      "Dia punya hobi rutin akhir pekan yang sulit ditinggalkan meski sudah berkeluarga.",
+    consequenceQuestion:
+      "Sabtu atau Minggu pagi dia bisa rutin pergi menyalurkan hobinya saat kamu butuh ditemani. Terima?",
+    compromises: [
+      "Jadwalkan hobi maksimal 4 jam di akhir pekan, sisanya buat keluarga",
+      "Pasangan juga dapat jatah waktu bebas yang sama di akhir pekan",
+      "Batalkan agenda hobi jika ada keperluan keluarga mendesak",
+    ],
+    botPref: { young: 2, mid: 0, mature: 1 },
+    targetGender: "Laki-laki",
+    targetAge: "mid",
+  },
+  {
+    id: "std-28",
+    segmentLabel: "Fase Emosi",
+    category: "Kebiasaan Buruk",
+    statement:
+      "Gua kalau lagi PMS atau capek emosional bisa sensitif banget dan gampang nangis cuma gara-gara hal sepele.",
+    partnerPrompt:
+      "Dia bisa sangat sensitif dan mudah menangis karena hal sepele saat PMS atau lelah.",
+    consequenceQuestion:
+      "Nada bicaramu yang sebenarnya biasa saja bisa dianggap membentak atau nggak peduli. Sabar?",
+    compromises: [
+      "Kasih sinyal atau info di awal kalau lagi fase PMS",
+      "Pasangan wajib menurunkan nada bicara dan lebih banyak memeluk",
+      "Hindari membahas topik konflik berat saat kondisi fisik lagi drop",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "young",
+  },
+  {
+    id: "std-29",
+    segmentLabel: "Fase Gaya Hidup",
+    category: "Kebiasaan Buruk",
+    statement:
+      "Gua masih susah jaga pola makan sehat dan jarang olahraga meski usia udah nggak muda lagi.",
+    partnerPrompt:
+      "Dia masih sulit menjaga pola makan sehat dan jarang berolahraga di usia yang sudah matang.",
+    consequenceQuestion:
+      "Risiko kesehatan di masa depan bisa memengaruhi kualitas hidup dan keuangan keluarga kalian. Terima?",
+    compromises: [
+      "Jadwalkan olahraga ringan berdua minimal 2 kali seminggu",
+      "Kurangi makanan manis dan begadang secara bertahap bersama",
+      "Wajib medical check-up rutin setahun sekali sebelum dan sesudah nikah",
+    ],
+    botPref: { young: 1, mid: 2, mature: 0 },
+    targetGender: "all",
+    targetAge: "mature",
+  },
+  {
+    id: "std-30",
+    segmentLabel: "Fase Komitmen",
+    category: "Ketakutan Hidup",
+    statement:
+      "Gua diam-diam takut pernikahan malah ngerusak hubungan kita yang sekarang udah asyik.",
+    partnerPrompt:
+      "Dia diam-diam takut ikatan pernikahan justru merusak keharmonisan kalian sekarang.",
+    consequenceQuestion:
+      "Dia butuh diyakinkan terus bahwa menikah bukan penjara yang mematikan kebahagiaan. Sanggup?",
+    compromises: [
+      "Ikut kelas bimbingan pranikah agar punya ekspektasi realistis",
+      "Pertahankan kebiasaan pacaran mingguan setelah resmi menikah",
+      "Bahas ketakutan terburuk masing-masing tanpa saling menghakimi",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "all",
+    targetAge: "young",
+  },
 ];
 
 const FINANSIAL_QUESTIONS: QuestionItem[] = [
@@ -584,6 +776,196 @@ const FINANSIAL_QUESTIONS: QuestionItem[] = [
       "Jadikan pasangan sebagai alasan resmi untuk menolak pinjaman",
     ],
     botPref: { young: 1, mid: 0, mature: 2 },
+  },
+  {
+    id: "fin-09",
+    segmentLabel: "Pembagian Nafkah",
+    category: "Finansial",
+    statement:
+      "Gua berharap istri tetap punya penghasilan sendiri karena gua nggak mau nanggung seluruh beban ekonomi sendirian.",
+    partnerPrompt:
+      "Dia berharap kamu tetap berpenghasilan agar beban ekonomi rumah tangga tidak ditanggungnya sendirian.",
+    consequenceQuestion:
+      "Kalau suatu hari kamu pengen resign jadi ibu rumah tangga penuh waktu, dia bisa keberatan. Siap?",
+    compromises: [
+      "Tetap bekerja atau punya usaha dari rumah setelah menikah",
+      "Suami tanggung biaya pokok, penghasilan istri untuk tabungan & sekunder",
+      "Izinkan resign penuh waktu jika tabungan darurat sudah 12x pengeluaran",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "mid",
+  },
+  {
+    id: "fin-10",
+    segmentLabel: "Prinsip Nafkah",
+    category: "Finansial",
+    statement:
+      "Menurut gua uang suami adalah uang bersama, sedangkan gaji gua adalah hak penuh buat diri gua sendiri.",
+    partnerPrompt:
+      "Dia berprinsip penghasilanmu adalah uang bersama, sedangkan gajinya adalah hak pribadinya sendiri.",
+    consequenceQuestion:
+      "Seluruh kebutuhan rumah tangga dan cicilan wajib ditutup dari penghasilanmu terlebih dahulu. Sanggup?",
+    compromises: [
+      "Suami tanggung seluruh kebutuhan dasar, istri bantu pos liburan & anak",
+      "Gaji istri tetap utuh tapi wajib ditabung untuk aset masa depan bersama",
+      "Gabungkan seluruh penghasilan lalu bagi jatah uang saku yang sama besar",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "mid",
+  },
+  {
+    id: "fin-11",
+    segmentLabel: "Gaya Hidup",
+    category: "Finansial",
+    statement:
+      "Gua masih sering ngabisin sisa gaji buat nongkrong atau upgrade kendaraan/gadget biar nggak ketinggalan tongkrongan.",
+    partnerPrompt:
+      "Dia masih sering menghabiskan sisa gaji untuk nongkrong atau upgrade gadget dan kendaraan.",
+    consequenceQuestion:
+      "Tabungan nikah kalian bisa jalan di tempat karena gaya hidup pergaulannya masih tinggi. Terima?",
+    compromises: [
+      "Auto-debet tabungan nikah di tanggal gajian sebelum dipakai jajan",
+      "Batasi budget nongkrong maksimal 10% dari penghasilan bulanan",
+      "Tunda ganti kendaraan atau gadget sampai dana darurat terkumpul",
+    ],
+    botPref: { young: 0, mid: 2, mature: 1 },
+    targetGender: "Laki-laki",
+    targetAge: "young",
+  },
+  {
+    id: "fin-12",
+    segmentLabel: "Gaya Hidup",
+    category: "Finansial",
+    statement:
+      "Budget skincare, perawatan salon, dan outfit gua tiap bulan cukup besar dan nggak bisa dipangkas drastis.",
+    partnerPrompt:
+      "Dia punya alokasi rutin yang cukup besar untuk skincare, perawatan, dan outfit setiap bulan.",
+    consequenceQuestion:
+      "Pos perawatan dirinya akan selalu masuk daftar belanja wajib bulanan rumah tangga. Oke?",
+    compromises: [
+      "Biayai pos perawatan dari penghasilan atau uang saku pribadi",
+      "Tetapkan batas maksimal budget perawatan bulanan yang disepakati",
+      "Pilih perawatan esensial saja saat kondisi keuangan lagi ketat",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "young",
+  },
+  {
+    id: "fin-13",
+    segmentLabel: "Karier & Risiko",
+    category: "Finansial",
+    statement:
+      "Gua punya rencana resign dari kerjaan tetap buat bangun bisnis sendiri meski penghasilannya belum pasti.",
+    partnerPrompt:
+      "Dia berencana meninggalkan pekerjaan tetap untuk merintis bisnis dengan penghasilan yang belum pasti.",
+    consequenceQuestion:
+      "Kalian harus siap menghadapi fase tanpa gaji tetap dan gaya hidup super hemat selama merintis usaha. Siap?",
+    compromises: [
+      "Siapkan dana hidup keluarga minimal 12 bulan sebelum resign",
+      "Jalankan bisnis sebagai sampingan dulu sampai profitnya menyamai gaji",
+      "Pasangan tetap bekerja sebagai penopang arus kas selama masa rintisan",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "mature",
+  },
+  {
+    id: "fin-14",
+    segmentLabel: "Aset Pribadi",
+    category: "Finansial",
+    statement:
+      "Setelah nikah nanti, gua tetap wajib punya tabungan dan aset atas nama pribadi sebagai jaring pengaman.",
+    partnerPrompt:
+      "Dia bersikeras tetap memiliki tabungan dan aset atas nama pribadinya setelah menikah.",
+    consequenceQuestion:
+      "Tidak semua aset yang kalian kumpulkan akan tercatat atas nama bersama. Kamu bisa menerima?",
+    compromises: [
+      "Sepakat punya rekening bersama sekaligus rekening darurat masing-masing",
+      "Buat perjanjian pranikah soal pemisahan harta secara transparan",
+      "Boleh punya aset pribadi asal tidak mengurangi jatah kebutuhan rumah",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Perempuan",
+    targetAge: "mature",
+  },
+  {
+    id: "fin-15",
+    segmentLabel: "Biaya Nikah",
+    category: "Finansial",
+    statement:
+      "Gua pengen acara pernikahan yang berkesan dan layak meski harus ngabisin hampir seluruh tabungan kita.",
+    partnerPrompt:
+      "Dia menginginkan pesta pernikahan yang meriah meski menguras hampir seluruh tabungan kalian.",
+    consequenceQuestion:
+      "Setelah pesta selesai, kalian bakal mulai hidup berumah tangga dari saldo tabungan yang tipis. Sanggup?",
+    compromises: [
+      "Gelar akad intim berkesan dengan budget maksimal 50% dari tabungan",
+      "Pesta meriah boleh asal dibiayai tanpa utang dan sisa tabungan aman",
+      "Alokasikan dana lebih besar untuk DP rumah dan isi perabotan",
+    ],
+    botPref: { young: 0, mid: 2, mature: 1 },
+    targetGender: "all",
+    targetAge: "young",
+  },
+  {
+    id: "fin-16",
+    segmentLabel: "Dana Anak",
+    category: "Finansial",
+    statement:
+      "Gua pengen anak kita nanti masuk sekolah swasta terbaik walau biayanya bakal nyedot porsi besar gaji bulanan.",
+    partnerPrompt:
+      "Dia menargetkan sekolah swasta mahal untuk anak nanti meski menyedot porsi besar penghasilan.",
+    consequenceQuestion:
+      "Gaya hidup pribadi kalian harus banyak dikorbankan demi mengejar dana pendidikan anak. Setuju?",
+    compromises: [
+      "Mulai buka tabungan pendidikan anak sejak tahun pertama menikah",
+      "Sesuaikan pilihan sekolah dengan kemampuan finansial riil saat waktunya tiba",
+      "Prioritaskan sekolah berkualitas yang dekat rumah tanpa memaksakan gengsi",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "all",
+    targetAge: "mid",
+  },
+  {
+    id: "fin-17",
+    segmentLabel: "Proteksi & Pensiun",
+    category: "Finansial",
+    statement:
+      "Gua mewajibkan alokasi besar buat asuransi kesehatan dan dana pensiun ketimbang liburan atau ganti mobil.",
+    partnerPrompt:
+      "Dia memprioritaskan budget besar untuk asuransi dan dana pensiun dibanding hiburan atau kendaraan.",
+    consequenceQuestion:
+      "Gaya hidup kalian bakal terasa sangat konservatif karena banyak uang dikunci untuk masa tua. Terima?",
+    compromises: [
+      "Sisihkan 15% untuk proteksi & pensiun, 10% khusus pos hiburan keluarga",
+      "Pilih produk asuransi murni sesuai kebutuhan tanpa membebani arus kas",
+      "Review alokasi keuangan bersama setiap 6 bulan sekali",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "all",
+    targetAge: "mature",
+  },
+  {
+    id: "fin-18",
+    segmentLabel: "Pergaulan",
+    category: "Finansial",
+    statement:
+      "Gua sering royal nraktir teman atau relasi kerja karena ngerasa itu bagian dari investasi pergaulan.",
+    partnerPrompt:
+      "Dia sering royal mentraktir teman atau relasi kerja demi menjaga pergaulan.",
+    consequenceQuestion:
+      "Pengeluaran tak terduga buat traktiran bisa bikin budget bulanan jebol di akhir bulan. Sabar?",
+    compromises: [
+      "Masukkan biaya traktiran ke dalam jatah uang saku pribadi bulanan",
+      "Dilarang pakai kartu kredit atau dana bersama untuk mentraktir orang lain",
+      "Batasi traktiran khusus untuk relasi yang benar-benar produktif",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "mid",
   },
 ];
 
@@ -724,6 +1106,196 @@ const KELUARGA_QUESTIONS: QuestionItem[] = [
     ],
     botPref: { young: 2, mid: 0, mature: 1 },
   },
+  {
+    id: "kel-09",
+    segmentLabel: "Posisi Tengah",
+    category: "Keluarga & Mertua",
+    statement:
+      "Kalau istri dan ibu gua beda pendapat, gua sering serba salah dan cenderung minta istri gua yang ngalah duluan.",
+    partnerPrompt:
+      "Dia cenderung memintamu mengalah duluan jika terjadi perbedaan pendapat dengan ibunya.",
+    consequenceQuestion:
+      "Kamu bisa merasa tidak dibela oleh suamimu sendiri di depan mertua. Sanggup hadapi?",
+    compromises: [
+      "Pasangan wajib jadi penengah adil di depan, lalu evaluasi berdua di kamar",
+      "Sepakat tidak saling menjatuhkan di depan orang tua masing-masing",
+      "Rumah tangga punya aturan sendiri yang tidak boleh diintervensi orang tua",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "mid",
+  },
+  {
+    id: "kel-10",
+    segmentLabel: "Kedekatan",
+    category: "Keluarga & Mertua",
+    statement:
+      "Gua dekat banget sama keluarga gua dan pengen bisa main atau nginep di rumah orang tua hampir tiap akhir pekan.",
+    partnerPrompt:
+      "Dia sangat lekat dengan keluarganya dan ingin rutin berkunjung atau menginap hampir tiap akhir pekan.",
+    consequenceQuestion:
+      "Waktu akhir pekan kalian berdua akan lebih sering dihabiskan di rumah mertua. Terima?",
+    compromises: [
+      "Kunjungan ke rumah orang tua maksimal 2 kali sebulan",
+      "Boleh main kapan saja di hari kerja, tapi akhir pekan milik keluarga inti",
+      "Gantian jadwal kunjungan adil antara keluarga kedua belah pihak",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "mid",
+  },
+  {
+    id: "kel-11",
+    segmentLabel: "Tanggung Jawab",
+    category: "Keluarga & Mertua",
+    statement:
+      "Sebagai anak laki-laki yang diandalkan, gua sering dimintain tolong urusan teknis atau finansial mendadak sama keluarga.",
+    partnerPrompt:
+      "Dia sering menjadi tumpuan utama keluarganya untuk urusan mendadak maupun bantuan dana.",
+    consequenceQuestion:
+      "Waktu dan rencana kalian bisa sering tersita demi mengurus kebutuhan saudara atau orang tuanya. Siap?",
+    compromises: [
+      "Bantu tenaga boleh, tapi bantuan dana wajib seizin pasangan",
+      "Ajarkan saudara lain untuk mandiri dan tidak selalu bergantung",
+      "Tetapkan jam khusus untuk urusan keluarga agar waktu rumah tidak terganggu",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "young",
+  },
+  {
+    id: "kel-12",
+    segmentLabel: "Ekspektasi Mertua",
+    category: "Keluarga & Mertua",
+    statement:
+      "Gua kurang jago masak dan mengurus rumah, dan gua males kalau dibanding-bandingin sama standar ibu kamu.",
+    partnerPrompt:
+      "Dia kurang mahir urusan domestik dan menolak dibanding-bandingkan dengan standar ibumu.",
+    consequenceQuestion:
+      "Kamu harus siap pasang badan kalau orang tuamu mengomentari cara dia mengurus rumah tangga. Sanggup?",
+    compromises: [
+      "Pasangan wajib membela dan menegaskan setiap rumah punya standar sendiri",
+      "Bagi tugas memasak dan bersih-bersih berdua tanpa membebankan satu pihak",
+      "Andalkan katering sehat atau alat rumah tangga praktis tanpa gengsi",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "young",
+  },
+  {
+    id: "kel-13",
+    segmentLabel: "Perawatan Lansia",
+    category: "Keluarga & Mertua",
+    statement:
+      "Kalau orang tua gua nanti sakit atau butuh perawatan intensif, gua wajib bawa mereka tinggal serumah sama kita.",
+    partnerPrompt:
+      "Dia mewajibkan orang tuanya tinggal serumah dengan kalian jika kelak sakit atau butuh perawatan.",
+    consequenceQuestion:
+      "Fokus, tenaga, dan suasana rumah tangga kalian akan berubah total untuk merawat lansia. Siap?",
+    compromises: [
+      "Siapkan kamar khusus di lantai bawah dan sewa perawat pendamping",
+      "Patungan biaya perawatan bersama saudara kandung lainnya secara adil",
+      "Jaga komunikasi rutin agar pasangan tidak merasa terabaikan",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Laki-laki",
+    targetAge: "mature",
+  },
+  {
+    id: "kel-14",
+    segmentLabel: "Batasan Parenting",
+    category: "Keluarga & Mertua",
+    statement:
+      "Gua bakal langsung menegur tegas siapapun di keluarga besar yang ikut campur atau ngomentarin cara kita ngurus anak.",
+    partnerPrompt:
+      "Dia tidak segan menegur langsung anggota keluarga besar yang mengomentari pola asuh anak kalian.",
+    consequenceQuestion:
+      "Suasana kumpul keluarga bisa mendadak tegang kalau ada kerabat yang tersinggung dengan ketegasannya. Terima?",
+    compromises: [
+      "Suami/istri yang menegur keluarganya masing-masing agar lebih halus",
+      "Sepakati kalimat jawaban diplomatis untuk menepis komentar kerabat",
+      "Prioritaskan kenyamanan mental ibu dan anak di atas rasa sungkan",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Perempuan",
+    targetAge: "mature",
+  },
+  {
+    id: "kel-15",
+    segmentLabel: "Resepsi & Restu",
+    category: "Keluarga & Mertua",
+    statement:
+      "Karena orang tua ikut bantu biaya nikah, gua ngerasa kita harus nurutin semua kemauan konsep dan tamu undangan mereka.",
+    partnerPrompt:
+      "Dia merasa kalian harus menuruti semua kemauan orang tua soal konsep pernikahan karena dibantu biaya.",
+    consequenceQuestion:
+      "Acara pernikahan kalian bisa terasa seperti hajatan orang tua ketimbang perayaan kalian berdua. Oke?",
+    compromises: [
+      "Biayai pernikahan mandiri sepenuhnya agar bebas menentukan konsep",
+      "Bagi kuota tamu undangan 50:50 antara pilihan orang tua dan pasangan",
+      "Kompromi di acara akad tradisional, bebaskan konsep di acara resepsi",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "all",
+    targetAge: "young",
+  },
+  {
+    id: "kel-16",
+    segmentLabel: "Nilai & Ibadah",
+    category: "Keluarga & Mertua",
+    statement:
+      "Standar praktik ibadah di keluarga gua cukup ketat, dan gua berharap pasangan bisa menyesuaikan diri saat kumpul keluarga.",
+    partnerPrompt:
+      "Dia berharap kamu menyesuaikan diri dengan standar praktik ibadah keluarganya yang cukup ketat.",
+    consequenceQuestion:
+      "Cara berpakaian dan rutinitas ibadahmu akan diperhatikan ketat setiap kali bertemu keluarga besarnya. Siap?",
+    compromises: [
+      "Saling menghormati proses belajar tanpa paksaan atau menghakimi",
+      "Sesuaikan penampilan yang sopan saat berkunjung ke rumah orang tua",
+      "Bangun kesepakatan spiritual inti berdua sebagai fondasi rumah tangga",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "all",
+    targetAge: "mid",
+  },
+  {
+    id: "kel-17",
+    segmentLabel: "Aset Keluarga",
+    category: "Keluarga & Mertua",
+    statement:
+      "Di keluarga besar gua ada urusan aset/bisnis keluarga yang rumit dan sewaktu-waktu butuh keterlibatan gua.",
+    partnerPrompt:
+      "Dia terlibat dalam urusan aset atau bisnis keluarga besar yang cukup rumit.",
+    consequenceQuestion:
+      "Drama internal keluarga besarnya bisa ikut menguras waktu dan pikiranmu di rumah. Sanggup?",
+    compromises: [
+      "Pisahkan total keuangan rumah tangga dari aset atau utang bisnis keluarga",
+      "Pasangan tidak wajib ikut campur dalam rapat atau konflik internal saudara",
+      "Batasi keterlibatan hanya pada aspek administratif yang jelas",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "all",
+    targetAge: "mature",
+  },
+  {
+    id: "kel-18",
+    segmentLabel: "Privasi Rumah",
+    category: "Keluarga & Mertua",
+    statement:
+      "Gua nggak suka kalau mertua atau ipar datang ke rumah tanpa janjian dulu, apalagi langsung masuk ke area kamar.",
+    partnerPrompt:
+      "Dia tidak suka jika mertua atau ipar datang ke rumah tanpa janji terlebih dahulu.",
+    consequenceQuestion:
+      "Keluargamu nggak bisa lagi mampir dadakan ke rumah kalian seperti mampir ke rumah sendiri. Setuju?",
+    compromises: [
+      "Wajib kabari minimal sehari sebelumnya sebelum berkunjung ke rumah",
+      "Area kamar tidur utama adalah zona privat terlarang bagi semua tamu",
+      "Sediakan ruang tamu nyaman khusus untuk menerima keluarga besar",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "mid",
+  },
 ];
 
 const PRIVASI_QUESTIONS: QuestionItem[] = [
@@ -863,24 +1435,266 @@ const PRIVASI_QUESTIONS: QuestionItem[] = [
     ],
     botPref: { young: 1, mid: 0, mature: 2 },
   },
+  {
+    id: "prv-09",
+    segmentLabel: "Etika Medsos",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua masih follow beberapa akun cewek cantik/selebgram di medsos cuma buat hiburan scroll, bukan niat selingkuh.",
+    partnerPrompt:
+      "Dia masih mengikuti akun-akun selebgram atau perempuan seksi di media sosial sebagai hiburan.",
+    consequenceQuestion:
+      "Isi explore Instagram dan daftar following-nya bisa bikin kamu insecure atau ilfeel. Terima?",
+    compromises: [
+      "Unfollow semua akun yang membuat pasangan tidak nyaman",
+      "Dilarang keras memberi like, komentar, atau DM pada akun tersebut",
+      "Sepakat menjaga etika bermedia sosial sejak berkomitmen serius",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "young",
+  },
+  {
+    id: "prv-10",
+    segmentLabel: "Curhat & Medsos",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Kalau lagi kesal sama pasangan, gua sering bikin status kode di Close Friends medsos atau curhat ke grup sahabat.",
+    partnerPrompt:
+      "Dia sering mengunggah sindiran di Close Friends media sosial atau curhat ke grup sahabat saat kesal.",
+    consequenceQuestion:
+      "Masalah rumah tangga kalian bisa jadi konsumsi teman-temannya sebelum sempat kamu selesaikan. Siap?",
+    compromises: [
+      "Stop total mengunggah kode atau sindiran masalah pasangan di medsos",
+      "Bahas keluhan langsung ke pasangan sebelum cerita ke orang lain",
+      "Pilih maksimal 1 sahabat dewasa yang bijak jika butuh teman cerita",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "young",
+  },
+  {
+    id: "prv-11",
+    segmentLabel: "Riwayat Finansial",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua pernah punya catatan gagal finansial atau tanggungan masa lalu yang bikin gua malu buat buka semuanya sekarang.",
+    partnerPrompt:
+      "Dia memiliki riwayat kegagalan finansial masa lalu yang belum dibuka sepenuhnya.",
+    consequenceQuestion:
+      "Kamu bisa kaget di kemudian hari jika riwayat kredit atau tanggungan lamanya baru terungkap. Sanggup?",
+    compromises: [
+      "Wajib saling cek SLIK OJK / riwayat kredit sebelum lamaran resmi",
+      "Terbuka soal sisa kewajiban masa lalu agar bisa disusun strategi pelunasan",
+      "Komitmen tidak ada utang baru yang disembunyikan setelah menikah",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "mid",
+  },
+  {
+    id: "prv-12",
+    segmentLabel: "Barang Kenangan",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua masih nyimpen beberapa barang pemberian mantan yang fungsional (kayak jam/tas) karena sayang kalau dibuang.",
+    partnerPrompt:
+      "Dia masih menyimpan dan memakai barang pemberian mantannya karena dianggap masih fungsional.",
+    consequenceQuestion:
+      "Kamu bakal sering melihat dia memakai barang pemberian mantannya dalam aktivitas sehari-hari. Oke?",
+    compromises: [
+      "Jual atau sumbangkan barang tersebut lalu ganti dengan yang baru",
+      "Boleh disimpan di gudang selama tidak dipakai di depan pasangan",
+      "Anggap murni sebagai benda fungsional tanpa mengaitkan masa lalu",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Perempuan",
+    targetAge: "mid",
+  },
+  {
+    id: "prv-13",
+    segmentLabel: "Lingkaran Profesi",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Mantan gua berada di lingkaran komunitas atau industri kerja yang sama, jadi gua masih sesekali ketemu di acara.",
+    partnerPrompt:
+      "Dia berada di komunitas atau industri kerja yang sama dengan mantannya sehingga masih sesekali bertemu.",
+    consequenceQuestion:
+      "Kamu harus siap menghadapi situasi di mana dia dan mantannya berada di satu acara yang sama. Kuat mental?",
+    compromises: [
+      "Wajib kasih tahu pasangan jika tahu akan hadir di acara yang sama",
+      "Ajak pasangan ikut hadir di acara komunitas tersebut jika memungkinkan",
+      "Jaga interaksi sebatas sapaan formal di tempat umum",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Laki-laki",
+    targetAge: "mature",
+  },
+  {
+    id: "prv-14",
+    segmentLabel: "Ruang Pribadi",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Ada catatan pribadi dan obrolan grup keluarga gua yang haram dibuka pasangan walau kita udah serumah.",
+    partnerPrompt:
+      "Dia memiliki catatan pribadi dan obrolan keluarga yang dilarang keras kamu buka meski sudah menikah.",
+    consequenceQuestion:
+      "Kamu harus menghormati batas privasi ruang digital pribadinya tanpa merasa dicurigai. Setuju?",
+    compromises: [
+      "Sepakati zona privasi masing-masing yang tidak boleh dilanggar",
+      "Saling percaya penuh tanpa kebiasaan memeriksa HP diam-diam",
+      "Terbuka hanya pada hal-hal yang menyangkut keamanan dan keuangan bersama",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "Perempuan",
+    targetAge: "mature",
+  },
+  {
+    id: "prv-15",
+    segmentLabel: "Jejak Masa Lalu",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua tipe orang yang kepo banget dan sering nge-stalk masa lalu pasangan maupun mantannya di internet.",
+    partnerPrompt:
+      "Dia sangat penasaran dan sering mencari tahu masa lalu kamu maupun mantanmu di media sosial.",
+    consequenceQuestion:
+      "Hal-hal lama sebelum kalian kenal bisa diungkit-ungkit dan jadi bahan pertengkaran baru. Sabar?",
+    compromises: [
+      "Tanyakan langsung hal yang bikin penasaran daripada stalking diam-diam",
+      "Sepakat masa lalu sebelum jadian tidak boleh dijadikan senjata bertengkar",
+      "Bersihkan jejak digital lama yang berpotensi memicu salah paham",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "all",
+    targetAge: "young",
+  },
+  {
+    id: "prv-16",
+    segmentLabel: "Hobi & Komunitas",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua sering mabar game online atau ikut komunitas olahraga yang mayoritas anggotanya lawan jenis.",
+    partnerPrompt:
+      "Dia rutin bermain game online atau ikut komunitas hobi yang mayoritas anggotanya lawan jenis.",
+    consequenceQuestion:
+      "Dia punya teman mabar atau teman olahraga lawan jenis yang intens berkomunikasi dengannya. Terima?",
+    compromises: [
+      "Kenalkan teman komunitasnya dan ajak pasangan ikut sesekali",
+      "Hindari obrolan pribadi di luar topik game atau jadwal olahraga",
+      "Pasang foto profil berdua di akun game dan media sosial",
+    ],
+    botPref: { young: 1, mid: 0, mature: 2 },
+    targetGender: "all",
+    targetAge: "mid",
+  },
+  {
+    id: "prv-17",
+    segmentLabel: "Riwayat Medis",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua punya riwayat kondisi kesehatan fisik/mental tertentu yang butuh perhatian rutin seumur hidup.",
+    partnerPrompt:
+      "Dia memiliki riwayat kondisi kesehatan tertentu yang membutuhkan perhatian dan biaya rutin jangka panjang.",
+    consequenceQuestion:
+      "Kamu harus siap mendampingi proses kontrol kesehatan dan menjaga pola hidupnya setiap hari. Siap?",
+    compromises: [
+      "Lakukan pre-marital medical check-up lengkap secara transparan",
+      "Siapkan asuransi kesehatan dan dana cadangan medis sejak awal",
+      "Pelajari cara penanganan darurat kondisi kesehatannya bersama",
+    ],
+    botPref: { young: 2, mid: 1, mature: 0 },
+    targetGender: "all",
+    targetAge: "mature",
+  },
+  {
+    id: "prv-18",
+    segmentLabel: "Kebiasaan Digital",
+    category: "Privasi & Masa Lalu",
+    statement:
+      "Gua punya kebiasaan rutin bersihin riwayat chat dan browser bukan karena selingkuh, tapi emang risih lihat menumpuk.",
+    partnerPrompt:
+      "Dia punya kebiasaan rutin menghapus riwayat chat dan pencarian browser dengan alasan risih menumpuk.",
+    consequenceQuestion:
+      "Riwayat chat yang selalu kosong bisa memicu rasa curiga seolah dia menyembunyikan sesuatu. Terima?",
+    compromises: [
+      "Arsipkan chat saja daripada dihapus permanen agar tidak memicu curiga",
+      "Bangun keterbukaan komunikasi harian agar tidak perlu cek riwayat HP",
+      "Hanya bersihkan cache file media tanpa menghapus riwayat percakapan",
+    ],
+    botPref: { young: 0, mid: 1, mature: 2 },
+    targetGender: "Laki-laki",
+    targetAge: "young",
+  },
 ];
+
+function getAgeGroup(age: number): "young" | "mid" | "mature" {
+  if (age <= 24) return "young";
+  if (age <= 32) return "mid";
+  return "mature";
+}
+
+function filterAndRankByProfile(
+  pool: QuestionItem[],
+  gender: "Laki-laki" | "Perempuan",
+  ageGroup: "young" | "mid" | "mature"
+): QuestionItem[] {
+  return pool
+    .filter((item) => {
+      const g = item.targetGender || "all";
+      return g === "all" || g === gender;
+    })
+    .sort((a, b) => {
+      const scoreA =
+        (a.targetGender === gender ? 4 : 1) +
+        (a.targetAge === ageGroup
+          ? 3
+          : !a.targetAge || a.targetAge === "all"
+          ? 1
+          : 0);
+      const scoreB =
+        (b.targetGender === gender ? 4 : 1) +
+        (b.targetAge === ageGroup
+          ? 3
+          : !b.targetAge || b.targetAge === "all"
+          ? 1
+          : 0);
+      return scoreB - scoreA;
+    });
+}
 
 export function build20QuestionsForProfile(
   gender: "Laki-laki" | "Perempuan",
   age: number,
   theme: DeckTheme = "standar"
 ): QuestionItem[] {
-  const themePoolMap: Record<DeckTheme, QuestionItem[]> = {
-    standar: STANDAR_QUESTIONS,
-    finansial: [...FINANSIAL_QUESTIONS, ...STANDAR_QUESTIONS.slice(0, 12)],
-    keluarga: [...KELUARGA_QUESTIONS, ...STANDAR_QUESTIONS.slice(0, 12)],
-    privasi: [...PRIVASI_QUESTIONS, ...STANDAR_QUESTIONS.slice(0, 12)],
-  };
-
-  const selectedPool = themePoolMap[theme] || STANDAR_QUESTIONS;
+  const ageGroup = getAgeGroup(age);
   const ageTag =
     age <= 24 ? "Fase Muda" : age <= 32 ? "Fase Dewasa" : "Fase Matang";
   const genderSuffix = gender === "Laki-laki" ? "Pria" : "Wanita";
+
+  const rankedStandar = filterAndRankByProfile(
+    STANDAR_QUESTIONS,
+    gender,
+    ageGroup
+  );
+
+  const themePoolMap: Record<DeckTheme, QuestionItem[]> = {
+    standar: rankedStandar,
+    finansial: [
+      ...filterAndRankByProfile(FINANSIAL_QUESTIONS, gender, ageGroup),
+      ...rankedStandar,
+    ],
+    keluarga: [
+      ...filterAndRankByProfile(KELUARGA_QUESTIONS, gender, ageGroup),
+      ...rankedStandar,
+    ],
+    privasi: [
+      ...filterAndRankByProfile(PRIVASI_QUESTIONS, gender, ageGroup),
+      ...rankedStandar,
+    ],
+  };
+
+  const selectedPool = themePoolMap[theme] || rankedStandar;
 
   return selectedPool.slice(0, 20).map((item, idx) => ({
     ...item,
