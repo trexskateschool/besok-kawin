@@ -3848,7 +3848,7 @@ export default function SefrekuensiGame() {
                   onClick={handleSecondChance}
                   className="py-3.5 px-5 rounded-2xl bg-slate-800 hover:bg-slate-700 text-white font-extrabold text-sm border border-slate-700 btn-tactile disabled:opacity-50"
                 >
-                  {isBusy ? "Memulai Ulang..." : "🔄 Kesempatan Kedua"}
+                  {isBusy ? "Memulai Ulang..." : "🔄 Main Lagi"}
                 </button>
                 <button
                   type="button"
