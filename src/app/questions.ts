@@ -1442,7 +1442,7 @@ const PRIVASI_QUESTIONS: QuestionItem[] = [
     statement:
       "Gua masih follow beberapa akun cewek cantik/selebgram di medsos cuma buat hiburan scroll, bukan niat selingkuh.",
     partnerPrompt:
-      "Dia masih mengikuti akun-akun selebgram atau perempuan seksi di media sosial sebagai hiburan.",
+      "Dia masih mengikuti akun-akun selebgram atau kreator hiburan di media sosial sebagai hiburan.",
     consequenceQuestion:
       "Isi explore Instagram dan daftar following-nya bisa bikin kamu insecure atau ilfeel. Terima?",
     compromises: [
